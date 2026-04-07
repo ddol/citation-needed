@@ -3,6 +3,7 @@ import { render, Box, Text } from 'ink';
 import { Command } from 'commander';
 import { getDatabase } from '../../db/index';
 import { TrustScorer } from '../../scoring/scorer';
+import { extractPdfText } from '../../verification/extractor';
 
 export function registerVerifyCommand(program: Command): void {
   program
@@ -11,7 +12,19 @@ export function registerVerifyCommand(program: Command): void {
     .action(async (doi: string, claim: string) => {
       const db = getDatabase();
       const scorer = new TrustScorer(db);
-      const result = await scorer.verifyAndScore(doi, claim);
+
+      // Load PDF text from stored path if available
+      const citation = db.getCitation(doi);
+      let pdfContent: string | undefined;
+      if (citation?.pdfPath) {
+        try {
+          pdfContent = await extractPdfText(citation.pdfPath);
+        } catch {
+          // Fall through to title-based heuristic
+        }
+      }
+
+      const result = await scorer.verifyAndScore(doi, claim, pdfContent);
       const color = result.verified ? 'green' : 'red';
       render(
         <Box flexDirection="column">

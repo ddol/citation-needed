@@ -8,7 +8,7 @@ export class ElsevierAdapter implements PublisherAdapter {
   }
 
   getLandingPageUrl(doi: string): string {
-    return `https://www.sciencedirect.com/science/article/pii/${doi}`;
+    return `https://doi.org/${doi}`;
   }
 
   getPdfUrl(_doi: string): string | null {

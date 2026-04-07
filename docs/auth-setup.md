@@ -17,8 +17,7 @@ Auth config is stored in `~/.citation-needed/auth.json`. Example:
       "username": "jdoe",
       "passwordEnvVar": "PROXY_PASSWORD"
     }
-  ],
-  "rateLimitMs": 1000
+  ]
 }
 ```
 

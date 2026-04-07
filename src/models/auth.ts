@@ -10,5 +10,4 @@ export interface ProxyConfig {
 export interface AuthConfig {
   email?: string;       // for Unpaywall API
   proxies?: ProxyConfig[];
-  rateLimitMs?: number; // ms between requests (default: 1000)
 }

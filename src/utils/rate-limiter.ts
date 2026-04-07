@@ -1,16 +1,13 @@
 export class RateLimiter {
-  private lastCallTime = 0;
+  private pending: Promise<void> = Promise.resolve();
 
   constructor(private intervalMs: number) {}
 
   async wait(): Promise<void> {
-    const now = Date.now();
-    const elapsed = now - this.lastCallTime;
-    if (elapsed < this.intervalMs) {
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, this.intervalMs - elapsed)
-      );
-    }
-    this.lastCallTime = Date.now();
+    const ticket = this.pending.then(() =>
+      new Promise<void>((resolve) => setTimeout(resolve, this.intervalMs))
+    );
+    this.pending = ticket;
+    return ticket;
   }
 }

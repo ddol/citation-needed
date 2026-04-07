@@ -129,6 +129,11 @@ describe('MCP Server', () => {
 
   test('update-trust-score tool updates the score', async () => {
     const db = getDatabase();
+    (db.getCitation as jest.Mock).mockReturnValue({
+      doi: '10.1234/test',
+      title: 'Test Paper',
+      trustScore: 0.5,
+    });
     const server = createMcpServer();
 
     const result = await (server as unknown as {
@@ -141,6 +146,23 @@ describe('MCP Server', () => {
     const content = (result as { content: Array<{ type: string; text: string }> }).content;
     expect(content[0].text).toContain('0.9');
     expect(db.updateTrustScore).toHaveBeenCalledWith('10.1234/test', 0.9, 'good paper', undefined);
+  });
+
+  test('update-trust-score returns error for unknown DOI', async () => {
+    const db = getDatabase();
+    (db.getCitation as jest.Mock).mockReturnValue(undefined);
+    const server = createMcpServer();
+
+    const result = await (server as unknown as {
+      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+    })._requestHandlers.get('tools/call')!({
+      method: 'tools/call',
+      params: { name: 'update-trust-score', arguments: { doi: '10.0000/missing', score: 0.9 } },
+    });
+
+    const r = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('not found');
   });
 
   test('unknown tool returns error', async () => {

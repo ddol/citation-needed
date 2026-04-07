@@ -6,30 +6,30 @@ describe('RateLimiter', () => {
     expect(limiter).toBeDefined();
   });
 
-  test('wait() resolves immediately on first call', async () => {
+  test('wait() resolves after the interval', async () => {
     const limiter = new RateLimiter(50);
     const start = Date.now();
     await limiter.wait();
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeLessThan(50);
+    expect(elapsed).toBeGreaterThanOrEqual(40); // allow 10ms slack
   });
 
-  test('wait() delays on second call within interval', async () => {
-    const limiter = new RateLimiter(100);
-    await limiter.wait(); // first call
+  test('wait() serializes concurrent calls', async () => {
+    const limiter = new RateLimiter(50);
     const start = Date.now();
-    await limiter.wait(); // second call should wait
+    // Fire two concurrent waits
+    await Promise.all([limiter.wait(), limiter.wait()]);
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(80); // allow 20ms slack
+    // Two serialized 50ms waits should take ~100ms total
+    expect(elapsed).toBeGreaterThanOrEqual(80); // allow slack
   }, 1000);
 
-  test('wait() does not delay after interval has passed', async () => {
+  test('successive waits each add the interval', async () => {
     const limiter = new RateLimiter(50);
-    await limiter.wait();
-    await new Promise((r) => setTimeout(r, 60)); // wait out the interval
     const start = Date.now();
     await limiter.wait();
+    await limiter.wait();
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeLessThan(50);
+    expect(elapsed).toBeGreaterThanOrEqual(80);
   }, 1000);
 });

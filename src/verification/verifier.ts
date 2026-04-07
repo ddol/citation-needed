@@ -1,4 +1,3 @@
-import type { TrustScorer } from '../scoring/scorer';
 import { extractPdfText } from './extractor';
 import { createLogger } from '../utils/logger';
 
@@ -14,7 +13,6 @@ export interface VerificationResult {
 }
 
 export class ClaimVerifier {
-  constructor(private scorer: TrustScorer) {}
 
   async verify(
     doi: string,

@@ -19,7 +19,7 @@ export function createLogger(name: string): Logger {
 
   function write(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
     if (LEVELS[level] < minLevel) return;
-    const line = JSON.stringify({ ts: new Date().toISOString(), level, name, msg, ...meta });
+    const line = JSON.stringify({ ...meta, ts: new Date().toISOString(), level, name, msg });
     process.stderr.write(line + '\n');
   }
 

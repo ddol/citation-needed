@@ -1,5 +1,6 @@
 import type { Database } from '../../db/index';
 import { TrustScorer } from '../../scoring/scorer';
+import { extractPdfText } from '../../verification/extractor';
 
 export const verificationToolDefinitions = [
   {
@@ -42,7 +43,20 @@ export async function handleVerificationTool(
     case 'verify-citation': {
       const doi = args['doi'] as string;
       const claim = args['claim'] as string;
-      const pdfContent = args['pdfContent'] as string | undefined;
+      let pdfContent = args['pdfContent'] as string | undefined;
+
+      // Auto-read locally stored PDF when pdfContent is not provided
+      if (!pdfContent) {
+        const citation = db.getCitation(doi);
+        if (citation?.pdfPath) {
+          try {
+            pdfContent = await extractPdfText(citation.pdfPath);
+          } catch {
+            // Fall through to title-based heuristic
+          }
+        }
+      }
+
       const result = await scorer.verifyAndScore(doi, claim, pdfContent);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
@@ -52,6 +66,15 @@ export async function handleVerificationTool(
       const score = args['score'] as number;
       const notes = args['notes'] as string | undefined;
       const agentId = args['agentId'] as string | undefined;
+
+      const citation = db.getCitation(doi);
+      if (!citation) {
+        return {
+          content: [{ type: 'text', text: `Citation not found for DOI: ${doi}` }],
+          isError: true,
+        };
+      }
+
       db.updateTrustScore(doi, score, notes, agentId);
       return {
         content: [{ type: 'text', text: `Updated trust score for ${doi} to ${score}` }],

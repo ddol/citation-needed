@@ -15,8 +15,8 @@ export function registerImportCommand(program: Command): void {
       const parsed = parseBibtex(content);
       let count = 0;
       for (const entry of parsed) {
-        if (entry.doi || entry.title) {
-          db.addCitation({ ...entry, doi: entry.doi || '' });
+        if (entry.doi) {
+          db.addCitation({ ...entry, doi: entry.doi });
           count++;
         }
       }

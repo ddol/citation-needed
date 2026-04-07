@@ -45,6 +45,9 @@ export class Database {
   }
 
   addCitation(citation: Citation): Citation {
+    if (!citation.doi || citation.doi.trim() === '') {
+      throw new Error('Citation must have a non-empty DOI');
+    }
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO citations
@@ -55,7 +58,7 @@ export class Database {
          @verificationStatus, @accessType, @createdAt, @updatedAt)
     `);
     stmt.run({
-      doi: citation.doi || null,
+      doi: citation.doi,
       url: citation.url || null,
       title: citation.title || null,
       authors: citation.authors || null,

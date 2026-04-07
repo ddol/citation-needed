@@ -1,16 +1,7 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { Database } from '../../db/index';
 import { parseBibtex } from '../../parsers/bibtex';
 import { TrustScorer } from '../../scoring/scorer';
 import { ArxivResolver } from '../../retrieval/resolvers/arxiv';
-
-export function registerCitationTools(server: Server, db: Database): void {
-  const scorer = new TrustScorer(db);
-
-  // Note: tool definitions are added via the ListToolsRequestSchema handler in server.ts
-  // This module wires the call handlers via a shared dispatch map pattern
-}
 
 export const citationToolDefinitions = [
   {
@@ -85,9 +76,9 @@ export async function handleCitationTool(
       const parsed = parseBibtex(bibtex);
       const imported: string[] = [];
       for (const entry of parsed) {
-        if (entry.doi || entry.title) {
-          db.addCitation({ ...entry, doi: entry.doi || '' });
-          imported.push(entry.doi || entry.title || 'unknown');
+        if (entry.doi) {
+          db.addCitation({ ...entry, doi: entry.doi });
+          imported.push(entry.doi);
         }
       }
       return {

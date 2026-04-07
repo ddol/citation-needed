@@ -65,7 +65,32 @@ export class AuthenticatedDownloader {
         }
       }
 
-      await page.pdf({ path: filePath });
+      // Look for a PDF link on the page and trigger a real download
+      // instead of using page.pdf() which only snapshots the HTML
+      const pdfLink = page.locator('a[href$=".pdf"], a[href*="pdf"]').first();
+      if ((await pdfLink.count()) > 0) {
+        const [download] = await Promise.all([
+          page.waitForEvent('download', { timeout }),
+          pdfLink.click(),
+        ]);
+        await download.saveAs(filePath);
+      } else {
+        // Fallback: try navigating to the URL directly and intercepting the response
+        const response = await page.goto(url, { waitUntil: 'load', timeout });
+        const contentType = response?.headers()['content-type'] || '';
+
+        if (contentType.includes('application/pdf')) {
+          const body = await response!.body();
+          fs.writeFileSync(filePath, body);
+        } else {
+          throw new Error(
+            `Could not find a downloadable PDF at ${url}. ` +
+            `The page returned content-type: ${contentType}. ` +
+            'Try providing a direct PDF URL instead.'
+          );
+        }
+      }
+
       logger.info('Authenticated PDF saved', { doi, filePath });
     } finally {
       await browser.close();

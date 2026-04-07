@@ -29,8 +29,15 @@ export function registerDownloadCommand(program: Command): void {
 
       render(<Text>Downloading PDF for {doi}...</Text>);
       const localPath = await downloader.download(doi, pdfUrl);
-      db.updatePdfPath(doi, localPath);
-      db.updateVerificationStatus(doi, 'downloaded');
+
+      const citation = db.getCitation(doi);
+      if (!citation) {
+        render(<Text color="yellow">Warning: DOI {doi} not found in database. PDF saved but citation not updated.</Text>);
+      } else {
+        db.updatePdfPath(doi, localPath);
+        db.updateVerificationStatus(doi, 'downloaded');
+      }
+
       render(<Text color="green">Saved to: {localPath}</Text>);
     });
 }

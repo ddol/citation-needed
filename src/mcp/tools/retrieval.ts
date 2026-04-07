@@ -51,6 +51,18 @@ export async function handleRetrievalTool(
       }
 
       const localPath = await downloader.download(doi, resolvedUrl);
+
+      const citation = db.getCitation(doi);
+      if (!citation) {
+        return {
+          content: [{
+            type: 'text',
+            text: `PDF saved to: ${localPath}, but DOI ${doi} not found in database. Import the citation first to track it.`,
+          }],
+          isError: true,
+        };
+      }
+
       db.updatePdfPath(doi, localPath);
       db.updateVerificationStatus(doi, 'downloaded');
       return { content: [{ type: 'text', text: `PDF saved to: ${localPath}` }] };
