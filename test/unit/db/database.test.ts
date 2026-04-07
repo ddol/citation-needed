@@ -6,7 +6,7 @@ import { Database } from '../../../src/db/index';
 function makeTestDb(): { db: Database; dbPath: string } {
   const dbPath = path.join(
     os.homedir(),
-    '.sober-sources-test',
+    '.citation-needed-test',
     `db-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
   );
   const db = new Database(dbPath);
@@ -27,7 +27,7 @@ describe('Database', () => {
   });
 
   afterAll(() => {
-    const dir = path.join(os.homedir(), '.sober-sources-test');
+    const dir = path.join(os.homedir(), '.citation-needed-test');
     if (fs.existsSync(dir)) fs.rmdirSync(dir, { recursive: true });
   });
 

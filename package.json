@@ -1,11 +1,11 @@
 {
-  "name": "sober-sources",
+  "name": "citation-needed",
   "version": "0.1.0",
   "description": "Trust and verification sidecar for AI agents - backs academic citations with locally verified PDFs",
   "type": "commonjs",
   "main": "dist/index.js",
   "bin": {
-    "sober-sources": "./dist/index.js"
+    "citation-needed": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

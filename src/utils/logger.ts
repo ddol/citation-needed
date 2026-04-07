@@ -31,4 +31,4 @@ export function createLogger(name: string): Logger {
   };
 }
 
-export const logger: Logger = createLogger('sober-sources');
+export const logger: Logger = createLogger('citation-needed');

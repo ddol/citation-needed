@@ -29,7 +29,7 @@ export class OpenAccessDownloader {
       responseType: 'arraybuffer',
       timeout: 60000,
       headers: {
-        'User-Agent': `sober-sources/0.1.0 (mailto:${process.env.SOBER_SOURCES_EMAIL || 'sober-sources@example.com'})`,
+        'User-Agent': `citation-needed/0.1.0 (mailto:${process.env.CITATION_NEEDED_EMAIL || 'citation-needed@example.com'})`,
       },
     });
 

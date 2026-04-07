@@ -1,7 +1,7 @@
 /**
- * Example MCP client usage for sober-sources.
+ * Example MCP client usage for citation-needed.
  *
- * Start the server first: sober-sources server
+ * Start the server first: citation-needed server
  * Then run: node examples/mcp-client.js
  */
 
@@ -10,7 +10,7 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 const { spawn } = require('child_process');
 
 async function main() {
-  // Spawn the sober-sources MCP server
+  // Spawn the citation-needed MCP server
   const serverProcess = spawn('node', ['dist/index.js', 'server'], {
     stdio: ['pipe', 'pipe', 'inherit'],
   });

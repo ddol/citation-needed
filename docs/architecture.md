@@ -2,7 +2,7 @@
 
 ## Overview
 
-`sober-sources` is a trust-and-verification sidecar for AI agents that grounds academic citations in locally verified PDFs. It exposes both a CLI and an MCP (Model Context Protocol) server interface.
+`citation-needed` is a trust-and-verification sidecar for AI agents that grounds academic citations in locally verified PDFs. It exposes both a CLI and an MCP (Model Context Protocol) server interface.
 
 ## Module Structure
 
@@ -53,7 +53,7 @@ BibTeX / DOI input
 
 ## Database Schema
 
-Three tables in SQLite (`~/.sober-sources/citations.db`):
+Three tables in SQLite (`~/.citation-needed/citations.db`):
 
 - **citations** – core citation data (doi, title, authors, trust_score, verification_status, …)
 - **trust_events** – immutable log of every trust score change

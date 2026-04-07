@@ -20,8 +20,8 @@ export class Database {
   constructor(dbPath?: string) {
     const resolvedPath =
       dbPath ||
-      process.env.SOBER_SOURCES_DB ||
-      path.join(os.homedir(), '.sober-sources', 'citations.db');
+      process.env.CITATION_NEEDED_DB ||
+      path.join(os.homedir(), '.citation-needed', 'citations.db');
 
     const dir = path.dirname(resolvedPath);
     if (!fs.existsSync(dir)) {

@@ -3,15 +3,15 @@ import path from 'path';
 import os from 'os';
 
 export function getDataDir(): string {
-  return process.env.SOBER_SOURCES_DIR || path.join(os.homedir(), '.sober-sources');
+  return process.env.CITATION_NEEDED_DIR || path.join(os.homedir(), '.citation-needed');
 }
 
 export function getPdfDir(): string {
-  return process.env.SOBER_SOURCES_PDF_DIR || path.join(getDataDir(), 'pdfs');
+  return process.env.CITATION_NEEDED_PDF_DIR || path.join(getDataDir(), 'pdfs');
 }
 
 export function getDbPath(): string {
-  return process.env.SOBER_SOURCES_DB || path.join(getDataDir(), 'citations.db');
+  return process.env.CITATION_NEEDED_DB || path.join(getDataDir(), 'citations.db');
 }
 
 export function ensureDir(dirPath: string): void {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== sober-sources setup ==="
+echo "=== citation-needed setup ==="
 
 # Check Node.js
 if ! command -v node &>/dev/null; then
@@ -23,7 +23,7 @@ npm install
 echo "✓ Dependencies installed"
 
 # Create data directory
-DATA_DIR="${SOBER_SOURCES_DIR:-$HOME/.sober-sources}"
+DATA_DIR="${CITATION_NEEDED_DIR:-$HOME/.citation-needed}"
 mkdir -p "$DATA_DIR/pdfs"
 echo "✓ Data directory: $DATA_DIR"
 
@@ -31,6 +31,6 @@ echo ""
 echo "=== Setup complete! ==="
 echo ""
 echo "Quick start:"
-echo "  sober-sources import-bibtex examples/sample.bib"
-echo "  sober-sources list"
-echo "  sober-sources server    # start MCP server"
+echo "  citation-needed import-bibtex examples/sample.bib"
+echo "  citation-needed list"
+echo "  citation-needed server    # start MCP server"

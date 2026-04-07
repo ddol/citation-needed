@@ -7,7 +7,7 @@ import { TrustScorer } from '../../../src/scoring/scorer';
 function makeTestDb(): { db: Database; dbPath: string } {
   const dbPath = path.join(
     os.homedir(),
-    '.sober-sources-test',
+    '.citation-needed-test',
     `trust-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
   );
   return { db: new Database(dbPath), dbPath };
@@ -35,7 +35,7 @@ describe('TrustScorer', () => {
   });
 
   afterAll(() => {
-    const dir = path.join(os.homedir(), '.sober-sources-test');
+    const dir = path.join(os.homedir(), '.citation-needed-test');
     if (fs.existsSync(dir)) fs.rmdirSync(dir, { recursive: true });
   });
 

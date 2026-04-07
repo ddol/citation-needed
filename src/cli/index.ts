@@ -10,7 +10,7 @@ import { registerAuthCommand } from './commands/auth';
 export function runCli(argv: string[]): void {
   const program = new Command();
   program
-    .name('sober-sources')
+    .name('citation-needed')
     .description('Trust and verification sidecar for AI agents')
     .version('0.1.0');
 

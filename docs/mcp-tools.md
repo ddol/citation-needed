@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-All tools are available via the MCP server started with `sober-sources server`.
+All tools are available via the MCP server started with `citation-needed server`.
 
 ## Citation Tools
 

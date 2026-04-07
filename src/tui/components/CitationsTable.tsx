@@ -14,7 +14,7 @@ export function CitationsTable({ rows }: { rows: CitationRow[] }): React.ReactEl
   if (rows.length === 0) {
     return (
       <Text color="yellow">
-        {'No citations found. Import some with: sober-sources import-bibtex <file>'}
+        {'No citations found. Import some with: citation-needed import-bibtex <file>'}
       </Text>
     );
   }

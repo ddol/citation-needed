@@ -1,8 +1,10 @@
-# sober-sources
+# citation-needed
+
+![citation needed](https://imgs.xkcd.com/comics/wikipedian_protester.png)
 
 > Trust and verification sidecar for AI agents — backs academic citations with locally verified PDFs.
 
-AI agents hallucinate citations. **sober-sources** fixes that by storing a local SQLite database of DOIs with trust scores, downloading open-access PDFs (arXiv, Unpaywall), and exposing everything via an MCP server that any agent can query.
+AI agents hallucinate citations. **citation-needed** fixes that by storing a local SQLite database of DOIs with trust scores, downloading open-access PDFs (arXiv, Unpaywall), and exposing everything via an MCP server that any agent can query.
 
 ---
 
@@ -21,10 +23,10 @@ AI agents hallucinate citations. **sober-sources** fixes that by storing a local
 ## Installation
 
 ```bash
-npm install -g sober-sources
+npm install -g citation-needed
 # or run locally:
-git clone https://github.com/your-org/sober-sources
-cd sober-sources
+git clone https://github.com/your-org/citation-needed
+cd citation-needed
 npm install
 npm run build
 ```
@@ -41,24 +43,24 @@ npx playwright install chromium
 
 ```bash
 # Import citations from a BibTeX file
-sober-sources import-bibtex references.bib
+citation-needed import-bibtex references.bib
 
 # List all citations with trust scores
-sober-sources list
+citation-needed list
 
 # Download a PDF for a citation
-sober-sources download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12345
+citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12345
 # or use Unpaywall for open-access lookup:
-sober-sources download 10.1234/example.doi --email you@example.com
+citation-needed download 10.1234/example.doi --email you@example.com
 
 # Verify a claim against a citation
-sober-sources verify 10.1234/example.doi "neural networks outperform SVMs on CIFAR-10"
+citation-needed verify 10.1234/example.doi "neural networks outperform SVMs on CIFAR-10"
 
 # Show trust score details and history
-sober-sources score 10.1234/example.doi
+citation-needed score 10.1234/example.doi
 
 # Start the MCP server (stdio transport)
-sober-sources server
+citation-needed server
 ```
 
 Trust scores are color-coded in the list view:
@@ -72,8 +74,8 @@ Trust scores are color-coded in the list view:
 
 | Variable | Default | Description |
 |---|---|---|
-| `SOBER_SOURCES_DB` | `~/.sober-sources/citations.db` | Path to SQLite database |
-| `SOBER_SOURCES_PDF_DIR` | `~/.sober-sources/pdfs` | Directory for downloaded PDFs |
+| `CITATION_NEEDED_DB` | `~/.citation-needed/citations.db` | Path to SQLite database |
+| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs` | Directory for downloaded PDFs |
 
 ---
 
@@ -84,8 +86,8 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 ```json
 {
   "mcpServers": {
-    "sober-sources": {
-      "command": "sober-sources",
+    "citation-needed": {
+      "command": "citation-needed",
       "args": ["server"]
     }
   }
@@ -157,4 +159,4 @@ src/
 
 MIT
 
-anti-hallucinations academic citation assistant 
+anti-hallucination academic citation assistant 

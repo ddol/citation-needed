@@ -13,7 +13,7 @@ import { verificationToolDefinitions, handleVerificationTool } from './tools/ver
 
 export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server {
   const server = new Server(
-    { name: 'sober-sources', version: '0.1.0' },
+    { name: 'citation-needed', version: '0.1.0' },
     { capabilities: { tools: {} } }
   );
 
