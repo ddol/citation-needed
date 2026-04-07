@@ -134,15 +134,21 @@ npm run dev        # Run with ts-node (no build required)
 ```
 src/
 ├── index.ts              # Entry point
-├── db/index.ts           # SQLite database
-├── bibtex/parser.ts      # BibTeX parser
+├── models/               # Shared TypeScript interfaces
+├── utils/                # Logger, RateLimiter, file helpers
+├── parsers/              # BibTeX, DOI, URL parsers
+├── db/                   # SQLite database (schema + Database class)
 ├── retrieval/
-│   ├── arxiv.ts          # arXiv API
-│   ├── unpaywall.ts      # Unpaywall API
-│   └── downloader.ts     # PDF downloader
-├── cli/app.tsx           # Ink CLI
-├── server/mcp.ts         # MCP server
-└── trust/scorer.ts       # Trust scoring
+│   ├── resolvers/        # arXiv, Unpaywall, DOI/Crossref resolvers
+│   ├── downloaders/      # Open-access + authenticated PDF downloaders
+│   ├── publishers/       # Publisher URL adapters (Springer, Elsevier, ACM)
+│   └── index.ts          # RetrievalOrchestrator
+├── auth/                 # Auth config (Unpaywall email, proxies)
+├── scoring/              # TrustScorer
+├── verification/         # PDF text extraction + claim verification
+├── mcp/                  # MCP server with per-tool modules
+├── tui/                  # Ink React components
+└── cli/                  # Commander CLI with per-command files
 ```
 
 ---

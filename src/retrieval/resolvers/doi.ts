@@ -48,9 +48,7 @@ export class DoiResolver {
         journal,
         publisher: work.publisher,
         url: work.URL,
-        isOpenAccess: work['is-referenced-by-count'] !== undefined
-          ? undefined
-          : undefined,
+        isOpenAccess: undefined,
       };
     } catch (err) {
       logger.warn('DOI resolve failed', { doi, err: String(err) });

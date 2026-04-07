@@ -16,7 +16,7 @@ export class ArxivResolver {
   }
 
   async searchByTitle(title: string): Promise<ArxivResult[]> {
-    const url = `http://export.arxiv.org/api/query?search_query=ti:${encodeURIComponent(title)}&max_results=5`;
+    const url = `https://export.arxiv.org/api/query?search_query=ti:${encodeURIComponent(title)}&max_results=5`;
 
     try {
       const response = await axios.get<string>(url, {

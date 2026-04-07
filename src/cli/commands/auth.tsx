@@ -42,6 +42,13 @@ export function registerAuthCommand(program: Command): void {
     .description('Show current auth configuration')
     .action(() => {
       const config = loadAuthConfig();
-      render(<Text>{JSON.stringify({ ...config, proxies: config.proxies?.map(p => ({ ...p, passwordEnvVar: p.passwordEnvVar ? '***' : undefined })) }, null, 2)}</Text>);
+      const sanitized = {
+        ...config,
+        proxies: config.proxies?.map((p) => ({
+          ...p,
+          passwordEnvVar: p.passwordEnvVar ? '***' : undefined,
+        })),
+      };
+      render(<Text>{JSON.stringify(sanitized, null, 2)}</Text>);
     });
 }
