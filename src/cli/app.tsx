@@ -28,7 +28,7 @@ function TrustBadge({ score }: { score: number }): React.ReactElement {
 
 function CitationsTable({ rows }: { rows: CitationRow[] }): React.ReactElement {
   if (rows.length === 0) {
-    return <Text color="yellow">No citations found. Import some with: sober-sources import-bibtex &lt;file&gt;</Text>;
+    return <Text color="yellow">{'No citations found. Import some with: sober-sources import-bibtex <file>'}</Text>;
   }
 
   return (

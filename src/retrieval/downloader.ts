@@ -32,7 +32,7 @@ export class PdfDownloader {
       responseType: 'arraybuffer',
       timeout: 60000,
       headers: {
-        'User-Agent': 'sober-sources/0.1.0 (mailto:user@example.com)',
+        'User-Agent': `sober-sources/0.1.0 (mailto:${process.env.SOBER_SOURCES_EMAIL || 'sober-sources@example.com'})`,
       },
     });
 
