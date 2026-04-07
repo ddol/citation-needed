@@ -2,12 +2,19 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: [
+    '**/test/**/*.test.ts',
+    '**/__tests__/**/*.test.ts',
+  ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
         module: 'commonjs',
-        jsx: 'react'
+        jsx: 'react',
+        rootDir: '.',
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
       }
     }]
   },
@@ -15,6 +22,5 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/__tests__/**'
-  ]
+  ],
 };

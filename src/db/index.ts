@@ -1,36 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import type { Citation, TrustEvent } from '../models/citation';
+import type { RetrievalAttempt } from '../models/retrieval';
+import {
+  CREATE_CITATIONS_TABLE,
+  CREATE_TRUST_EVENTS_TABLE,
+  CREATE_RETRIEVAL_LOG_TABLE,
+} from './schema';
 
 // Use require for better-sqlite3 (CommonJS native module)
 const BetterSqlite3 = require('better-sqlite3');
 
-export interface Citation {
-  id?: number;
-  doi: string;
-  url?: string;
-  title?: string;
-  authors?: string;
-  year?: number;
-  journal?: string;
-  bibtexKey?: string;
-  pdfPath?: string;
-  trustScore?: number;
-  verificationStatus?: string;
-  lastVerified?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface TrustEvent {
-  id?: number;
-  citationId: number;
-  eventType: string;
-  scoreDelta: number;
-  notes?: string;
-  agentId?: string;
-  createdAt?: string;
-}
+export type { Citation, TrustEvent };
 
 export class Database {
   private db: InstanceType<typeof BetterSqlite3>;
@@ -51,43 +33,26 @@ export class Database {
   }
 
   private initSchema(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS citations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        doi TEXT UNIQUE,
-        url TEXT,
-        title TEXT,
-        authors TEXT,
-        year INTEGER,
-        journal TEXT,
-        bibtex_key TEXT,
-        pdf_path TEXT,
-        trust_score REAL DEFAULT 0.5,
-        verification_status TEXT DEFAULT 'unverified',
-        last_verified TEXT,
-        created_at TEXT,
-        updated_at TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS trust_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        citation_id INTEGER REFERENCES citations(id),
-        event_type TEXT,
-        score_delta REAL,
-        notes TEXT,
-        agent_id TEXT,
-        created_at TEXT
-      );
-    `);
+    this.db.exec(CREATE_CITATIONS_TABLE);
+    this.db.exec(CREATE_TRUST_EVENTS_TABLE);
+    this.db.exec(CREATE_RETRIEVAL_LOG_TABLE);
+    // Add access_type column if missing (migration for existing dbs)
+    try {
+      this.db.exec(`ALTER TABLE citations ADD COLUMN access_type TEXT DEFAULT 'unknown'`);
+    } catch {
+      // column already exists, ignore
+    }
   }
 
   addCitation(citation: Citation): Citation {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO citations
-        (doi, url, title, authors, year, journal, bibtex_key, trust_score, verification_status, created_at, updated_at)
+        (doi, url, title, authors, year, journal, bibtex_key, trust_score,
+         verification_status, access_type, created_at, updated_at)
       VALUES
-        (@doi, @url, @title, @authors, @year, @journal, @bibtexKey, @trustScore, @verificationStatus, @createdAt, @updatedAt)
+        (@doi, @url, @title, @authors, @year, @journal, @bibtexKey, @trustScore,
+         @verificationStatus, @accessType, @createdAt, @updatedAt)
     `);
     stmt.run({
       doi: citation.doi || null,
@@ -99,6 +64,7 @@ export class Database {
       bibtexKey: citation.bibtexKey || null,
       trustScore: citation.trustScore ?? 0.5,
       verificationStatus: citation.verificationStatus || 'unverified',
+      accessType: citation.accessType || 'unknown',
       createdAt: now,
       updatedAt: now,
     });
@@ -124,6 +90,18 @@ export class Database {
     return rows.map((r) => this.rowToCitation(r));
   }
 
+  searchCitations(query: string): Citation[] {
+    const like = `%${query}%`;
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM citations
+         WHERE title LIKE ? OR authors LIKE ?
+         ORDER BY created_at DESC`
+      )
+      .all(like, like) as Record<string, unknown>[];
+    return rows.map((r) => this.rowToCitation(r));
+  }
+
   updateTrustScore(
     doi: string,
     score: number,
@@ -138,14 +116,13 @@ export class Database {
     const now = new Date().toISOString();
 
     this.db
-      .prepare(
-        'UPDATE citations SET trust_score = ?, updated_at = ? WHERE doi = ?'
-      )
+      .prepare('UPDATE citations SET trust_score = ?, updated_at = ? WHERE doi = ?')
       .run(score, now, doi);
 
     this.db
       .prepare(`
-        INSERT INTO trust_events (citation_id, event_type, score_delta, notes, agent_id, created_at)
+        INSERT INTO trust_events
+          (citation_id, event_type, score_delta, notes, agent_id, created_at)
         VALUES (?, 'score_update', ?, ?, ?, ?)
       `)
       .run(citation.id, delta, notes || null, agentId || null, now);
@@ -154,9 +131,7 @@ export class Database {
   updatePdfPath(doi: string, pdfPath: string): void {
     const now = new Date().toISOString();
     this.db
-      .prepare(
-        'UPDATE citations SET pdf_path = ?, updated_at = ? WHERE doi = ?'
-      )
+      .prepare('UPDATE citations SET pdf_path = ?, updated_at = ? WHERE doi = ?')
       .run(pdfPath, now, doi);
   }
 
@@ -167,6 +142,13 @@ export class Database {
         'UPDATE citations SET verification_status = ?, last_verified = ?, updated_at = ? WHERE doi = ?'
       )
       .run(status, now, now, doi);
+  }
+
+  updateAccessType(doi: string, accessType: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare('UPDATE citations SET access_type = ?, updated_at = ? WHERE doi = ?')
+      .run(accessType, now, doi);
   }
 
   getTrustHistory(doi: string): TrustEvent[] {
@@ -190,6 +172,47 @@ export class Database {
     }));
   }
 
+  logRetrieval(attempt: RetrievalAttempt): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(`
+        INSERT INTO retrieval_log
+          (citation_id, source, url, success, error_message, duration_ms, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        attempt.citationId,
+        attempt.source,
+        attempt.url || null,
+        attempt.success ? 1 : 0,
+        attempt.errorMessage || null,
+        attempt.durationMs || null,
+        now
+      );
+  }
+
+  getRetrievalLog(doi: string): RetrievalAttempt[] {
+    const citation = this.getCitationByDoi(doi);
+    if (!citation || citation.id == null) return [];
+
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM retrieval_log WHERE citation_id = ? ORDER BY created_at DESC'
+      )
+      .all(citation.id) as Record<string, unknown>[];
+
+    return rows.map((r) => ({
+      id: r['id'] as number,
+      citationId: r['citation_id'] as number,
+      source: r['source'] as string,
+      url: r['url'] as string | undefined,
+      success: Boolean(r['success']),
+      errorMessage: r['error_message'] as string | undefined,
+      durationMs: r['duration_ms'] as number | undefined,
+      createdAt: r['created_at'] as string | undefined,
+    }));
+  }
+
   close(): void {
     this.db.close();
   }
@@ -206,7 +229,8 @@ export class Database {
       bibtexKey: row['bibtex_key'] as string | undefined,
       pdfPath: row['pdf_path'] as string | undefined,
       trustScore: row['trust_score'] as number,
-      verificationStatus: row['verification_status'] as string,
+      verificationStatus: row['verification_status'] as Citation['verificationStatus'],
+      accessType: row['access_type'] as Citation['accessType'],
       lastVerified: row['last_verified'] as string | undefined,
       createdAt: row['created_at'] as string | undefined,
       updatedAt: row['updated_at'] as string | undefined,
