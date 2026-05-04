@@ -10,7 +10,7 @@ export interface PdfMarkdownExtractor {
 
 class Pdf2MarkdownExtractor implements PdfMarkdownExtractor {
   async extract(pdfPath: string): Promise<string> {
-    const buffer = fs.readFileSync(pdfPath);
+    const buffer = await fs.promises.readFile(pdfPath);
     return pdf2md(buffer);
   }
 }

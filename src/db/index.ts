@@ -53,7 +53,6 @@ export class Database {
     this.db.exec(CREATE_RETRIEVAL_LOG_TABLE);
     this.ensureAccessTypeColumn();
     this.migrateLegacyCitationSchema();
-    this.dropUnexpectedTables();
   }
 
   private ensureAccessTypeColumn(): void {
@@ -134,24 +133,6 @@ export class Database {
     `);
   }
 
-  private dropUnexpectedTables(): void {
-    const rows = this.db
-      .prepare(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'table'
-           AND name NOT LIKE 'sqlite_%'
-           AND name NOT IN ('citations', 'retrieval_log')`
-      )
-      .all() as Array<{ name: string }>;
-
-    for (const row of rows) {
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name)) {
-        continue;
-      }
-
-      this.db.exec(`DROP TABLE IF EXISTS "${row.name}"`);
-    }
-  }
 
   addCitation(citation: Citation): Citation {
     if (!citation.doi || citation.doi.trim() === '') {
