@@ -25,7 +25,7 @@ List all stored citations.
 ---
 
 ### `import-bibtex`
-Import citations from a BibTeX string.
+Import citations from a BibTeX string into the database.
 
 **Input:**
 ```json
@@ -61,29 +61,3 @@ Download a PDF for a citation (tries open-access sources first).
 }
 ```
 **Output:** Path to downloaded PDF or error message.
-
----
-
-## Verification Tools
-
-### `verify-citation`
-Verify a claim against locally stored PDF Markdown.
-
-**Input:**
-```json
-{
-  "doi": "10.1234/example",
-  "claim": "This paper proposes a transformer architecture",
-  "pdfMarkdown": "optional pre-extracted markdown..."
-}
-```
-**Output:**
-```json
-{
-  "verified": true,
-  "matchedKeywords": ["paper", "proposes", "transformer"],
-  "totalKeywords": 4,
-  "notes": "75% keyword match (3/4)",
-  "pdfAvailable": true
-}
-```

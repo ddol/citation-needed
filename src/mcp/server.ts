@@ -9,7 +9,6 @@ import { loadAuthConfig } from '../auth/config';
 import type { AuthConfig } from '../models/auth';
 import { citationToolDefinitions, handleCitationTool } from './tools/citations';
 import { retrievalToolDefinitions, handleRetrievalTool } from './tools/retrieval';
-import { verificationToolDefinitions, handleVerificationTool } from './tools/verification';
 
 export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server {
   const server = new Server(
@@ -24,7 +23,6 @@ export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server 
     tools: [
       ...citationToolDefinitions,
       ...retrievalToolDefinitions,
-      ...verificationToolDefinitions,
     ],
   }));
 
@@ -38,9 +36,6 @@ export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server 
 
       const retrievalResult = await handleRetrievalTool(name, safeArgs, resolvedDb, resolvedAuth);
       if (retrievalResult) return retrievalResult;
-
-      const verificationResult = await handleVerificationTool(name, safeArgs, resolvedDb);
-      if (verificationResult) return verificationResult;
 
       return {
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],

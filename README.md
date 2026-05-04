@@ -2,22 +2,21 @@
 
 ![citation needed](https://imgs.xkcd.com/comics/wikipedian_protester.png)
 
-> Citation retrieval and verification sidecar for AI agents — backs academic citations with locally stored PDFs.
+> Citation retrieval and Markdown extraction sidecar for AI agents — turns BibTeX references into local PDF and Markdown folders.
 
-AI agents hallucinate citations. **citation-needed** helps by storing citation metadata in SQLite, downloading open-access PDFs (arXiv, Unpaywall), converting PDFs to Markdown, and exposing retrieval and verification workflows through a CLI and MCP server.
+`citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, and converts those PDFs into Markdown using JavaScript.
 
 ---
 
 ## Features
 
-- 📚 **BibTeX import** — parse and ingest `.bib` files
-- 🗄️ **SQLite database** — track citations, PDF paths, and verification status
+- 📚 **BibTeX-first workflow** — process a `.bib` file in one run
+- 🗄️ **SQLite database** — track citation metadata, PDF paths, and processing status
 - 🔓 **Open-access retrieval** — arXiv API and Unpaywall API
 - 🔒 **Authenticated PDF download** — via Playwright for proxy-gated content (optional)
 - 📝 **PDF to Markdown extraction** — convert downloaded PDFs into Markdown in JavaScript
-- ✅ **Claim verification** — compare claims against extracted PDF Markdown
-- 🖥️ **Ink CLI** — interactive terminal UI for managing citations
-- 🤖 **MCP server** — Model Context Protocol tools for AI agent integration
+- 📁 **Automatic output folders** — write PDFs to `papers/` and Markdown to `markdown/` by default
+- 🤖 **MCP server** — Model Context Protocol tools for citation metadata and retrieval
 
 ---
 
@@ -43,23 +42,23 @@ npx playwright install chromium
 ## CLI Usage
 
 ```bash
-# Import citations from a BibTeX file
+# Import a BibTeX file, download PDFs into ./papers, and write Markdown into ./markdown
 citation-needed import-bibtex references.bib
 
-# List all citations
+# Override the PDF output directory for the run
+citation-needed import-bibtex references.bib --paper-path ./downloaded-papers
+
+# List stored citations
 citation-needed list
 
-# Download a PDF for a citation
+# Download a single PDF manually if needed
 citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12345
-# or use Unpaywall for open-access lookup:
-citation-needed download 10.1234/example.doi --email you@example.com
-
-# Verify a claim against a citation
-citation-needed verify 10.1234/example.doi "neural networks outperform SVMs on CIFAR-10"
 
 # Start the MCP server (stdio transport)
 citation-needed server
 ```
+
+By default, `import-bibtex` writes PDFs to a `papers/` folder next to the BibTeX file and Markdown files to a sibling `markdown/` folder. Use `--paper-path` to change the PDF output directory for that run.
 
 ---
 
@@ -68,7 +67,7 @@ citation-needed server
 | Variable | Default | Description |
 |---|---|---|
 | `CITATION_NEEDED_DB` | `~/.citation-needed/citations.db` | Path to SQLite database |
-| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs` | Directory for downloaded PDFs |
+| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs` | Fallback directory for standalone PDF downloads |
 
 ---
 
@@ -92,26 +91,10 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 | Tool | Description | Required params |
 |---|---|---|
 | `get-citation` | Get citation details | `doi` |
-| `import-bibtex` | Import citations from BibTeX string | `bibtex` |
-| `verify-citation` | Verify a claim against stored PDF Markdown | `doi`, `claim` |
+| `import-bibtex` | Import citations from BibTeX string into the database | `bibtex` |
 | `download-pdf` | Download PDF for a citation | `doi` |
 | `list-citations` | List all citations | — |
 | `search-arxiv` | Search arXiv by paper title | `title` |
-
-#### Example agent usage
-
-```
-User: "Is the claim that 'transformers outperform RNNs on long sequences' supported?"
-
-Agent calls:
-  search-arxiv(title: "transformers long sequences")
-  → [{arxivId: "1706.03762", title: "Attention Is All You Need", ...}]
-
-  download-pdf(doi: "10.48550/arxiv.1706.03762", pdfUrl: "https://arxiv.org/pdf/1706.03762")
-
-  verify-citation(doi: "10.48550/arxiv.1706.03762", claim: "transformers outperform RNNs on long sequences")
-  → {verified: true, matchedKeywords: ["transformers", "sequences"], totalKeywords: 3, notes: "67% keyword match (2/3)"}
-```
 
 ---
 
@@ -137,8 +120,8 @@ src/
 │   ├── downloaders/      # Open-access + authenticated PDF downloaders
 │   ├── publishers/       # Publisher URL adapters (Springer, Elsevier, ACM)
 │   └── index.ts          # RetrievalOrchestrator
-├── auth/                 # Auth config (Unpaywall email, proxies)
-├── verification/         # PDF Markdown extraction + claim verification
+├── verification/         # PDF Markdown extraction helpers
+├── workflows/            # BibTeX batch processing workflow
 ├── mcp/                  # MCP server with per-tool modules
 ├── tui/                  # Ink React components
 └── cli/                  # Commander CLI with per-command files
@@ -149,5 +132,3 @@ src/
 ## License
 
 MIT
-
-anti-hallucination academic citation assistant

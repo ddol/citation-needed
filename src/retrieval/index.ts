@@ -20,11 +20,13 @@ export class RetrievalOrchestrator {
   private db: Database;
   private authConfig: AuthConfig;
   private downloader: OpenAccessDownloader;
+  private storageDir?: string;
 
-  constructor(db: Database, authConfig: AuthConfig = {}) {
+  constructor(db: Database, authConfig: AuthConfig = {}, storageDir?: string) {
     this.db = db;
     this.authConfig = authConfig;
-    this.downloader = new OpenAccessDownloader();
+    this.storageDir = storageDir;
+    this.downloader = new OpenAccessDownloader(storageDir);
   }
 
   async retrievePdf(doi: string): Promise<RetrievalResult> {
@@ -44,7 +46,6 @@ export class RetrievalOrchestrator {
   }
 
   private async tryOpenAccess(doi: string): Promise<RetrievalResult> {
-    // 1. Try Unpaywall
     if (this.authConfig.email) {
       const unpaywall = new UnpaywallResolver(this.authConfig.email);
       const pdfUrl = await unpaywall.getOpenAccessPdf(doi);
@@ -61,7 +62,6 @@ export class RetrievalOrchestrator {
       }
     }
 
-    // 2. Try arXiv
     const citation = this.db.getCitation(doi);
     if (citation?.title) {
       const arxiv = new ArxivResolver();
@@ -89,7 +89,7 @@ export class RetrievalOrchestrator {
       return { success: false, source: 'authenticated', message: 'No proxy configured' };
     }
 
-    const authDownloader = new AuthenticatedDownloader();
+    const authDownloader = new AuthenticatedDownloader(this.storageDir);
     const password = proxy.passwordEnvVar
       ? process.env[proxy.passwordEnvVar]
       : undefined;

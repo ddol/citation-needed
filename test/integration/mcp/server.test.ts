@@ -1,7 +1,6 @@
 import { createMcpServer } from '../../../src/mcp/server';
 import { getDatabase } from '../../../src/db/index';
 
-// Mock the database module
 jest.mock('../../../src/db/index', () => {
   const mockDb = {
     getCitation: jest.fn(),
@@ -19,7 +18,6 @@ jest.mock('../../../src/db/index', () => {
   };
 });
 
-// Mock auth config
 jest.mock('../../../src/auth/config', () => ({
   loadAuthConfig: jest.fn().mockReturnValue({}),
 }));
@@ -78,13 +76,12 @@ describe('MCP Server', () => {
   });
 
   test('get-citation tool returns citation when found', async () => {
-    const mockCitation = {
+    const db = getDatabase();
+    (db.getCitation as jest.Mock).mockReturnValue({
       doi: '10.1234/test.001',
       title: 'Test Paper',
-      verificationStatus: 'verified',
-    };
-    const db = getDatabase();
-    (db.getCitation as jest.Mock).mockReturnValue(mockCitation);
+      verificationStatus: 'downloaded',
+    });
 
     const server = createMcpServer();
     const result = await (server as unknown as {
@@ -97,7 +94,7 @@ describe('MCP Server', () => {
     const content = (result as { content: Array<{ type: string; text: string }> }).content;
     const parsed = JSON.parse(content[0].text);
     expect(parsed.doi).toBe('10.1234/test.001');
-    expect(parsed.verificationStatus).toBe('verified');
+    expect(parsed.verificationStatus).toBe('downloaded');
   });
 
   test('import-bibtex tool imports citations', async () => {
@@ -122,57 +119,6 @@ describe('MCP Server', () => {
     const content = (result as { content: Array<{ type: string; text: string }> }).content;
     expect(content[0].text).toContain('Imported');
     expect(db.addCitation).toHaveBeenCalled();
-  });
-
-  test('verify-citation tool returns verification results', async () => {
-    const db = getDatabase();
-    (db.getCitation as jest.Mock).mockReturnValue({
-      doi: '10.1234/test',
-      title: 'Test Paper',
-      verificationStatus: 'unverified',
-    });
-
-    const server = createMcpServer();
-
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
-      method: 'tools/call',
-      params: {
-        name: 'verify-citation',
-        arguments: {
-          doi: '10.1234/test',
-          claim: 'transformers improve sequence modeling',
-          pdfMarkdown: '# Paper\n\nTransformers improve sequence modeling in practice.',
-        },
-      },
-    });
-
-    const content = (result as { content: Array<{ type: string; text: string }> }).content;
-    const parsed = JSON.parse(content[0].text);
-    expect(parsed.verified).toBe(true);
-    expect(parsed.totalKeywords).toBe(4);
-    expect(db.updateVerificationStatus).toHaveBeenCalledWith('10.1234/test', 'verified');
-  });
-
-  test('verify-citation returns error for unknown DOI', async () => {
-    const db = getDatabase();
-    (db.getCitation as jest.Mock).mockReturnValue(undefined);
-    const server = createMcpServer();
-
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
-      method: 'tools/call',
-      params: {
-        name: 'verify-citation',
-        arguments: { doi: '10.0000/missing', claim: 'some claim' },
-      },
-    });
-
-    const response = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
-    expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain('not found');
   });
 
   test('unknown tool returns error', async () => {
@@ -203,7 +149,6 @@ describe('MCP Server', () => {
 
     expect(toolNames).toContain('get-citation');
     expect(toolNames).toContain('import-bibtex');
-    expect(toolNames).toContain('verify-citation');
     expect(toolNames).toContain('download-pdf');
     expect(toolNames).toContain('list-citations');
     expect(toolNames).toContain('search-arxiv');
