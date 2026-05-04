@@ -133,7 +133,6 @@ export class Database {
     `);
   }
 
-
   addCitation(citation: Citation): Citation {
     if (!citation.doi || citation.doi.trim() === '') {
       throw new Error('Citation must have a non-empty DOI');

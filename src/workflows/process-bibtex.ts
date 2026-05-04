@@ -45,7 +45,7 @@ export async function processBibtexFile(
   const bibtexDir = path.dirname(resolvedBibtexPath);
   const paperPath = path.resolve(options.paperPath || path.join(bibtexDir, 'papers'));
   const markdownPath = path.resolve(
-    options.markdownPath || path.join(path.dirname(paperPath), 'markdown')
+    options.markdownPath || path.join(bibtexDir, 'markdown')
   );
 
   ensureDir(paperPath);

@@ -65,6 +65,6 @@ describe('processBibtexFile', () => {
     });
 
     expect(result.paperPath).toBe(customPaperPath);
-    expect(result.markdownPath).toBe(path.join(tempRoot, 'markdown'));
+    expect(result.markdownPath).toBe(path.join(bibtexDir, 'markdown'));
   });
 });
