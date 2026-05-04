@@ -5,18 +5,18 @@ All tools are available via the MCP server started with `citation-needed server`
 ## Citation Tools
 
 ### `get-citation`
-Get citation details and trust score by DOI.
+Get citation details by DOI.
 
 **Input:**
 ```json
 { "doi": "10.1234/example.001" }
 ```
-**Output:** JSON object with citation fields plus `trustLevel` (`high`/`medium`/`low`/`unverified`).
+**Output:** JSON object with citation fields.
 
 ---
 
 ### `list-citations`
-List all stored citations with trust scores.
+List all stored citations.
 
 **Input:** `{}`
 
@@ -55,9 +55,9 @@ Download a PDF for a citation (tries open-access sources first).
 ```json
 {
   "doi": "10.1234/example",
-  "pdfUrl": "https://example.com/paper.pdf",   // optional
-  "useUnpaywall": true,                          // optional
-  "email": "you@university.edu"                  // required if useUnpaywall
+  "pdfUrl": "https://example.com/paper.pdf",
+  "useUnpaywall": true,
+  "email": "you@university.edu"
 }
 ```
 **Output:** Path to downloaded PDF or error message.
@@ -67,30 +67,23 @@ Download a PDF for a citation (tries open-access sources first).
 ## Verification Tools
 
 ### `verify-citation`
-Verify a claim against locally stored PDF content.
+Verify a claim against locally stored PDF Markdown.
 
 **Input:**
 ```json
 {
   "doi": "10.1234/example",
   "claim": "This paper proposes a transformer architecture",
-  "pdfContent": "optional pre-extracted text..."
+  "pdfMarkdown": "optional pre-extracted markdown..."
 }
 ```
-**Output:** `{ score, verified, notes }`
-
----
-
-### `update-trust-score`
-Update the trust score for a citation with an absolute value.
-
-**Input:**
+**Output:**
 ```json
 {
-  "doi": "10.1234/example",
-  "score": 0.85,
-  "notes": "Manually verified against source",
-  "agentId": "gpt-4"
+  "verified": true,
+  "matchedKeywords": ["paper", "proposes", "transformer"],
+  "totalKeywords": 4,
+  "notes": "75% keyword match (3/4)",
+  "pdfAvailable": true
 }
 ```
-**Output:** Confirmation message.

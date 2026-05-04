@@ -2,21 +2,22 @@
 
 ![citation needed](https://imgs.xkcd.com/comics/wikipedian_protester.png)
 
-> Trust and verification sidecar for AI agents — backs academic citations with locally verified PDFs.
+> Citation retrieval and verification sidecar for AI agents — backs academic citations with locally stored PDFs.
 
-AI agents hallucinate citations. **citation-needed** fixes that by storing a local SQLite database of DOIs with trust scores, downloading open-access PDFs (arXiv, Unpaywall), and exposing everything via an MCP server that any agent can query.
+AI agents hallucinate citations. **citation-needed** helps by storing citation metadata in SQLite, downloading open-access PDFs (arXiv, Unpaywall), converting PDFs to Markdown, and exposing retrieval and verification workflows through a CLI and MCP server.
 
 ---
 
 ## Features
 
 - 📚 **BibTeX import** — parse and ingest `.bib` files
-- 🗄️ **SQLite database** — track citations, PDF paths, and trust scores
+- 🗄️ **SQLite database** — track citations, PDF paths, and verification status
 - 🔓 **Open-access retrieval** — arXiv API and Unpaywall API
 - 🔒 **Authenticated PDF download** — via Playwright for proxy-gated content (optional)
+- 📝 **PDF to Markdown extraction** — convert downloaded PDFs into Markdown in JavaScript
+- ✅ **Claim verification** — compare claims against extracted PDF Markdown
 - 🖥️ **Ink CLI** — interactive terminal UI for managing citations
 - 🤖 **MCP server** — Model Context Protocol tools for AI agent integration
-- 📊 **Trust scoring** — feedback loop to raise/lower confidence per citation
 
 ---
 
@@ -45,7 +46,7 @@ npx playwright install chromium
 # Import citations from a BibTeX file
 citation-needed import-bibtex references.bib
 
-# List all citations with trust scores
+# List all citations
 citation-needed list
 
 # Download a PDF for a citation
@@ -56,17 +57,9 @@ citation-needed download 10.1234/example.doi --email you@example.com
 # Verify a claim against a citation
 citation-needed verify 10.1234/example.doi "neural networks outperform SVMs on CIFAR-10"
 
-# Show trust score details and history
-citation-needed score 10.1234/example.doi
-
 # Start the MCP server (stdio transport)
 citation-needed server
 ```
-
-Trust scores are color-coded in the list view:
-- 🟢 **Green** (≥ 0.7) — high confidence
-- 🟡 **Yellow** (0.4–0.7) — medium confidence
-- 🔴 **Red** (< 0.4) — low confidence
 
 ---
 
@@ -98,12 +91,11 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 
 | Tool | Description | Required params |
 |---|---|---|
-| `get-citation` | Get citation details and trust score | `doi` |
+| `get-citation` | Get citation details | `doi` |
 | `import-bibtex` | Import citations from BibTeX string | `bibtex` |
-| `verify-citation` | Verify a claim against stored PDF | `doi`, `claim` |
-| `update-trust-score` | Update trust score with feedback | `doi`, `score` |
+| `verify-citation` | Verify a claim against stored PDF Markdown | `doi`, `claim` |
 | `download-pdf` | Download PDF for a citation | `doi` |
-| `list-citations` | List all citations with trust scores | — |
+| `list-citations` | List all citations | — |
 | `search-arxiv` | Search arXiv by paper title | `title` |
 
 #### Example agent usage
@@ -112,13 +104,13 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 User: "Is the claim that 'transformers outperform RNNs on long sequences' supported?"
 
 Agent calls:
-  search-arxiv(title: "transformers long sequences") 
+  search-arxiv(title: "transformers long sequences")
   → [{arxivId: "1706.03762", title: "Attention Is All You Need", ...}]
-  
+
   download-pdf(doi: "10.48550/arxiv.1706.03762", pdfUrl: "https://arxiv.org/pdf/1706.03762")
-  
+
   verify-citation(doi: "10.48550/arxiv.1706.03762", claim: "transformers outperform RNNs on long sequences")
-  → {score: 0.75, verified: true, notes: "85% keyword match in PDF"}
+  → {verified: true, matchedKeywords: ["transformers", "sequences"], totalKeywords: 3, notes: "67% keyword match (2/3)"}
 ```
 
 ---
@@ -146,8 +138,7 @@ src/
 │   ├── publishers/       # Publisher URL adapters (Springer, Elsevier, ACM)
 │   └── index.ts          # RetrievalOrchestrator
 ├── auth/                 # Auth config (Unpaywall email, proxies)
-├── scoring/              # TrustScorer
-├── verification/         # PDF text extraction + claim verification
+├── verification/         # PDF Markdown extraction + claim verification
 ├── mcp/                  # MCP server with per-tool modules
 ├── tui/                  # Ink React components
 └── cli/                  # Commander CLI with per-command files
@@ -159,4 +150,4 @@ src/
 
 MIT
 
-anti-hallucination academic citation assistant 
+anti-hallucination academic citation assistant

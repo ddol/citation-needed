@@ -1,7 +1,7 @@
 {
   "name": "citation-needed",
   "version": "0.1.0",
-  "description": "Trust and verification sidecar for AI agents - backs academic citations with locally verified PDFs",
+  "description": "Citation retrieval and verification sidecar for AI agents backed by local PDFs",
   "type": "commonjs",
   "main": "dist/index.js",
   "bin": {

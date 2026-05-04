@@ -13,6 +13,23 @@ const BetterSqlite3 = require('better-sqlite3');
 
 export type { Citation };
 
+const EXPECTED_CITATION_COLUMNS = [
+  'id',
+  'doi',
+  'url',
+  'title',
+  'authors',
+  'year',
+  'journal',
+  'bibtex_key',
+  'pdf_path',
+  'verification_status',
+  'access_type',
+  'last_verified',
+  'created_at',
+  'updated_at',
+] as const;
+
 export class Database {
   private db: InstanceType<typeof BetterSqlite3>;
 
@@ -35,7 +52,8 @@ export class Database {
     this.db.exec(CREATE_CITATIONS_TABLE);
     this.db.exec(CREATE_RETRIEVAL_LOG_TABLE);
     this.ensureAccessTypeColumn();
-    this.migrateLegacyScoringSchema();
+    this.migrateLegacyCitationSchema();
+    this.dropUnexpectedTables();
   }
 
   private ensureAccessTypeColumn(): void {
@@ -46,14 +64,17 @@ export class Database {
     }
   }
 
-  private migrateLegacyScoringSchema(): void {
-    this.db.exec('DROP TABLE IF EXISTS trust_events');
-
+  private migrateLegacyCitationSchema(): void {
     const columns = this.db
       .prepare('PRAGMA table_info(citations)')
       .all() as Array<{ name: string }>;
+    const hasExpectedShape =
+      columns.length === EXPECTED_CITATION_COLUMNS.length &&
+      EXPECTED_CITATION_COLUMNS.every((expectedColumn) =>
+        columns.some((column) => column.name === expectedColumn)
+      );
 
-    if (!columns.some((column) => column.name === 'trust_score')) {
+    if (hasExpectedShape) {
       return;
     }
 
@@ -111,6 +132,25 @@ export class Database {
       ALTER TABLE citations_migrated RENAME TO citations;
       COMMIT;
     `);
+  }
+
+  private dropUnexpectedTables(): void {
+    const rows = this.db
+      .prepare(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%'
+           AND name NOT IN ('citations', 'retrieval_log')`
+      )
+      .all() as Array<{ name: string }>;
+
+    for (const row of rows) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name)) {
+        continue;
+      }
+
+      this.db.exec(`DROP TABLE IF EXISTS "${row.name}"`);
+    }
   }
 
   addCitation(citation: Citation): Citation {
