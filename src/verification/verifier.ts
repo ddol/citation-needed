@@ -1,28 +1,32 @@
-import { extractPdfText } from './extractor';
+import { extractPdfMarkdown } from './markdown';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('claim-verifier');
 
 export interface VerificationResult {
   verified: boolean;
-  confidence: number;      // 0-1
   matchedKeywords: string[];
   totalKeywords: number;
   notes: string;
   pdfAvailable: boolean;
 }
 
-export class ClaimVerifier {
+export interface VerifyOptions {
+  pdfPath?: string;
+  pdfMarkdown?: string;
+}
 
+export class ClaimVerifier {
   async verify(
     doi: string,
     claim: string,
-    pdfPath?: string
+    options: VerifyOptions = {}
   ): Promise<VerificationResult> {
-    if (!pdfPath) {
+    const { pdfPath, pdfMarkdown } = options;
+
+    if (!pdfPath && !pdfMarkdown) {
       return {
         verified: false,
-        confidence: 0,
         matchedKeywords: [],
         totalKeywords: 0,
         notes: 'No PDF available for verification',
@@ -30,33 +34,43 @@ export class ClaimVerifier {
       };
     }
 
-    let pdfText: string;
-    try {
-      pdfText = await extractPdfText(pdfPath);
-    } catch (err) {
-      logger.warn('PDF text extraction failed', { pdfPath, err: String(err) });
+    let markdown = pdfMarkdown;
+    if (!markdown && pdfPath) {
+      try {
+        markdown = await extractPdfMarkdown(pdfPath);
+      } catch (err) {
+        logger.warn('PDF markdown extraction failed', { pdfPath, err: String(err) });
+        return {
+          verified: false,
+          matchedKeywords: [],
+          totalKeywords: 0,
+          notes: `PDF extraction failed: ${String(err)}`,
+          pdfAvailable: true,
+        };
+      }
+    }
+
+    const keywords = this.extractKeywords(claim);
+    if (keywords.length === 0) {
       return {
         verified: false,
-        confidence: 0,
         matchedKeywords: [],
         totalKeywords: 0,
-        notes: `PDF extraction failed: ${String(err)}`,
+        notes: 'No claim keywords available for verification',
         pdfAvailable: true,
       };
     }
 
-    const keywords = this.extractKeywords(claim);
-    const { matched, ratio } = this.calculateMatch(keywords, pdfText);
+    const matchedKeywords = this.findMatchedKeywords(keywords, markdown || '');
+    const matchRatio = matchedKeywords.length / keywords.length;
+    const verified = matchRatio >= 0.7;
+    const notes = `${Math.round(matchRatio * 100)}% keyword match (${matchedKeywords.length}/${keywords.length})`;
 
-    const verified = ratio >= 0.7;
-    const notes = `${Math.round(ratio * 100)}% keyword match (${matched.length}/${keywords.length})`;
-
-    logger.debug('Claim verification', { doi, verified, ratio });
+    logger.debug('Claim verification', { doi, verified, matchedKeywords: matchedKeywords.length, totalKeywords: keywords.length });
 
     return {
       verified,
-      confidence: ratio,
-      matchedKeywords: matched,
+      matchedKeywords,
       totalKeywords: keywords.length,
       notes,
       pdfAvailable: true,
@@ -64,20 +78,23 @@ export class ClaimVerifier {
   }
 
   private extractKeywords(text: string): string[] {
-    return text
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 4)
-      .filter((w) => /^[a-z]+$/.test(w));
+    return Array.from(
+      new Set(
+        text
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((word) => word.length > 4)
+          .filter((word) => /^[a-z]+$/.test(word))
+      )
+    );
   }
 
-  private calculateMatch(
-    claimWords: string[],
-    pdfText: string
-  ): { matched: string[]; ratio: number } {
-    const lower = pdfText.toLowerCase();
-    const matched = claimWords.filter((w) => lower.includes(w));
-    const ratio = claimWords.length > 0 ? matched.length / claimWords.length : 0;
-    return { matched, ratio };
+  private findMatchedKeywords(claimWords: string[], markdown: string): string[] {
+    const normalizedMarkdown = markdown
+      .toLowerCase()
+      .replace(/[`*_>#\[\]()|~-]/g, ' ')
+      .replace(/\s+/g, ' ');
+
+    return claimWords.filter((word) => normalizedMarkdown.includes(word));
   }
 }

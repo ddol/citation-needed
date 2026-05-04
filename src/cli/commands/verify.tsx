@@ -2,8 +2,7 @@ import React from 'react';
 import { render, Box, Text } from 'ink';
 import { Command } from 'commander';
 import { getDatabase } from '../../db/index';
-import { TrustScorer } from '../../scoring/scorer';
-import { extractPdfText } from '../../verification/extractor';
+import { ClaimVerifier } from '../../verification/verifier';
 
 export function registerVerifyCommand(program: Command): void {
   program
@@ -11,27 +10,28 @@ export function registerVerifyCommand(program: Command): void {
     .description('Verify a claim against a citation PDF')
     .action(async (doi: string, claim: string) => {
       const db = getDatabase();
-      const scorer = new TrustScorer(db);
-
-      // Load PDF text from stored path if available
       const citation = db.getCitation(doi);
-      let pdfContent: string | undefined;
-      if (citation?.pdfPath) {
-        try {
-          pdfContent = await extractPdfText(citation.pdfPath);
-        } catch {
-          // Fall through to title-based heuristic
-        }
+      if (!citation) {
+        render(<Text color="red">Citation not found: {doi}</Text>);
+        return;
       }
 
-      const result = await scorer.verifyAndScore(doi, claim, pdfContent);
-      const color = result.verified ? 'green' : 'red';
+      const verifier = new ClaimVerifier();
+      const result = await verifier.verify(doi, claim, { pdfPath: citation.pdfPath });
+      const status = result.verified ? 'verified' : result.pdfAvailable ? 'failed' : 'unverified';
+      db.updateVerificationStatus(doi, status);
+
       render(
         <Box flexDirection="column">
           <Text>
-            Verified: <Text color={color}>{result.verified ? 'YES' : 'NO'}</Text>
+            Verified: <Text color={result.verified ? 'green' : 'red'}>{result.verified ? 'YES' : 'NO'}</Text>
           </Text>
-          <Text>Score: {result.score.toFixed(3)}</Text>
+          <Text>
+            Matched keywords: {result.matchedKeywords.length}/{result.totalKeywords}
+          </Text>
+          {result.matchedKeywords.length > 0 && (
+            <Text>Matches: {result.matchedKeywords.join(', ')}</Text>
+          )}
           <Text dimColor>{result.notes}</Text>
         </Box>
       );

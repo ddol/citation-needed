@@ -5,8 +5,6 @@ export interface CitationRow {
   doi: string;
   title?: string;
   year?: number;
-  trustScore: number;
-  trustLevel: string;
   verificationStatus: string;
 }
 
@@ -23,27 +21,18 @@ export function CitationsTable({ rows }: { rows: CitationRow[] }): React.ReactEl
     <Box flexDirection="column">
       <Box>
         <Text bold color="cyan">{'DOI'.padEnd(30)}</Text>
-        <Text bold color="cyan">{'Title'.padEnd(40)}</Text>
+        <Text bold color="cyan">{'Title'.padEnd(50)}</Text>
         <Text bold color="cyan">{'Year'.padEnd(6)}</Text>
-        <Text bold color="cyan">{'Trust'.padEnd(8)}</Text>
         <Text bold color="cyan">{'Status'}</Text>
       </Box>
       {rows.map((row) => (
         <Box key={row.doi}>
           <Text>{(row.doi || '').slice(0, 29).padEnd(30)}</Text>
-          <Text>{(row.title || '(no title)').slice(0, 39).padEnd(40)}</Text>
+          <Text>{(row.title || '(no title)').slice(0, 49).padEnd(50)}</Text>
           <Text>{String(row.year || '').padEnd(6)}</Text>
-          <Box width={8}>
-            <TrustBadgeInline score={row.trustScore} />
-          </Box>
           <Text dimColor>{row.verificationStatus}</Text>
         </Box>
       ))}
     </Box>
   );
-}
-
-function TrustBadgeInline({ score }: { score: number }): React.ReactElement {
-  const color = score >= 0.7 ? 'green' : score >= 0.4 ? 'yellow' : 'red';
-  return <Text color={color}>{score.toFixed(2)}</Text>;
 }

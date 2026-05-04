@@ -1,18 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { Citation, TrustEvent } from '../models/citation';
+import type { Citation } from '../models/citation';
 import type { RetrievalAttempt } from '../models/retrieval';
 import {
   CREATE_CITATIONS_TABLE,
-  CREATE_TRUST_EVENTS_TABLE,
   CREATE_RETRIEVAL_LOG_TABLE,
 } from './schema';
 
 // Use require for better-sqlite3 (CommonJS native module)
 const BetterSqlite3 = require('better-sqlite3');
 
-export type { Citation, TrustEvent };
+export type { Citation };
 
 export class Database {
   private db: InstanceType<typeof BetterSqlite3>;
@@ -34,14 +33,84 @@ export class Database {
 
   private initSchema(): void {
     this.db.exec(CREATE_CITATIONS_TABLE);
-    this.db.exec(CREATE_TRUST_EVENTS_TABLE);
     this.db.exec(CREATE_RETRIEVAL_LOG_TABLE);
-    // Add access_type column if missing (migration for existing dbs)
+    this.ensureAccessTypeColumn();
+    this.migrateLegacyScoringSchema();
+  }
+
+  private ensureAccessTypeColumn(): void {
     try {
       this.db.exec(`ALTER TABLE citations ADD COLUMN access_type TEXT DEFAULT 'unknown'`);
     } catch {
       // column already exists, ignore
     }
+  }
+
+  private migrateLegacyScoringSchema(): void {
+    this.db.exec('DROP TABLE IF EXISTS trust_events');
+
+    const columns = this.db
+      .prepare('PRAGMA table_info(citations)')
+      .all() as Array<{ name: string }>;
+
+    if (!columns.some((column) => column.name === 'trust_score')) {
+      return;
+    }
+
+    this.db.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE citations_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doi TEXT UNIQUE,
+        url TEXT,
+        title TEXT,
+        authors TEXT,
+        year INTEGER,
+        journal TEXT,
+        bibtex_key TEXT,
+        pdf_path TEXT,
+        verification_status TEXT DEFAULT 'unverified',
+        access_type TEXT DEFAULT 'unknown',
+        last_verified TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO citations_migrated (
+        id,
+        doi,
+        url,
+        title,
+        authors,
+        year,
+        journal,
+        bibtex_key,
+        pdf_path,
+        verification_status,
+        access_type,
+        last_verified,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        doi,
+        url,
+        title,
+        authors,
+        year,
+        journal,
+        bibtex_key,
+        pdf_path,
+        verification_status,
+        access_type,
+        last_verified,
+        created_at,
+        updated_at
+      FROM citations;
+      DROP TABLE citations;
+      ALTER TABLE citations_migrated RENAME TO citations;
+      COMMIT;
+    `);
   }
 
   addCitation(citation: Citation): Citation {
@@ -51,10 +120,10 @@ export class Database {
     const now = new Date().toISOString();
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO citations
-        (doi, url, title, authors, year, journal, bibtex_key, trust_score,
+        (doi, url, title, authors, year, journal, bibtex_key,
          verification_status, access_type, created_at, updated_at)
       VALUES
-        (@doi, @url, @title, @authors, @year, @journal, @bibtexKey, @trustScore,
+        (@doi, @url, @title, @authors, @year, @journal, @bibtexKey,
          @verificationStatus, @accessType, @createdAt, @updatedAt)
     `);
     stmt.run({
@@ -65,7 +134,6 @@ export class Database {
       year: citation.year || null,
       journal: citation.journal || null,
       bibtexKey: citation.bibtexKey || null,
-      trustScore: citation.trustScore ?? 0.5,
       verificationStatus: citation.verificationStatus || 'unverified',
       accessType: citation.accessType || 'unknown',
       createdAt: now,
@@ -105,32 +173,6 @@ export class Database {
     return rows.map((r) => this.rowToCitation(r));
   }
 
-  updateTrustScore(
-    doi: string,
-    score: number,
-    notes?: string,
-    agentId?: string
-  ): void {
-    const citation = this.getCitationByDoi(doi);
-    if (!citation || citation.id == null) return;
-
-    const oldScore = citation.trustScore ?? 0.5;
-    const delta = score - oldScore;
-    const now = new Date().toISOString();
-
-    this.db
-      .prepare('UPDATE citations SET trust_score = ?, updated_at = ? WHERE doi = ?')
-      .run(score, now, doi);
-
-    this.db
-      .prepare(`
-        INSERT INTO trust_events
-          (citation_id, event_type, score_delta, notes, agent_id, created_at)
-        VALUES (?, 'score_update', ?, ?, ?, ?)
-      `)
-      .run(citation.id, delta, notes || null, agentId || null, now);
-  }
-
   updatePdfPath(doi: string, pdfPath: string): void {
     const now = new Date().toISOString();
     this.db
@@ -152,27 +194,6 @@ export class Database {
     this.db
       .prepare('UPDATE citations SET access_type = ?, updated_at = ? WHERE doi = ?')
       .run(accessType, now, doi);
-  }
-
-  getTrustHistory(doi: string): TrustEvent[] {
-    const citation = this.getCitationByDoi(doi);
-    if (!citation || citation.id == null) return [];
-
-    const rows = this.db
-      .prepare(
-        'SELECT * FROM trust_events WHERE citation_id = ? ORDER BY created_at ASC'
-      )
-      .all(citation.id) as Record<string, unknown>[];
-
-    return rows.map((r) => ({
-      id: r['id'] as number,
-      citationId: r['citation_id'] as number,
-      eventType: r['event_type'] as string,
-      scoreDelta: r['score_delta'] as number,
-      notes: r['notes'] as string | undefined,
-      agentId: r['agent_id'] as string | undefined,
-      createdAt: r['created_at'] as string | undefined,
-    }));
   }
 
   logRetrieval(attempt: RetrievalAttempt): void {
@@ -231,7 +252,6 @@ export class Database {
       journal: row['journal'] as string | undefined,
       bibtexKey: row['bibtex_key'] as string | undefined,
       pdfPath: row['pdf_path'] as string | undefined,
-      trustScore: row['trust_score'] as number,
       verificationStatus: row['verification_status'] as Citation['verificationStatus'],
       accessType: row['access_type'] as Citation['accessType'],
       lastVerified: row['last_verified'] as string | undefined,

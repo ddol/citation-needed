@@ -1,3 +1,6 @@
+export type VerificationStatus = 'unverified' | 'downloaded' | 'verified' | 'failed' | 'not-found';
+export type AccessType = 'open-access' | 'institutional' | 'unknown';
+
 export interface Citation {
   id?: number;
   doi: string;
@@ -8,22 +11,9 @@ export interface Citation {
   journal?: string;
   bibtexKey?: string;
   pdfPath?: string;
-  trustScore?: number;
-  verificationStatus?: 'unverified' | 'downloaded' | 'verified' | 'failed' | 'not-found';
-  accessType?: 'open-access' | 'institutional' | 'unknown';
+  verificationStatus?: VerificationStatus;
+  accessType?: AccessType;
   lastVerified?: string;
   createdAt?: string;
   updatedAt?: string;
 }
-
-export interface TrustEvent {
-  id?: number;
-  citationId: number;
-  eventType: string;
-  scoreDelta: number;
-  notes?: string;
-  agentId?: string;
-  createdAt?: string;
-}
-
-export type TrustLevel = 'high' | 'medium' | 'low' | 'unverified';
