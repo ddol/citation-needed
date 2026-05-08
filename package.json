@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "dist/index.js",
   "bin": {
-    "citation-needed": "./dist/index.js"
+    "citation-needed": "./bin/citation-needed.js"
   },
   "scripts": {
     "build": "tsc",
