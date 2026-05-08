@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { Citation } from '../models/citation';
+import type { Citation, VerificationStatus, AccessType } from '../models/citation';
 import type { RetrievalAttempt } from '../models/retrieval';
 import {
   CREATE_CITATIONS_TABLE,
@@ -200,7 +200,7 @@ export class Database {
       .run(pdfPath, now, doi);
   }
 
-  updateVerificationStatus(doi: string, status: string): void {
+  updateVerificationStatus(doi: string, status: VerificationStatus): void {
     const now = new Date().toISOString();
     this.db
       .prepare(
@@ -209,7 +209,7 @@ export class Database {
       .run(status, now, now, doi);
   }
 
-  updateAccessType(doi: string, accessType: string): void {
+  updateAccessType(doi: string, accessType: AccessType): void {
     const now = new Date().toISOString();
     this.db
       .prepare('UPDATE citations SET access_type = ?, updated_at = ? WHERE doi = ?')

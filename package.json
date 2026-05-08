@@ -1,7 +1,7 @@
 {
   "name": "citation-needed",
   "version": "0.1.0",
-  "description": "Citation retrieval and verification sidecar for AI agents backed by local PDFs",
+  "description": "BibTeX ingestion pipeline for local PDF and Markdown outputs",
   "type": "commonjs",
   "main": "dist/index.js",
   "bin": {
