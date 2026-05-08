@@ -1,3 +1,4 @@
+import fs from 'fs';
 import type { Database } from '../db/index';
 import type { AuthConfig } from '../models/auth';
 import type { RetrievalResult } from '../models/retrieval';
@@ -35,6 +36,16 @@ export class RetrievalOrchestrator {
     doi: string,
     identity?: CitationFileIdentity
   ): Promise<RetrievalResult> {
+    const cachedCitation = this.db.getCitation(doi);
+    if (cachedCitation?.pdfPath && fs.existsSync(cachedCitation.pdfPath)) {
+      return {
+        success: true,
+        localPath: cachedCitation.pdfPath,
+        source: 'cache',
+        message: 'Already downloaded',
+      };
+    }
+
     const fileStem = getCitationFileStem({ doi, ...identity });
     const existing = this.downloader.getLocalPath(doi, fileStem);
     if (existing) {
