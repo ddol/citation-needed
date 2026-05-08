@@ -107,7 +107,7 @@ export async function processBibtexFile(
       message: 'Downloading PDF',
     });
 
-    const retrieval = await retriever.retrievePdf(entry.doi, entry, { fileStem });
+    const retrieval = await retriever.retrievePdf(entry.doi, entry);
     if (!retrieval.success || !retrieval.localPath) {
       failures.push({
         doi: entry.doi,

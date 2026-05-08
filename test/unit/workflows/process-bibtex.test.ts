@@ -130,4 +130,67 @@ describe('processBibtexFile', () => {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  test('emits progress updates for skipped, successful, and failed entries', async () => {
+    const tempRoot = makeTempRoot();
+    const bibtexDir = path.join(tempRoot, 'refs');
+    const bibtexPath = path.join(bibtexDir, 'library.bib');
+    const progressEvents: Array<{ label: string; stage: string; message?: string }> = [];
+
+    fs.mkdirSync(bibtexDir, { recursive: true });
+    fs.writeFileSync(
+      bibtexPath,
+      [
+        '@article{skip, title={Skipped Paper}, author={No DOI Author}}',
+        '@article{success, title={Successful Paper}, doi={10.1234/success}, author={Success Author}}',
+        '@article{failure, title={Failed Paper}, doi={10.1234/failure}, author={Failure Author}}',
+      ].join('\n\n'),
+      'utf-8'
+    );
+
+    try {
+      await processBibtexFile(bibtexPath, {
+        db: { addCitation: jest.fn() } as never,
+        retrievePdf: async (doi, entry) => {
+          if (entry.bibtexKey === 'failure') {
+            return {
+              success: false,
+              source: 'open-access',
+              message: 'No PDF available',
+            };
+          }
+
+          return {
+            success: true,
+            localPath: path.join(bibtexDir, 'papers', 'pdf', `${entry.bibtexKey}.pdf`),
+            source: 'cache',
+            message: `ok:${doi}`,
+          };
+        },
+        extractMarkdown: async () => '# Markdown\n',
+        onProgress: (progress) => {
+          progressEvents.push({
+            label: progress.label,
+            stage: progress.stage,
+            message: progress.message,
+          });
+        },
+      });
+
+      expect(progressEvents).toEqual([
+        { label: 'skip', stage: 'skipped', message: 'Skipped: no DOI' },
+        { label: 'success', stage: 'retrieving', message: 'Downloading PDF' },
+        { label: 'success', stage: 'markdown', message: 'Generating Markdown' },
+        {
+          label: 'success',
+          stage: 'completed',
+          message: 'PDF downloaded and Markdown created',
+        },
+        { label: 'failure', stage: 'retrieving', message: 'Downloading PDF' },
+        { label: 'failure', stage: 'failed', message: 'No PDF available' },
+      ]);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
 });

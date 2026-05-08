@@ -6,6 +6,8 @@ import { UnpaywallResolver } from './resolvers/unpaywall';
 import { OpenAccessDownloader } from './downloaders/open-access';
 import { AuthenticatedDownloader } from './downloaders/authenticated';
 import { createLogger } from '../utils/logger';
+import type { CitationFileIdentity } from '../utils/file';
+import { getCitationFileStem } from '../utils/file';
 
 export { ArxivResolver, ArxivRetriever } from './resolvers/arxiv';
 export { UnpaywallResolver, UnpaywallRetriever } from './resolvers/unpaywall';
@@ -31,18 +33,19 @@ export class RetrievalOrchestrator {
 
   async retrievePdf(
     doi: string,
-    options?: { fileStem?: string }
+    identity?: CitationFileIdentity
   ): Promise<RetrievalResult> {
-    const existing = this.downloader.getLocalPath(doi, options?.fileStem);
+    const fileStem = getCitationFileStem({ doi, ...identity });
+    const existing = this.downloader.getLocalPath(doi, fileStem);
     if (existing) {
       return { success: true, localPath: existing, source: 'cache', message: 'Already downloaded' };
     }
 
-    const oaResult = await this.tryOpenAccess(doi, options);
+    const oaResult = await this.tryOpenAccess(doi, fileStem);
     if (oaResult.success) return oaResult;
 
     if (this.authConfig.proxies?.length) {
-      return this.tryAuthenticated(doi, options);
+      return this.tryAuthenticated(doi, fileStem);
     }
 
     return oaResult;
@@ -50,14 +53,14 @@ export class RetrievalOrchestrator {
 
   private async tryOpenAccess(
     doi: string,
-    options?: { fileStem?: string }
+    fileStem: string
   ): Promise<RetrievalResult> {
     if (this.authConfig.email) {
       const unpaywall = new UnpaywallResolver(this.authConfig.email);
       const pdfUrl = await unpaywall.getOpenAccessPdf(doi);
       if (pdfUrl) {
         try {
-          const localPath = await this.downloader.download(doi, pdfUrl, options?.fileStem);
+          const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
           this.db.updatePdfPath(doi, localPath);
           this.db.updateVerificationStatus(doi, 'downloaded');
           this.db.updateAccessType(doi, 'open-access');
@@ -75,7 +78,7 @@ export class RetrievalOrchestrator {
       if (results.length > 0) {
         try {
           const pdfUrl = results[0].pdfUrl;
-          const localPath = await this.downloader.download(doi, pdfUrl, options?.fileStem);
+          const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
           this.db.updatePdfPath(doi, localPath);
           this.db.updateVerificationStatus(doi, 'downloaded');
           this.db.updateAccessType(doi, 'open-access');
@@ -91,7 +94,7 @@ export class RetrievalOrchestrator {
 
   private async tryAuthenticated(
     doi: string,
-    options?: { fileStem?: string }
+    fileStem: string
   ): Promise<RetrievalResult> {
     const proxy = this.authConfig.proxies?.[0];
     if (!proxy) {
@@ -108,7 +111,7 @@ export class RetrievalOrchestrator {
       const localPath = await authDownloader.download(doi, landingUrl, {
         username: proxy.username,
         password,
-        fileStem: options?.fileStem,
+        fileStem,
         proxyUrl: proxy.proxyUrl,
       });
       this.db.updatePdfPath(doi, localPath);
