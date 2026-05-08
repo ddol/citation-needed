@@ -59,7 +59,7 @@ citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12
 citation-needed server
 ```
 
-By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. When a BibTeX key is available, it is used as the PDF and Markdown filename stem; otherwise the DOI is used. Use `--paper-path` to change the PDF output directory for that run.
+By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. File naming is determined by the current retrieval and conversion pipeline. Use `--paper-path` to change the PDF output directory for that run.
 
 ---
 
