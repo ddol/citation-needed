@@ -32,6 +32,7 @@ npm run build
 ```
 
 For authenticated PDF downloads via Playwright (optional):
+
 ```bash
 npm install playwright
 npx playwright install chromium
@@ -42,7 +43,7 @@ npx playwright install chromium
 ## CLI Usage
 
 ```bash
-# Import a BibTeX file, download PDFs into ./papers, and write Markdown into ./markdown
+# Import a BibTeX file, download PDFs into ./papers/pdf, and write Markdown into ./papers/markdown
 citation-needed import-bibtex references.bib
 
 # Override the PDF output directory for the run
@@ -58,16 +59,16 @@ citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12
 citation-needed server
 ```
 
-By default, `import-bibtex` writes PDFs to a `papers/` folder next to the BibTeX file and Markdown files to a sibling `markdown/` folder. Use `--paper-path` to change the PDF output directory for that run.
+By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. When a BibTeX key is available, it is used as the PDF and Markdown filename stem; otherwise the DOI is used. Use `--paper-path` to change the PDF output directory for that run.
 
 ---
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `CITATION_NEEDED_DB` | `~/.citation-needed/citations.db` | Path to SQLite database |
-| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs` | Fallback directory for standalone PDF downloads |
+| Variable                  | Default                           | Description                                     |
+| ------------------------- | --------------------------------- | ----------------------------------------------- |
+| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                         |
+| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads |
 
 ---
 
@@ -88,13 +89,13 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 
 ### MCP Tools
 
-| Tool | Description | Required params |
-|---|---|---|
-| `get-citation` | Get citation details | `doi` |
-| `import-bibtex` | Import citations from BibTeX string into the database | `bibtex` |
-| `download-pdf` | Download PDF for a citation | `doi` |
-| `list-citations` | List all citations | — |
-| `search-arxiv` | Search arXiv by paper title | `title` |
+| Tool             | Description                                           | Required params |
+| ---------------- | ----------------------------------------------------- | --------------- |
+| `get-citation`   | Get citation details                                  | `doi`           |
+| `import-bibtex`  | Import citations from BibTeX string into the database | `bibtex`        |
+| `download-pdf`   | Download PDF for a citation                           | `doi`           |
+| `list-citations` | List all citations                                    | —               |
+| `search-arxiv`   | Search arXiv by paper title                           | `title`         |
 
 ---
 

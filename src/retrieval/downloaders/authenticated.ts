@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { sanitizeFilename, getPdfDir, ensureDir } from '../../utils/file';
+import { getCitationFileStem, sanitizeFilename, getPdfDir, ensureDir } from '../../utils/file';
 import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('authenticated-downloader');
@@ -10,6 +10,7 @@ export interface AuthDownloadOptions {
   password?: string;
   proxyUrl?: string;
   timeout?: number;
+  fileStem?: string;
 }
 
 export class AuthenticatedDownloader {
@@ -34,7 +35,7 @@ export class AuthenticatedDownloader {
       );
     }
 
-    const filename = `${sanitizeFilename(doi)}.pdf`;
+    const filename = `${sanitizeFilename(options?.fileStem || getCitationFileStem({ doi }))}.pdf`;
     const filePath = path.join(this.storageDir, filename);
     const timeout = options?.timeout ?? 30000;
 

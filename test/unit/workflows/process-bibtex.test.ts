@@ -38,20 +38,20 @@ describe('processBibtexFile', () => {
         db: { addCitation: jest.fn() } as never,
         retrievePdf: async () => ({
           success: true,
-          localPath: path.join(bibtexDir, 'papers', '10.1234_test.paper.pdf'),
+          localPath: path.join(bibtexDir, 'papers', 'pdf', 'paper.pdf'),
           source: 'cache',
           message: 'ok',
         }),
         extractMarkdown: async () => '# Test Paper\n',
       });
 
-      expect(result.paperPath).toBe(path.join(bibtexDir, 'papers'));
-      expect(result.markdownPath).toBe(path.join(bibtexDir, 'markdown'));
+      expect(result.paperPath).toBe(path.join(bibtexDir, 'papers', 'pdf'));
+      expect(result.markdownPath).toBe(path.join(bibtexDir, 'papers', 'markdown'));
       expect(result.importedCount).toBe(1);
       expect(result.downloadedCount).toBe(1);
       expect(result.markdownCount).toBe(1);
       expect(
-        fs.readFileSync(path.join(bibtexDir, 'markdown', '10.1234_test.paper.md'), 'utf-8')
+        fs.readFileSync(path.join(bibtexDir, 'papers', 'markdown', 'paper.md'), 'utf-8')
       ).toContain('# Test Paper');
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -76,7 +76,7 @@ describe('processBibtexFile', () => {
         db: { addCitation: jest.fn() } as never,
         retrievePdf: async () => ({
           success: true,
-          localPath: path.join(customPaperPath, '10.1234_test.paper.pdf'),
+          localPath: path.join(customPaperPath, 'paper.pdf'),
           source: 'cache',
           message: 'ok',
         }),
@@ -84,7 +84,7 @@ describe('processBibtexFile', () => {
       });
 
       expect(result.paperPath).toBe(customPaperPath);
-      expect(result.markdownPath).toBe(path.join(bibtexDir, 'markdown'));
+      expect(result.markdownPath).toBe(path.join(bibtexDir, 'papers', 'markdown'));
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -104,7 +104,7 @@ describe('processBibtexFile', () => {
     );
     mockRetrievePdf.mockResolvedValue({
       success: true,
-      localPath: path.join(customPaperPath, '10.1234_test.paper.pdf'),
+      localPath: path.join(customPaperPath, 'paper.pdf'),
       source: 'cache',
       message: 'ok',
     });
@@ -122,7 +122,10 @@ describe('processBibtexFile', () => {
         expect.objectContaining({ email: 'reader@example.com' }),
         customPaperPath
       );
-      expect(mockRetrievePdf).toHaveBeenCalledWith('10.1234/test.paper');
+      expect(mockRetrievePdf).toHaveBeenCalledWith(
+        '10.1234/test.paper',
+        expect.objectContaining({ bibtexKey: 'paper' })
+      );
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
