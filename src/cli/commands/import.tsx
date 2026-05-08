@@ -1,25 +1,43 @@
 import React from 'react';
-import fs from 'fs';
-import { render, Text } from 'ink';
+import { render, Box, Text } from 'ink';
 import { Command } from 'commander';
-import { getDatabase } from '../../db/index';
-import { parseBibtex } from '../../parsers/bibtex';
+import { processBibtexFile } from '../../workflows/process-bibtex';
 
 export function registerImportCommand(program: Command): void {
   program
     .command('import-bibtex <file>')
-    .description('Import citations from a BibTeX file')
-    .action((file: string) => {
-      const db = getDatabase();
-      const content = fs.readFileSync(file, 'utf-8');
-      const parsed = parseBibtex(content);
-      let count = 0;
-      for (const entry of parsed) {
-        if (entry.doi) {
-          db.addCitation({ ...entry, doi: entry.doi });
-          count++;
-        }
+    .description('Import a BibTeX file, download PDFs, and write Markdown output')
+    .option('--paper-path <path>', 'Directory for downloaded PDFs')
+    .option('--markdown-path <path>', 'Directory for generated Markdown files')
+    .option('--email <email>', 'Email for Unpaywall API lookups')
+    .action(
+      async (
+        file: string,
+        options: { paperPath?: string; markdownPath?: string; email?: string }
+      ) => {
+        const result = await processBibtexFile(file, options);
+
+        render(
+          <Box flexDirection="column">
+            <Text color="green">Processed BibTeX file: {result.bibtexPath}</Text>
+            <Text>Imported citations: {result.importedCount}</Text>
+            <Text>Downloaded PDFs: {result.downloadedCount}</Text>
+            <Text>Generated Markdown files: {result.markdownCount}</Text>
+            <Text>Skipped entries without DOI: {result.skippedCount}</Text>
+            <Text>PDF output: {result.paperPath}</Text>
+            <Text>Markdown output: {result.markdownPath}</Text>
+            {result.failures.length > 0 && (
+              <Box flexDirection="column">
+                <Text color="yellow">Failures:</Text>
+                {result.failures.map((failure) => (
+                  <Text key={`${failure.doi}-${failure.stage}`} dimColor>
+                    {failure.doi} [{failure.stage}] {failure.message}
+                  </Text>
+                ))}
+              </Box>
+            )}
+          </Box>
+        );
       }
-      render(<Text color="green">Imported {count} citations from {file}</Text>);
-    });
+    );
 }

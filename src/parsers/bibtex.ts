@@ -9,7 +9,6 @@ export interface ParsedEntry {
   year?: number;
   journal?: string;
   bibtexKey?: string;
-  rawBibtex?: string;
 }
 
 export function parseBibtex(bibtexString: string): ParsedEntry[] {
@@ -42,7 +41,6 @@ export function parseBibtex(bibtexString: string): ParsedEntry[] {
         getField('booktitle') ||
         getField('publisher'),
       bibtexKey: entry['key'] as string | undefined,
-      rawBibtex: bibtexString,
     };
   });
 }

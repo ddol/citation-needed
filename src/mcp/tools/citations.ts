@@ -1,12 +1,11 @@
 import type { Database } from '../../db/index';
 import { parseBibtex } from '../../parsers/bibtex';
-import { TrustScorer } from '../../scoring/scorer';
 import { ArxivResolver } from '../../retrieval/resolvers/arxiv';
 
 export const citationToolDefinitions = [
   {
     name: 'get-citation',
-    description: 'Get citation details and trust score by DOI',
+    description: 'Get citation details by DOI',
     inputSchema: {
       type: 'object',
       properties: {
@@ -17,7 +16,7 @@ export const citationToolDefinitions = [
   },
   {
     name: 'list-citations',
-    description: 'List all citations with trust scores',
+    description: 'List all stored citations',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -49,8 +48,6 @@ export async function handleCitationTool(
   args: Record<string, unknown>,
   db: Database
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean } | null> {
-  const scorer = new TrustScorer(db);
-
   switch (name) {
     case 'get-citation': {
       const doi = args['doi'] as string;
@@ -58,17 +55,12 @@ export async function handleCitationTool(
       if (!citation) {
         return { content: [{ type: 'text', text: `Citation not found for DOI: ${doi}` }] };
       }
-      const trustLevel = scorer.getTrustLevel(citation.trustScore ?? 0.5);
-      return { content: [{ type: 'text', text: JSON.stringify({ ...citation, trustLevel }, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(citation, null, 2) }] };
     }
 
     case 'list-citations': {
       const citations = db.getAllCitations();
-      const withLevels = citations.map((c) => ({
-        ...c,
-        trustLevel: scorer.getTrustLevel(c.trustScore ?? 0.5),
-      }));
-      return { content: [{ type: 'text', text: JSON.stringify(withLevels, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(citations, null, 2) }] };
     }
 
     case 'import-bibtex': {

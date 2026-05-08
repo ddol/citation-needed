@@ -1,17 +1,14 @@
 import { createMcpServer } from '../../../src/mcp/server';
 import { getDatabase } from '../../../src/db/index';
 
-// Mock the database module
 jest.mock('../../../src/db/index', () => {
   const mockDb = {
     getCitation: jest.fn(),
     getAllCitations: jest.fn().mockReturnValue([]),
     addCitation: jest.fn(),
-    updateTrustScore: jest.fn(),
     updatePdfPath: jest.fn(),
     updateVerificationStatus: jest.fn(),
     updateAccessType: jest.fn(),
-    getTrustHistory: jest.fn().mockReturnValue([]),
     searchCitations: jest.fn().mockReturnValue([]),
     close: jest.fn(),
   };
@@ -21,7 +18,6 @@ jest.mock('../../../src/db/index', () => {
   };
 });
 
-// Mock auth config
 jest.mock('../../../src/auth/config', () => ({
   loadAuthConfig: jest.fn().mockReturnValue({}),
 }));
@@ -80,14 +76,12 @@ describe('MCP Server', () => {
   });
 
   test('get-citation tool returns citation when found', async () => {
-    const mockCitation = {
+    const db = getDatabase();
+    (db.getCitation as jest.Mock).mockReturnValue({
       doi: '10.1234/test.001',
       title: 'Test Paper',
-      trustScore: 0.8,
-      verificationStatus: 'verified',
-    };
-    const db = getDatabase();
-    (db.getCitation as jest.Mock).mockReturnValue(mockCitation);
+      verificationStatus: 'downloaded',
+    });
 
     const server = createMcpServer();
     const result = await (server as unknown as {
@@ -100,7 +94,7 @@ describe('MCP Server', () => {
     const content = (result as { content: Array<{ type: string; text: string }> }).content;
     const parsed = JSON.parse(content[0].text);
     expect(parsed.doi).toBe('10.1234/test.001');
-    expect(parsed.trustLevel).toBe('high');
+    expect(parsed.verificationStatus).toBe('downloaded');
   });
 
   test('import-bibtex tool imports citations', async () => {
@@ -127,44 +121,6 @@ describe('MCP Server', () => {
     expect(db.addCitation).toHaveBeenCalled();
   });
 
-  test('update-trust-score tool updates the score', async () => {
-    const db = getDatabase();
-    (db.getCitation as jest.Mock).mockReturnValue({
-      doi: '10.1234/test',
-      title: 'Test Paper',
-      trustScore: 0.5,
-    });
-    const server = createMcpServer();
-
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
-      method: 'tools/call',
-      params: { name: 'update-trust-score', arguments: { doi: '10.1234/test', score: 0.9, notes: 'good paper' } },
-    });
-
-    const content = (result as { content: Array<{ type: string; text: string }> }).content;
-    expect(content[0].text).toContain('0.9');
-    expect(db.updateTrustScore).toHaveBeenCalledWith('10.1234/test', 0.9, 'good paper', undefined);
-  });
-
-  test('update-trust-score returns error for unknown DOI', async () => {
-    const db = getDatabase();
-    (db.getCitation as jest.Mock).mockReturnValue(undefined);
-    const server = createMcpServer();
-
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
-      method: 'tools/call',
-      params: { name: 'update-trust-score', arguments: { doi: '10.0000/missing', score: 0.9 } },
-    });
-
-    const r = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
-    expect(r.isError).toBe(true);
-    expect(r.content[0].text).toContain('not found');
-  });
-
   test('unknown tool returns error', async () => {
     const server = createMcpServer();
     const result = await (server as unknown as {
@@ -174,9 +130,9 @@ describe('MCP Server', () => {
       params: { name: 'nonexistent-tool', arguments: {} },
     });
 
-    const r = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
-    expect(r.isError).toBe(true);
-    expect(r.content[0].text).toContain('Unknown tool');
+    const response = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain('Unknown tool');
   });
 
   test('list-tools returns all expected tools', async () => {
@@ -189,12 +145,10 @@ describe('MCP Server', () => {
     });
 
     const tools = (result as { tools: Array<{ name: string }> }).tools;
-    const toolNames = tools.map((t) => t.name);
+    const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toContain('get-citation');
     expect(toolNames).toContain('import-bibtex');
-    expect(toolNames).toContain('verify-citation');
-    expect(toolNames).toContain('update-trust-score');
     expect(toolNames).toContain('download-pdf');
     expect(toolNames).toContain('list-citations');
     expect(toolNames).toContain('search-arxiv');

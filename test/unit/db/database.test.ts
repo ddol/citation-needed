@@ -3,6 +3,8 @@ import os from 'os';
 import fs from 'fs';
 import { Database } from '../../../src/db/index';
 
+const BetterSqlite3 = require('better-sqlite3');
+
 function makeTestDb(): { db: Database; dbPath: string } {
   const dbPath = path.join(
     os.homedir(),
@@ -28,7 +30,7 @@ describe('Database', () => {
 
   afterAll(() => {
     const dir = path.join(os.homedir(), '.citation-needed-test');
-    if (fs.existsSync(dir)) fs.rmdirSync(dir, { recursive: true });
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test('addCitation inserts a new citation', () => {
@@ -74,22 +76,55 @@ describe('Database', () => {
     expect(all.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('updateTrustScore changes the score and records event', () => {
-    const doi = '10.1234/test.trust';
-    db.addCitation({ doi, title: 'Trust Paper' });
-    db.updateTrustScore(doi, 0.9, 'great paper', 'agent-1');
-    const updated = db.getCitation(doi);
-    expect(updated?.trustScore).toBeCloseTo(0.9);
-    const history = db.getTrustHistory(doi);
-    expect(history.length).toBe(1);
-    expect(history[0].eventType).toBe('score_update');
-    expect(history[0].notes).toBe('great paper');
-    expect(history[0].agentId).toBe('agent-1');
-  });
+  test('migrates legacy citation tables with unexpected columns', () => {
+    db.close();
+    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
 
-  test('getTrustHistory returns empty array for unknown DOI', () => {
-    const history = db.getTrustHistory('10.0000/nope');
-    expect(history).toEqual([]);
+    const legacyDb = new BetterSqlite3(dbPath);
+    legacyDb.exec(`
+      CREATE TABLE citations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doi TEXT UNIQUE,
+        url TEXT,
+        title TEXT,
+        authors TEXT,
+        year INTEGER,
+        journal TEXT,
+        bibtex_key TEXT,
+        pdf_path TEXT,
+        legacy_flag TEXT,
+        verification_status TEXT DEFAULT 'unverified',
+        access_type TEXT DEFAULT 'unknown',
+        last_verified TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO citations (
+        doi,
+        title,
+        verification_status,
+        access_type,
+        created_at,
+        updated_at,
+        legacy_flag
+      ) VALUES (
+        '10.1234/legacy',
+        'Legacy Paper',
+        'verified',
+        'unknown',
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:00.000Z',
+        'old'
+      );
+      CREATE TABLE legacy_events (id INTEGER PRIMARY KEY AUTOINCREMENT);
+    `);
+    legacyDb.close();
+
+    db = new Database(dbPath);
+
+    const citation = db.getCitation('10.1234/legacy');
+    expect(citation?.title).toBe('Legacy Paper');
+    expect(citation?.verificationStatus).toBe('verified');
   });
 
   test('updatePdfPath stores the path', () => {
