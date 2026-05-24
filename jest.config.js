@@ -22,13 +22,15 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/index.ts',
   ],
-  // Conservative floor: catches regressions without forcing test work until commit 7
+  // Floor sits just below current coverage so any regression fails CI.
+  // Push these higher as more code gets tested (ImportProgress, MCP retrieval
+  // tool, full orchestrator cascade) — tracked as a follow-up to Milestone 1.
   coverageThreshold: {
     global: {
-      lines: 40,
-      branches: 30,
-      functions: 30,
-      statements: 40,
+      lines: 60,
+      branches: 45,
+      functions: 48,
+      statements: 60,
     },
   },
 };
