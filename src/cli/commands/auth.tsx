@@ -10,8 +10,14 @@ export function registerAuthCommand(program: Command): void {
     .command('set-email <email>')
     .description('Set email for Unpaywall API')
     .action((email: string) => {
-      setEmail(email);
-      render(<Text color="green">Email set: {email}</Text>);
+      try {
+        setEmail(email);
+        render(<Text color="green">Email set: {email}</Text>);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        render(<Text color="red">{message}</Text>);
+        process.exitCode = 1;
+      }
     });
 
   auth
@@ -33,7 +39,7 @@ export function registerAuthCommand(program: Command): void {
           username: options.username,
           passwordEnvVar: options.passwordEnv,
         });
-        render(<Text color="green">Proxy '{name}' added.</Text>);
+        render(<Text color="green">{`Proxy '${name}' added.`}</Text>);
       }
     );
 

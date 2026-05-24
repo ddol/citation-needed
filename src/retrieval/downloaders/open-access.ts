@@ -4,17 +4,37 @@ import axios from 'axios';
 import { getCitationFileStem, sanitizeFilename, getPdfDir, ensureDir } from '../../utils/file';
 import { RateLimiter } from '../../utils/rate-limiter';
 import { createLogger } from '../../utils/logger';
+import { VERSION } from '../../utils/version';
+import {
+  DEFAULT_CONTACT_EMAIL,
+  OPEN_ACCESS_DOWNLOAD_TIMEOUT_MS,
+  OPEN_ACCESS_RATE_LIMIT_MS,
+} from '../config';
 
 const logger = createLogger('open-access-downloader');
 
+export interface OpenAccessDownloaderOptions {
+  storageDir?: string;
+  email?: string;
+}
+
 export class OpenAccessDownloader {
   private storageDir: string;
+
   private rateLimiter: RateLimiter;
 
-  constructor(storageDir?: string) {
-    this.storageDir = storageDir || getPdfDir();
+  private email: string;
+
+  constructor(storageDirOrOptions?: string | OpenAccessDownloaderOptions) {
+    const options: OpenAccessDownloaderOptions =
+      typeof storageDirOrOptions === 'string'
+        ? { storageDir: storageDirOrOptions }
+        : (storageDirOrOptions ?? {});
+
+    this.storageDir = options.storageDir || getPdfDir();
     ensureDir(this.storageDir);
-    this.rateLimiter = new RateLimiter(1000);
+    this.rateLimiter = new RateLimiter(OPEN_ACCESS_RATE_LIMIT_MS);
+    this.email = options.email || process.env.CITATION_NEEDED_EMAIL || DEFAULT_CONTACT_EMAIL;
   }
 
   async download(doi: string, pdfUrl: string, fileStem?: string): Promise<string> {
@@ -27,9 +47,9 @@ export class OpenAccessDownloader {
 
     const response = await axios.get<Buffer>(pdfUrl, {
       responseType: 'arraybuffer',
-      timeout: 60000,
+      timeout: OPEN_ACCESS_DOWNLOAD_TIMEOUT_MS,
       headers: {
-        'User-Agent': `citation-needed/0.1.0 (mailto:${process.env.CITATION_NEEDED_EMAIL || 'citation-needed@example.com'})`,
+        'User-Agent': `citation-needed/${VERSION} (mailto:${this.email})`,
       },
     });
 

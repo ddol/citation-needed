@@ -32,10 +32,12 @@ describe('Retrieval Resolvers', () => {
       axios.get = jest.fn().mockResolvedValueOnce({ data: mockXml });
 
       const resolver = new ArxivResolver();
-      const results = await resolver.searchByTitle('Test Paper');
-      expect(results.length).toBe(1);
-      expect(results[0].arxivId).toBe('2301.12345');
-      expect(results[0].title).toBe('Test Paper Title');
+      const result = await resolver.searchByTitle('Test Paper');
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('expected ok');
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0].arxivId).toBe('2301.12345');
+      expect(result.value[0].title).toBe('Test Paper Title');
     });
 
     test('searchByTitle normalizes whitespace in the query', async () => {
@@ -71,26 +73,32 @@ describe('Retrieval Resolvers', () => {
         .mockResolvedValueOnce({ data: mockXml });
 
       const resolver = new ArxivResolver();
-      const results = await resolver.searchByTitle('Recovered Paper');
+      const result = await resolver.searchByTitle('Recovered Paper');
 
       expect(axios.get).toHaveBeenCalledTimes(2);
-      expect(results[0].title).toBe('Recovered Paper');
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('expected ok');
+      expect(result.value[0].title).toBe('Recovered Paper');
     });
 
-    test('searchByTitle returns empty array on error', async () => {
+    test('searchByTitle surfaces an error result on network failure', async () => {
       axios.get = jest.fn().mockRejectedValueOnce(new Error('Network error'));
       const resolver = new ArxivResolver();
-      const results = await resolver.searchByTitle('Test');
-      expect(results).toEqual([]);
+      const result = await resolver.searchByTitle('Test');
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('expected error');
+      expect(result.error).toContain('Network error');
     });
   });
 
   describe('UnpaywallResolver', () => {
-    test('getOpenAccessPdf returns null for closed access', async () => {
+    test('getOpenAccessPdf returns null value for closed access', async () => {
       axios.get = jest.fn().mockResolvedValueOnce({ data: { doi: '10.1234/test', is_oa: false } });
       const resolver = new UnpaywallResolver('test@example.com');
       const result = await resolver.getOpenAccessPdf('10.1234/test');
-      expect(result).toBeNull();
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('expected ok');
+      expect(result.value).toBeNull();
     });
 
     test('getOpenAccessPdf returns PDF URL for open access', async () => {
@@ -103,14 +111,18 @@ describe('Retrieval Resolvers', () => {
       });
       const resolver = new UnpaywallResolver('test@example.com');
       const result = await resolver.getOpenAccessPdf('10.1234/test');
-      expect(result).toBe('https://example.com/paper.pdf');
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('expected ok');
+      expect(result.value).toBe('https://example.com/paper.pdf');
     });
 
-    test('getOpenAccessPdf returns null on error', async () => {
+    test('getOpenAccessPdf surfaces an error result on network failure', async () => {
       axios.get = jest.fn().mockRejectedValueOnce(new Error('Network error'));
       const resolver = new UnpaywallResolver('test@example.com');
       const result = await resolver.getOpenAccessPdf('10.1234/test');
-      expect(result).toBeNull();
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('expected error');
+      expect(result.error).toContain('Network error');
     });
   });
 });

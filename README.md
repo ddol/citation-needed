@@ -15,7 +15,7 @@
 - 🔓 **Open-access retrieval** — arXiv API and Unpaywall API
 - 🔒 **Authenticated PDF download** — via Playwright for proxy-gated content (optional)
 - 📝 **PDF to Markdown extraction** — convert downloaded PDFs into Markdown in JavaScript
-- 📁 **Automatic output folders** — write PDFs to `papers/` and Markdown to `markdown/` by default
+- 📁 **Automatic output folders** — write PDFs to `papers/pdf/` and Markdown to `papers/markdown/` by default
 - 🤖 **MCP server** — Model Context Protocol tools for citation metadata and retrieval
 
 ---
@@ -65,10 +65,15 @@ By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the Bi
 
 ## Environment Variables
 
-| Variable                  | Default                           | Description                                     |
-| ------------------------- | --------------------------------- | ----------------------------------------------- |
-| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                         |
-| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads |
+| Variable                  | Default                           | Description                                                |
+| ------------------------- | --------------------------------- | ---------------------------------------------------------- |
+| `CITATION_NEEDED_DIR`     | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)        |
+| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                                    |
+| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads            |
+| `CITATION_NEEDED_EMAIL`   | _(unset)_                         | Contact email sent to Unpaywall and the Crossref User-Agent |
+| `LOG_LEVEL`               | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent` |
+
+See `.env.example` for a copy-paste starter.
 
 ---
 

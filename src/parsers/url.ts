@@ -25,7 +25,9 @@ export function classifyUrl(url: string): ClassifiedUrl {
   if (bareDoi) return { url: trimmed, type: 'doi', identifier: bareDoi[1] };
 
   // PubMed
-  const pubmed = /(?:pubmed\.ncbi\.nlm\.nih\.gov|ncbi\.nlm\.nih\.gov\/pubmed)\/(\d+)/i.exec(trimmed);
+  const pubmed = /(?:pubmed\.ncbi\.nlm\.nih\.gov|ncbi\.nlm\.nih\.gov\/pubmed)\/(\d+)/i.exec(
+    trimmed
+  );
   if (pubmed) return { url: trimmed, type: 'pubmed', identifier: pubmed[1] };
 
   // PDF by extension or content-type hint

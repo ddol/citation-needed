@@ -21,18 +21,12 @@ export class AuthenticatedDownloader {
     ensureDir(this.storageDir);
   }
 
-  async download(
-    doi: string,
-    url: string,
-    options?: AuthDownloadOptions
-  ): Promise<string> {
+  async download(doi: string, url: string, options?: AuthDownloadOptions): Promise<string> {
     let playwright: typeof import('playwright') | undefined;
     try {
       playwright = require('playwright') as typeof import('playwright');
     } catch {
-      throw new Error(
-        'playwright is not installed. Install it with: npm install playwright'
-      );
+      throw new Error('playwright is not installed. Install it with: npm install playwright');
     }
 
     const filename = `${sanitizeFilename(options?.fileStem || getCitationFileStem({ doi }))}.pdf`;
@@ -44,9 +38,7 @@ export class AuthenticatedDownloader {
     const browser = await playwright.chromium.launch({ headless: true });
     try {
       const context = await browser.newContext(
-        options?.proxyUrl
-          ? { proxy: { server: options.proxyUrl } }
-          : undefined
+        options?.proxyUrl ? { proxy: { server: options.proxyUrl } } : undefined
       );
       const page = await context.newPage();
 
@@ -86,8 +78,8 @@ export class AuthenticatedDownloader {
         } else {
           throw new Error(
             `Could not find a downloadable PDF at ${url}. ` +
-            `The page returned content-type: ${contentType}. ` +
-            'Try providing a direct PDF URL instead.'
+              `The page returned content-type: ${contentType}. ` +
+              'Try providing a direct PDF URL instead.'
           );
         }
       }

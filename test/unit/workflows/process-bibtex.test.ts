@@ -11,6 +11,9 @@ jest.mock('../../../src/retrieval/index', () => ({
   RetrievalOrchestrator: mockRetrievalOrchestrator,
 }));
 
+// eslint-disable-next-line import/first, import/order
+import * as bibtexParser from '../../../src/parsers/bibtex';
+// eslint-disable-next-line import/first, import/order
 import { processBibtexFile } from '../../../src/workflows/process-bibtex';
 
 function makeTempRoot(): string {
@@ -20,6 +23,7 @@ function makeTempRoot(): string {
 describe('processBibtexFile', () => {
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   test('defaults outputs next to the BibTeX file and writes markdown', async () => {
@@ -189,6 +193,73 @@ describe('processBibtexFile', () => {
         { label: 'failure', stage: 'retrieving', message: 'Downloading PDF' },
         { label: 'failure', stage: 'failed', message: 'No PDF available' },
       ]);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('uses a normalized DOI for fallback markdown filenames', async () => {
+    const tempRoot = makeTempRoot();
+    const bibtexDir = path.join(tempRoot, 'refs');
+    const bibtexPath = path.join(bibtexDir, 'library.bib');
+
+    fs.mkdirSync(bibtexDir, { recursive: true });
+    fs.writeFileSync(bibtexPath, '@article{paper, title={Ignored}}', 'utf-8');
+
+    jest.spyOn(bibtexParser, 'parseBibtex').mockReturnValueOnce([
+      {
+        doi: 'https://doi.org/10.1234/test.paper',
+        title: 'Test Paper',
+        authors: 'Test Author',
+      },
+    ]);
+
+    try {
+      const result = await processBibtexFile(bibtexPath, {
+        db: { addCitation: jest.fn().mockReturnValue({ id: 1 }) } as never,
+        retrievePdf: async () => ({
+          success: true,
+          localPath: path.join(bibtexDir, 'papers', 'pdf', 'paper.pdf'),
+          source: 'cache',
+          message: 'ok',
+        }),
+        extractMarkdown: async () => '# Test Paper\n',
+      });
+
+      expect(fs.existsSync(path.join(result.markdownPath, '10.1234_test.paper.md'))).toBe(true);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('skips retrieval logging when injected db stubs do not return a stored citation', async () => {
+    const tempRoot = makeTempRoot();
+    const bibtexDir = path.join(tempRoot, 'refs');
+    const bibtexPath = path.join(bibtexDir, 'library.bib');
+    const logRetrieval = jest.fn();
+
+    fs.mkdirSync(bibtexDir, { recursive: true });
+    fs.writeFileSync(
+      bibtexPath,
+      `@article{paper, title={Test Paper}, doi={10.1234/test.paper}, author={Test Author}}`,
+      'utf-8'
+    );
+
+    try {
+      await expect(
+        processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn().mockReturnValue(undefined), logRetrieval } as never,
+          retrievePdf: async () => ({
+            success: true,
+            localPath: path.join(bibtexDir, 'papers', 'pdf', 'paper.pdf'),
+            source: 'cache',
+            message: 'ok',
+          }),
+          extractMarkdown: async () => '# Test Paper\n',
+        })
+      ).resolves.toMatchObject({ importedCount: 1, downloadedCount: 1, markdownCount: 1 });
+
+      expect(logRetrieval).not.toHaveBeenCalled();
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }

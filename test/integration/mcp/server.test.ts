@@ -45,15 +45,17 @@ describe('MCP Server', () => {
     (db.getAllCitations as jest.Mock).mockReturnValue([]);
 
     const server = createMcpServer();
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
       method: 'tools/call',
       params: { name: 'list-citations', arguments: {} },
     });
 
     expect(result).toBeDefined();
-    const content = (result as { content: Array<{ type: string; text: string }> }).content;
+    const { content } = result as { content: Array<{ type: string; text: string }> };
     expect(content[0].type).toBe('text');
     const parsed = JSON.parse(content[0].text);
     expect(Array.isArray(parsed)).toBe(true);
@@ -64,14 +66,16 @@ describe('MCP Server', () => {
     (db.getCitation as jest.Mock).mockReturnValue(undefined);
 
     const server = createMcpServer();
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
       method: 'tools/call',
       params: { name: 'get-citation', arguments: { doi: '10.0000/not-found' } },
     });
 
-    const content = (result as { content: Array<{ type: string; text: string }> }).content;
+    const { content } = result as { content: Array<{ type: string; text: string }> };
     expect(content[0].text).toContain('not found');
   });
 
@@ -84,14 +88,16 @@ describe('MCP Server', () => {
     });
 
     const server = createMcpServer();
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
       method: 'tools/call',
       params: { name: 'get-citation', arguments: { doi: '10.1234/test.001' } },
     });
 
-    const content = (result as { content: Array<{ type: string; text: string }> }).content;
+    const { content } = result as { content: Array<{ type: string; text: string }> };
     const parsed = JSON.parse(content[0].text);
     expect(parsed.doi).toBe('10.1234/test.001');
     expect(parsed.verificationStatus).toBe('downloaded');
@@ -109,42 +115,119 @@ describe('MCP Server', () => {
 }`;
 
     const server = createMcpServer();
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
       method: 'tools/call',
       params: { name: 'import-bibtex', arguments: { bibtex } },
     });
 
-    const content = (result as { content: Array<{ type: string; text: string }> }).content;
+    const { content } = result as { content: Array<{ type: string; text: string }> };
     expect(content[0].text).toContain('Imported');
     expect(db.addCitation).toHaveBeenCalled();
   });
 
   test('unknown tool returns error', async () => {
     const server = createMcpServer();
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/call')!({
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
       method: 'tools/call',
       params: { name: 'nonexistent-tool', arguments: {} },
     });
 
-    const response = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const response = result as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
     expect(response.isError).toBe(true);
     expect(response.content[0].text).toContain('Unknown tool');
   });
 
+  test('get-citation returns isError on zod validation failure (missing doi)', async () => {
+    const server = createMcpServer();
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
+      method: 'tools/call',
+      params: { name: 'get-citation', arguments: {} },
+    });
+
+    const response = result as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain('Invalid arguments');
+    expect(response.content[0].text).toContain('doi');
+  });
+
+  test('list-citations supports cursor pagination', async () => {
+    const db = getDatabase();
+    (db.getAllCitations as jest.Mock).mockReturnValue({
+      citations: [{ doi: '10/a' }, { doi: '10/b' }],
+      nextCursor: 'abc',
+    });
+
+    const server = createMcpServer();
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
+      method: 'tools/call',
+      params: { name: 'list-citations', arguments: { limit: 2 } },
+    });
+
+    const { content } = result as { content: Array<{ type: string; text: string }> };
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed.citations).toHaveLength(2);
+    expect(parsed.nextCursor).toBe('abc');
+    expect(db.getAllCitations).toHaveBeenCalledWith({ cursor: undefined, limit: 2 });
+  });
+
+  test('list-citations returns isError for invalid cursors', async () => {
+    const db = getDatabase();
+    (db.getAllCitations as jest.Mock).mockImplementation(() => {
+      throw new Error('Invalid cursor');
+    });
+
+    const server = createMcpServer();
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
+      method: 'tools/call',
+      params: { name: 'list-citations', arguments: { cursor: 'bad-cursor', limit: 2 } },
+    });
+
+    const response = result as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain('Invalid cursor');
+  });
+
   test('list-tools returns all expected tools', async () => {
     const server = createMcpServer();
-    const result = await (server as unknown as {
-      _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
-    })._requestHandlers.get('tools/list')!({
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/list')!({
       method: 'tools/list',
       params: {},
     });
 
-    const tools = (result as { tools: Array<{ name: string }> }).tools;
+    const { tools } = result as { tools: Array<{ name: string }> };
     const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toContain('get-citation');

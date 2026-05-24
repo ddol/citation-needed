@@ -8,6 +8,6 @@ export interface ProxyConfig {
 }
 
 export interface AuthConfig {
-  email?: string;       // for Unpaywall API
+  email?: string; // for Unpaywall API
   proxies?: ProxyConfig[];
 }

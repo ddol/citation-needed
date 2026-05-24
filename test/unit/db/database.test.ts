@@ -76,6 +76,26 @@ describe('Database', () => {
     expect(all.length).toBeGreaterThanOrEqual(2);
   });
 
+  test('getAllCitations throws on invalid cursors', () => {
+    expect(() => db.getAllCitations({ cursor: 'not-a-valid-cursor', limit: 2 })).toThrow(
+      'Invalid cursor'
+    );
+  });
+
+  test('does not create a redundant explicit DOI index', () => {
+    const sqlite = new BetterSqlite3(dbPath);
+
+    try {
+      const indexes = sqlite.prepare('PRAGMA index_list(citations)').all() as Array<{
+        name: string;
+      }>;
+
+      expect(indexes.some((index) => index.name === 'idx_citations_doi')).toBe(false);
+    } finally {
+      sqlite.close();
+    }
+  });
+
   test('migrates legacy citation tables with unexpected columns', () => {
     db.close();
     if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);

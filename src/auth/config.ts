@@ -28,9 +28,21 @@ export function saveAuthConfig(config: AuthConfig): void {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
+// Pragmatic email check — good enough to catch obvious typos like missing @
+// or a trailing comma. RFC-compliant validation is intentionally out of scope.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email);
+}
+
 export function setEmail(email: string): void {
+  const trimmed = email.trim();
+  if (!isValidEmail(trimmed)) {
+    throw new Error(`Invalid email format: "${email}"`);
+  }
   const config = loadAuthConfig();
-  config.email = email;
+  config.email = trimmed;
   saveAuthConfig(config);
 }
 

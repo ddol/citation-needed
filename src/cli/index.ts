@@ -4,13 +4,14 @@ import { registerListCommand } from './commands/list';
 import { registerDownloadCommand } from './commands/download';
 import { registerServerCommand } from './commands/server';
 import { registerAuthCommand } from './commands/auth';
+import { VERSION } from '../utils/version';
 
 export function runCli(argv: string[]): void {
   const program = new Command();
   program
     .name('citation-needed')
     .description('Citation retrieval and Markdown extraction sidecar for AI agents')
-    .version('0.1.0');
+    .version(VERSION);
 
   registerImportCommand(program);
   registerListCommand(program);
