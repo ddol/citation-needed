@@ -3,7 +3,12 @@ import path from 'path';
 import os from 'os';
 import type { Citation, VerificationStatus, AccessType } from '../models/citation';
 import type { RetrievalAttempt } from '../models/retrieval';
-import { CREATE_CITATIONS_TABLE, CREATE_RETRIEVAL_LOG_TABLE, CREATE_INDEXES } from './schema';
+import {
+  CREATE_CITATIONS_TABLE,
+  CREATE_RETRIEVAL_LOG_TABLE,
+  CREATE_INDEXES,
+  createCitationsTableStatement,
+} from './schema';
 
 // Use require for better-sqlite3 (CommonJS native module)
 const BetterSqlite3 = require('better-sqlite3');
@@ -102,26 +107,13 @@ export class Database {
     // retrieval_log -> citations(id).
     this.db.pragma('foreign_keys = OFF');
     try {
+      const migratedTableSql = createCitationsTableStatement('citations_migrated', {
+        ifNotExists: false,
+      });
+
       this.db.exec(`
         BEGIN TRANSACTION;
-        CREATE TABLE citations_migrated (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          doi TEXT UNIQUE,
-          url TEXT,
-          title TEXT,
-          authors TEXT,
-          year INTEGER,
-          journal TEXT,
-          bibtex_key TEXT,
-          pdf_path TEXT,
-          verification_status TEXT NOT NULL DEFAULT 'unverified'
-            CHECK (verification_status IN ('unverified','downloaded','verified','failed','not-found')),
-          access_type TEXT NOT NULL DEFAULT 'unknown'
-            CHECK (access_type IN ('open-access','institutional','unknown')),
-          last_verified TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
+        ${migratedTableSql};
         INSERT INTO citations_migrated (
           id,
           doi,
@@ -424,17 +416,17 @@ function encodeCursor(state: CursorState): string {
   return Buffer.from(JSON.stringify(state), 'utf8').toString('base64');
 }
 
-function decodeCursor(cursor: string): CursorState | null {
+function decodeCursor(cursor: string): CursorState {
   try {
     const parsed = JSON.parse(
       Buffer.from(cursor, 'base64').toString('utf8')
     ) as Partial<CursorState>;
     if (typeof parsed.createdAt !== 'string' || typeof parsed.id !== 'number') {
-      return null;
+      throw new Error('Invalid cursor');
     }
     return { createdAt: parsed.createdAt, id: parsed.id };
   } catch {
-    return null;
+    throw new Error('Invalid cursor');
   }
 }
 

@@ -192,6 +192,30 @@ describe('MCP Server', () => {
     expect(db.getAllCitations).toHaveBeenCalledWith({ cursor: undefined, limit: 2 });
   });
 
+  test('list-citations returns isError for invalid cursors', async () => {
+    const db = getDatabase();
+    (db.getAllCitations as jest.Mock).mockImplementation(() => {
+      throw new Error('Invalid cursor');
+    });
+
+    const server = createMcpServer();
+    const result = await (
+      server as unknown as {
+        _requestHandlers: Map<string, (req: unknown) => Promise<unknown>>;
+      }
+    )._requestHandlers.get('tools/call')!({
+      method: 'tools/call',
+      params: { name: 'list-citations', arguments: { cursor: 'bad-cursor', limit: 2 } },
+    });
+
+    const response = result as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain('Invalid cursor');
+  });
+
   test('list-tools returns all expected tools', async () => {
     const server = createMcpServer();
     const result = await (

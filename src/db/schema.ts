@@ -13,8 +13,14 @@ export const ACCESS_TYPES = ['open-access', 'institutional', 'unknown'] as const
 const verificationCheck = VERIFICATION_STATUSES.map((s) => `'${s}'`).join(',');
 const accessTypeCheck = ACCESS_TYPES.map((s) => `'${s}'`).join(',');
 
-export const CREATE_CITATIONS_TABLE = `
-  CREATE TABLE IF NOT EXISTS citations (
+export function createCitationsTableStatement(
+  tableName = 'citations',
+  options: { ifNotExists?: boolean } = {}
+): string {
+  const ifNotExists = options.ifNotExists ?? true;
+
+  return `
+  CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}${tableName} (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     doi TEXT UNIQUE,
     url TEXT,
@@ -32,6 +38,9 @@ export const CREATE_CITATIONS_TABLE = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`;
+}
+
+export const CREATE_CITATIONS_TABLE = createCitationsTableStatement();
 
 export const CREATE_RETRIEVAL_LOG_TABLE = `
   CREATE TABLE IF NOT EXISTS retrieval_log (
@@ -47,7 +56,6 @@ export const CREATE_RETRIEVAL_LOG_TABLE = `
   )`;
 
 export const CREATE_INDEXES = [
-  'CREATE INDEX IF NOT EXISTS idx_citations_doi ON citations(doi)',
   'CREATE INDEX IF NOT EXISTS idx_citations_created_at ON citations(created_at)',
   'CREATE INDEX IF NOT EXISTS idx_retrieval_log_citation_id ON retrieval_log(citation_id)',
 ];

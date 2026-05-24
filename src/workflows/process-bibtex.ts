@@ -92,10 +92,10 @@ export async function processBibtexFile(
   const skippedEntries: ProcessBibtexSkipped[] = [];
 
   for (const entry of parsed) {
-    const fileStem = getCitationFileStem(entry);
     const label = getCitationDisplayName(entry);
 
     if (!entry.doi) {
+      const fileStem = getCitationFileStem(entry);
       const reason = 'no DOI';
       skippedCount += 1;
       skippedEntries.push({ bibtexKey: entry.bibtexKey, label, reason });
@@ -109,6 +109,9 @@ export async function processBibtexFile(
     }
 
     const normalizedDoi = normalizeDoi(entry.doi);
+    const normalizedEntry = { ...entry, doi: normalizedDoi };
+    const fileStem = getCitationFileStem(normalizedEntry);
+
     if (!isValidDoi(normalizedDoi)) {
       const reason = `invalid DOI format: ${entry.doi}`;
       skippedCount += 1;
@@ -122,7 +125,7 @@ export async function processBibtexFile(
       continue;
     }
 
-    const stored = db.addCitation({ ...entry, doi: normalizedDoi });
+    const stored = db.addCitation(normalizedEntry);
     importedCount += 1;
     emitProgress({
       doi: normalizedDoi,
@@ -139,7 +142,7 @@ export async function processBibtexFile(
     // Audit log: one retrieval_log row per attempt (success or failure) so the
     // import history is queryable after the fact. Skip if we don't have a
     // citation_id (legacy mock DBs in tests may not implement logRetrieval).
-    if (typeof db.logRetrieval === 'function' && stored.id != null) {
+    if (typeof db.logRetrieval === 'function' && stored?.id != null) {
       try {
         db.logRetrieval({
           citationId: stored.id,

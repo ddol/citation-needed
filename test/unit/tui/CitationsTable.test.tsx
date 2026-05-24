@@ -1,8 +1,13 @@
 import React from 'react';
+import * as ink from 'ink';
 import { render } from 'ink-testing-library';
 import { CitationsTable } from '../../../src/tui/components/CitationsTable';
 
 describe('CitationsTable', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   test('renders the empty-state hint when there are no rows', () => {
     const { lastFrame } = render(<CitationsTable rows={[]} />);
     expect(lastFrame()).toContain('No citations found');
@@ -57,5 +62,30 @@ describe('CitationsTable', () => {
       .split('\n')
       .reduce((max, line) => Math.max(max, line.length), 0);
     expect(longestLine).toBeLessThan(longTitle.length);
+  });
+
+  test('keeps rendered lines within narrow terminal widths', () => {
+    jest.spyOn(ink, 'useStdout').mockReturnValue({
+      stdout: { columns: 50 },
+    } as ReturnType<typeof ink.useStdout>);
+
+    const { lastFrame } = render(
+      <CitationsTable
+        rows={[
+          {
+            doi: 'https://doi.org/10.1234/very.long.identifier',
+            title: 'A Very Long Paper Title That Would Otherwise Overflow A Narrow Terminal',
+            year: 2024,
+            verificationStatus: 'downloaded',
+          },
+        ]}
+      />
+    );
+
+    const longestLine = (lastFrame() ?? '')
+      .split('\n')
+      .reduce((max, line) => Math.max(max, line.length), 0);
+
+    expect(longestLine).toBeLessThanOrEqual(50);
   });
 });
