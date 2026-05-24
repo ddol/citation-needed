@@ -1,3 +1,4 @@
+import fs from 'fs';
 import type { Database } from '../db/index';
 import type { AuthConfig } from '../models/auth';
 import type { RetrievalResult } from '../models/retrieval';
@@ -6,6 +7,8 @@ import { UnpaywallResolver } from './resolvers/unpaywall';
 import { OpenAccessDownloader } from './downloaders/open-access';
 import { AuthenticatedDownloader } from './downloaders/authenticated';
 import { createLogger } from '../utils/logger';
+import type { CitationFileIdentity } from '../utils/file';
+import { getCitationFileStem } from '../utils/file';
 
 export { ArxivResolver, ArxivRetriever } from './resolvers/arxiv';
 export { UnpaywallResolver, UnpaywallRetriever } from './resolvers/unpaywall';
@@ -29,29 +32,46 @@ export class RetrievalOrchestrator {
     this.downloader = new OpenAccessDownloader(storageDir);
   }
 
-  async retrievePdf(doi: string): Promise<RetrievalResult> {
-    const existing = this.downloader.getLocalPath(doi);
+  async retrievePdf(
+    doi: string,
+    identity?: CitationFileIdentity
+  ): Promise<RetrievalResult> {
+    const cachedCitation = this.db.getCitation(doi);
+    if (cachedCitation?.pdfPath && fs.existsSync(cachedCitation.pdfPath)) {
+      return {
+        success: true,
+        localPath: cachedCitation.pdfPath,
+        source: 'cache',
+        message: 'Already downloaded',
+      };
+    }
+
+    const fileStem = getCitationFileStem({ doi, ...identity });
+    const existing = this.downloader.getLocalPath(doi, fileStem);
     if (existing) {
       return { success: true, localPath: existing, source: 'cache', message: 'Already downloaded' };
     }
 
-    const oaResult = await this.tryOpenAccess(doi);
+    const oaResult = await this.tryOpenAccess(doi, fileStem);
     if (oaResult.success) return oaResult;
 
     if (this.authConfig.proxies?.length) {
-      return this.tryAuthenticated(doi);
+      return this.tryAuthenticated(doi, fileStem);
     }
 
     return oaResult;
   }
 
-  private async tryOpenAccess(doi: string): Promise<RetrievalResult> {
+  private async tryOpenAccess(
+    doi: string,
+    fileStem: string
+  ): Promise<RetrievalResult> {
     if (this.authConfig.email) {
       const unpaywall = new UnpaywallResolver(this.authConfig.email);
       const pdfUrl = await unpaywall.getOpenAccessPdf(doi);
       if (pdfUrl) {
         try {
-          const localPath = await this.downloader.download(doi, pdfUrl);
+          const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
           this.db.updatePdfPath(doi, localPath);
           this.db.updateVerificationStatus(doi, 'downloaded');
           this.db.updateAccessType(doi, 'open-access');
@@ -69,7 +89,7 @@ export class RetrievalOrchestrator {
       if (results.length > 0) {
         try {
           const pdfUrl = results[0].pdfUrl;
-          const localPath = await this.downloader.download(doi, pdfUrl);
+          const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
           this.db.updatePdfPath(doi, localPath);
           this.db.updateVerificationStatus(doi, 'downloaded');
           this.db.updateAccessType(doi, 'open-access');
@@ -83,7 +103,10 @@ export class RetrievalOrchestrator {
     return { success: false, source: 'open-access', message: 'No open-access PDF found' };
   }
 
-  private async tryAuthenticated(doi: string): Promise<RetrievalResult> {
+  private async tryAuthenticated(
+    doi: string,
+    fileStem: string
+  ): Promise<RetrievalResult> {
     const proxy = this.authConfig.proxies?.[0];
     if (!proxy) {
       return { success: false, source: 'authenticated', message: 'No proxy configured' };
@@ -99,6 +122,7 @@ export class RetrievalOrchestrator {
       const localPath = await authDownloader.download(doi, landingUrl, {
         username: proxy.username,
         password,
+        fileStem,
         proxyUrl: proxy.proxyUrl,
       });
       this.db.updatePdfPath(doi, localPath);

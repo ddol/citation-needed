@@ -38,6 +38,45 @@ describe('Retrieval Resolvers', () => {
       expect(results[0].title).toBe('Test Paper Title');
     });
 
+    test('searchByTitle normalizes whitespace in the query', async () => {
+      const mockXml = `<?xml version="1.0"?>
+<feed>
+  <entry>
+    <id>http://arxiv.org/abs/2301.12345v1</id>
+    <title>Test Paper Title</title>
+  </entry>
+</feed>`;
+      axios.get = jest.fn().mockResolvedValueOnce({ data: mockXml });
+
+      const resolver = new ArxivResolver();
+      await resolver.searchByTitle('Test   Paper\n   Title');
+
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('search_query=ti:Test%20Paper%20Title'),
+        expect.objectContaining({ timeout: 30000, responseType: 'text' })
+      );
+    });
+
+    test('searchByTitle retries once on rate limit errors', async () => {
+      const mockXml = `<?xml version="1.0"?>
+<feed>
+  <entry>
+    <id>http://arxiv.org/abs/2301.12345v1</id>
+    <title>Recovered Paper</title>
+  </entry>
+</feed>`;
+      axios.get = jest
+        .fn()
+        .mockRejectedValueOnce({ response: { status: 429 } })
+        .mockResolvedValueOnce({ data: mockXml });
+
+      const resolver = new ArxivResolver();
+      const results = await resolver.searchByTitle('Recovered Paper');
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(results[0].title).toBe('Recovered Paper');
+    });
+
     test('searchByTitle returns empty array on error', async () => {
       axios.get = jest.fn().mockRejectedValueOnce(new Error('Network error'));
       const resolver = new ArxivResolver();

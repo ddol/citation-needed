@@ -1,6 +1,6 @@
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
 
-const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
 
 export interface Logger {
   debug(msg: string, meta?: Record<string, unknown>): void;
@@ -15,9 +15,8 @@ function getConfiguredLevel(): LogLevel {
 }
 
 export function createLogger(name: string): Logger {
-  const minLevel = LEVELS[getConfiguredLevel()];
-
   function write(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
+    const minLevel = LEVELS[getConfiguredLevel()];
     if (LEVELS[level] < minLevel) return;
     const line = JSON.stringify({ ...meta, ts: new Date().toISOString(), level, name, msg });
     process.stderr.write(line + '\n');

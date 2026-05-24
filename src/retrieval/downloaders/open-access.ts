@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { sanitizeFilename, getPdfDir, ensureDir } from '../../utils/file';
+import { getCitationFileStem, sanitizeFilename, getPdfDir, ensureDir } from '../../utils/file';
 import { RateLimiter } from '../../utils/rate-limiter';
 import { createLogger } from '../../utils/logger';
 
@@ -17,10 +17,10 @@ export class OpenAccessDownloader {
     this.rateLimiter = new RateLimiter(1000);
   }
 
-  async download(doi: string, pdfUrl: string): Promise<string> {
+  async download(doi: string, pdfUrl: string, fileStem?: string): Promise<string> {
     await this.rateLimiter.wait();
 
-    const filename = `${sanitizeFilename(doi)}.pdf`;
+    const filename = `${sanitizeFilename(fileStem || getCitationFileStem({ doi }))}.pdf`;
     const filePath = path.join(this.storageDir, filename);
 
     logger.info('Downloading PDF', { doi, pdfUrl });
@@ -38,9 +38,15 @@ export class OpenAccessDownloader {
     return filePath;
   }
 
-  getLocalPath(doi: string): string | null {
-    const filename = `${sanitizeFilename(doi)}.pdf`;
-    const filePath = path.join(this.storageDir, filename);
-    return fs.existsSync(filePath) ? filePath : null;
+  getLocalPath(doi: string, fileStem?: string): string | null {
+    const preferredFilename = `${sanitizeFilename(fileStem || getCitationFileStem({ doi }))}.pdf`;
+    const preferredPath = path.join(this.storageDir, preferredFilename);
+    if (fs.existsSync(preferredPath)) {
+      return preferredPath;
+    }
+
+    const legacyFilename = `${sanitizeFilename(doi)}.pdf`;
+    const legacyPath = path.join(this.storageDir, legacyFilename);
+    return fs.existsSync(legacyPath) ? legacyPath : null;
   }
 }

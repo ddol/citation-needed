@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { createLogger } from '../../utils/logger';
+import { RateLimiter } from '../../utils/rate-limiter';
 
 const logger = createLogger('arxiv-resolver');
+const requestLimiter = new RateLimiter(2000);
 
 export interface ArxivResult {
   arxivId: string;
@@ -16,17 +18,48 @@ export class ArxivResolver {
   }
 
   async searchByTitle(title: string): Promise<ArxivResult[]> {
-    const url = `https://export.arxiv.org/api/query?search_query=ti:${encodeURIComponent(title)}&max_results=5`;
+    const normalizedTitle = normalizeTitle(title);
+    const strictQuery = `ti:${encodeURIComponent(normalizedTitle)}`;
+    const broadQuery = `all:${encodeURIComponent(stripQueryPunctuation(normalizedTitle))}`;
+
+    try {
+      const strictResults = await this.queryArxiv(strictQuery);
+      if (strictResults.length > 0) {
+        return strictResults;
+      }
+
+      if (broadQuery === strictQuery) {
+        return [];
+      }
+
+      return this.queryArxiv(broadQuery);
+    } catch (err) {
+      logger.warn('arXiv search failed', { title: normalizedTitle, err: String(err) });
+      return [];
+    }
+  }
+
+  private async queryArxiv(searchQuery: string): Promise<ArxivResult[]> {
+    const url = `https://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=5`;
+    await requestLimiter.wait();
 
     try {
       const response = await axios.get<string>(url, {
-        timeout: 15000,
+        timeout: 30000,
         responseType: 'text',
       });
       return this.parseAtomResponse(response.data);
-    } catch (err) {
-      logger.warn('arXiv search failed', { title, err: String(err) });
-      return [];
+    } catch (error) {
+      if (shouldRetry(error)) {
+        await requestLimiter.wait();
+        const retryResponse = await axios.get<string>(url, {
+          timeout: 30000,
+          responseType: 'text',
+        });
+        return this.parseAtomResponse(retryResponse.data);
+      }
+
+      throw error;
     }
   }
 
@@ -59,6 +92,23 @@ export class ArxivResolver {
 
     return results;
   }
+}
+
+function normalizeTitle(title: string): string {
+  return title.replace(/\s+/g, ' ').trim();
+}
+
+function stripQueryPunctuation(title: string): string {
+  return title.replace(/[^a-zA-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function shouldRetry(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeAxiosError = error as { code?: string; response?: { status?: number } };
+  return maybeAxiosError.code === 'ECONNABORTED' || maybeAxiosError.response?.status === 429;
 }
 
 /** @deprecated Use ArxivResolver */

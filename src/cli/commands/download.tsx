@@ -14,6 +14,7 @@ export function registerDownloadCommand(program: Command): void {
     .action(async (doi: string, options: { url?: string; email?: string }) => {
       const db = getDatabase();
       const downloader = new OpenAccessDownloader();
+      const citation = db.getCitation(doi);
 
       let pdfUrl = options.url;
 
@@ -28,9 +29,8 @@ export function registerDownloadCommand(program: Command): void {
       }
 
       render(<Text>Downloading PDF for {doi}...</Text>);
-      const localPath = await downloader.download(doi, pdfUrl);
+      const localPath = await downloader.download(doi, pdfUrl, citation?.bibtexKey || doi);
 
-      const citation = db.getCitation(doi);
       if (!citation) {
         render(<Text color="yellow">Warning: DOI {doi} not found in database. PDF saved but citation not updated.</Text>);
       } else {
