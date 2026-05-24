@@ -20,7 +20,12 @@ export function registerDownloadCommand(program: Command): void {
 
       if (!pdfUrl && options.email) {
         const unpaywall = new UnpaywallResolver(options.email);
-        pdfUrl = (await unpaywall.getOpenAccessPdf(doi)) || undefined;
+        const lookup = await unpaywall.getOpenAccessPdf(doi);
+        if (!lookup.ok) {
+          render(<Text color="red">Unpaywall lookup failed: {lookup.error}</Text>);
+          return;
+        }
+        pdfUrl = lookup.value || undefined;
       }
 
       if (!pdfUrl) {

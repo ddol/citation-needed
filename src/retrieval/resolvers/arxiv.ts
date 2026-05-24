@@ -1,9 +1,11 @@
 import axios from 'axios';
 import { createLogger } from '../../utils/logger';
 import { RateLimiter } from '../../utils/rate-limiter';
+import type { ResolverResult } from '../../models/retrieval';
+import { ARXIV_RATE_LIMIT_MS, ARXIV_TIMEOUT_MS } from '../config';
 
 const logger = createLogger('arxiv-resolver');
-const requestLimiter = new RateLimiter(2000);
+const requestLimiter = new RateLimiter(ARXIV_RATE_LIMIT_MS);
 
 export interface ArxivResult {
   arxivId: string;
@@ -17,7 +19,7 @@ export class ArxivResolver {
     return `https://arxiv.org/pdf/${cleanId}`;
   }
 
-  async searchByTitle(title: string): Promise<ArxivResult[]> {
+  async searchByTitle(title: string): Promise<ResolverResult<ArxivResult[]>> {
     const normalizedTitle = normalizeTitle(title);
     const strictQuery = `ti:${encodeURIComponent(normalizedTitle)}`;
     const broadQuery = `all:${encodeURIComponent(stripQueryPunctuation(normalizedTitle))}`;
@@ -25,18 +27,19 @@ export class ArxivResolver {
     try {
       const strictResults = await this.queryArxiv(strictQuery);
       if (strictResults.length > 0) {
-        return strictResults;
+        return { ok: true, value: strictResults };
       }
 
       if (broadQuery === strictQuery) {
-        return [];
+        return { ok: true, value: [] };
       }
 
       const broadResults = await this.queryArxiv(broadQuery);
-      return broadResults;
+      return { ok: true, value: broadResults };
     } catch (err) {
-      logger.warn('arXiv search failed', { title: normalizedTitle, err: String(err) });
-      return [];
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('arXiv search failed', { title: normalizedTitle, err: message });
+      return { ok: false, error: `arXiv search failed: ${message}` };
     }
   }
 
@@ -46,7 +49,7 @@ export class ArxivResolver {
 
     try {
       const response = await axios.get<string>(url, {
-        timeout: 30000,
+        timeout: ARXIV_TIMEOUT_MS,
         responseType: 'text',
       });
       return this.parseAtomResponse(response.data);
@@ -54,7 +57,7 @@ export class ArxivResolver {
       if (shouldRetry(error)) {
         await requestLimiter.wait();
         const retryResponse = await axios.get<string>(url, {
-          timeout: 30000,
+          timeout: ARXIV_TIMEOUT_MS,
           responseType: 'text',
         });
         return this.parseAtomResponse(retryResponse.data);
@@ -111,6 +114,3 @@ function shouldRetry(error: unknown): boolean {
   const maybeAxiosError = error as { code?: string; response?: { status?: number } };
   return maybeAxiosError.code === 'ECONNABORTED' || maybeAxiosError.response?.status === 429;
 }
-
-/** @deprecated Use ArxivResolver */
-export const ArxivRetriever = ArxivResolver;

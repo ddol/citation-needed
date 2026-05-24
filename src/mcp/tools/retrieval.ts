@@ -38,7 +38,14 @@ export async function handleRetrievalTool(
 
       if (!resolvedUrl && useUnpaywall && email) {
         const unpaywall = new UnpaywallResolver(email);
-        resolvedUrl = (await unpaywall.getOpenAccessPdf(doi)) || undefined;
+        const lookup = await unpaywall.getOpenAccessPdf(doi);
+        if (!lookup.ok) {
+          return {
+            content: [{ type: 'text', text: `Unpaywall lookup failed: ${lookup.error}` }],
+            isError: true,
+          };
+        }
+        resolvedUrl = lookup.value || undefined;
       }
 
       if (!resolvedUrl) {
