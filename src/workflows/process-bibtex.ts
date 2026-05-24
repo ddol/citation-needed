@@ -7,6 +7,7 @@ import type { AuthConfig } from '../models/auth';
 import type { RetrievalResult } from '../models/retrieval';
 import { parseBibtex } from '../parsers/bibtex';
 import type { ParsedEntry } from '../parsers/bibtex';
+import { isValidDoi, normalizeDoi } from '../parsers/doi';
 import { RetrievalOrchestrator } from '../retrieval/index';
 import { ensureDir, getCitationDisplayName, getCitationFileStem } from '../utils/file';
 import { extractPdfMarkdown } from '../verification/markdown';
@@ -107,10 +108,24 @@ export async function processBibtexFile(
       continue;
     }
 
-    const stored = db.addCitation({ ...entry, doi: entry.doi });
+    const normalizedDoi = normalizeDoi(entry.doi);
+    if (!isValidDoi(normalizedDoi)) {
+      const reason = `invalid DOI format: ${entry.doi}`;
+      skippedCount += 1;
+      skippedEntries.push({ bibtexKey: entry.bibtexKey, label, reason });
+      emitProgress({
+        label,
+        fileStem,
+        stage: 'skipped',
+        message: `Skipped: ${reason}`,
+      });
+      continue;
+    }
+
+    const stored = db.addCitation({ ...entry, doi: normalizedDoi });
     importedCount += 1;
     emitProgress({
-      doi: entry.doi,
+      doi: normalizedDoi,
       label,
       fileStem,
       stage: 'retrieving',
@@ -118,7 +133,7 @@ export async function processBibtexFile(
     });
 
     const startedAt = Date.now();
-    const retrieval = await retriever.retrievePdf(entry.doi, entry);
+    const retrieval = await retriever.retrievePdf(normalizedDoi, entry);
     const durationMs = Date.now() - startedAt;
 
     // Audit log: one retrieval_log row per attempt (success or failure) so the
@@ -141,12 +156,12 @@ export async function processBibtexFile(
 
     if (!retrieval.success || !retrieval.localPath) {
       failures.push({
-        doi: entry.doi,
+        doi: normalizedDoi,
         stage: 'download',
         message: retrieval.message,
       });
       emitProgress({
-        doi: entry.doi,
+        doi: normalizedDoi,
         label,
         fileStem,
         stage: 'failed',
@@ -157,7 +172,7 @@ export async function processBibtexFile(
 
     downloadedCount += 1;
     emitProgress({
-      doi: entry.doi,
+      doi: normalizedDoi,
       label,
       fileStem,
       stage: 'markdown',
@@ -170,7 +185,7 @@ export async function processBibtexFile(
       fs.writeFileSync(markdownFile, markdown, 'utf-8');
       markdownCount += 1;
       emitProgress({
-        doi: entry.doi,
+        doi: normalizedDoi,
         label,
         fileStem,
         stage: 'completed',
@@ -179,12 +194,12 @@ export async function processBibtexFile(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push({
-        doi: entry.doi,
+        doi: normalizedDoi,
         stage: 'markdown',
         message,
       });
       emitProgress({
-        doi: entry.doi,
+        doi: normalizedDoi,
         label,
         fileStem,
         stage: 'failed',
