@@ -69,9 +69,11 @@ export class RetrievalOrchestrator {
       if (pdfUrl) {
         try {
           const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
-          this.db.updatePdfPath(doi, localPath);
-          this.db.updateVerificationStatus(doi, 'downloaded');
-          this.db.updateAccessType(doi, 'open-access');
+          this.db.transaction(() => {
+            this.db.updatePdfPath(doi, localPath);
+            this.db.updateVerificationStatus(doi, 'downloaded');
+            this.db.updateAccessType(doi, 'open-access');
+          });
           return {
             success: true,
             pdfUrl,
@@ -93,9 +95,11 @@ export class RetrievalOrchestrator {
         try {
           const { pdfUrl } = results[0];
           const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
-          this.db.updatePdfPath(doi, localPath);
-          this.db.updateVerificationStatus(doi, 'downloaded');
-          this.db.updateAccessType(doi, 'open-access');
+          this.db.transaction(() => {
+            this.db.updatePdfPath(doi, localPath);
+            this.db.updateVerificationStatus(doi, 'downloaded');
+            this.db.updateAccessType(doi, 'open-access');
+          });
           return {
             success: true,
             pdfUrl,
@@ -129,9 +133,11 @@ export class RetrievalOrchestrator {
         fileStem,
         proxyUrl: proxy.proxyUrl,
       });
-      this.db.updatePdfPath(doi, localPath);
-      this.db.updateVerificationStatus(doi, 'downloaded');
-      this.db.updateAccessType(doi, 'institutional');
+      this.db.transaction(() => {
+        this.db.updatePdfPath(doi, localPath);
+        this.db.updateVerificationStatus(doi, 'downloaded');
+        this.db.updateAccessType(doi, 'institutional');
+      });
       return {
         success: true,
         localPath,
