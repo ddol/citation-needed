@@ -1,6 +1,24 @@
+import { z, ZodError } from 'zod';
 import type { Database } from '../../db/index';
 import { parseBibtex } from '../../parsers/bibtex';
 import { ArxivResolver } from '../../retrieval/resolvers/arxiv';
+
+const GetCitationArgs = z.object({
+  doi: z.string().min(1, 'doi is required'),
+});
+
+const ListCitationsArgs = z.object({
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+const ImportBibtexArgs = z.object({
+  bibtex: z.string().min(1, 'bibtex is required'),
+});
+
+const SearchArxivArgs = z.object({
+  title: z.string().min(1, 'title is required'),
+});
 
 export const citationToolDefinitions = [
   {
@@ -16,8 +34,21 @@ export const citationToolDefinitions = [
   },
   {
     name: 'list-citations',
-    description: 'List all stored citations',
-    inputSchema: { type: 'object', properties: {} },
+    description:
+      'List stored citations with cursor pagination. Pass nextCursor from a prior response to fetch the next page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cursor: {
+          type: 'string',
+          description: 'Opaque cursor from a previous list-citations response',
+        },
+        limit: {
+          type: 'number',
+          description: 'Page size (1–200, default 50)',
+        },
+      },
+    },
   },
   {
     name: 'import-bibtex',
@@ -43,51 +74,108 @@ export const citationToolDefinitions = [
   },
 ];
 
+export interface ToolContext {
+  progressToken?: string | number;
+  sendProgress?: (notification: {
+    progress: number;
+    total?: number;
+    message?: string;
+  }) => Promise<void> | void;
+}
+
 export async function handleCitationTool(
   name: string,
   args: Record<string, unknown>,
-  db: Database
+  db: Database,
+  context: ToolContext = {}
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean } | null> {
-  switch (name) {
-    case 'get-citation': {
-      const doi = args.doi as string;
-      const citation = db.getCitation(doi);
-      if (!citation) {
-        return { content: [{ type: 'text', text: `Citation not found for DOI: ${doi}` }] };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(citation, null, 2) }] };
-    }
-
-    case 'list-citations': {
-      const citations = db.getAllCitations();
-      return { content: [{ type: 'text', text: JSON.stringify(citations, null, 2) }] };
-    }
-
-    case 'import-bibtex': {
-      const bibtex = args.bibtex as string;
-      const parsed = parseBibtex(bibtex);
-      const imported: string[] = [];
-      for (const entry of parsed) {
-        if (entry.doi) {
-          db.addCitation({ ...entry, doi: entry.doi });
-          imported.push(entry.doi);
+  try {
+    switch (name) {
+      case 'get-citation': {
+        const { doi } = GetCitationArgs.parse(args);
+        const citation = db.getCitation(doi);
+        if (!citation) {
+          return { content: [{ type: 'text', text: `Citation not found for DOI: ${doi}` }] };
         }
+        return { content: [{ type: 'text', text: JSON.stringify(citation, null, 2) }] };
       }
+
+      case 'list-citations': {
+        const { cursor, limit } = ListCitationsArgs.parse(args);
+        if (cursor === undefined && limit === undefined) {
+          // Back-compat: callers without pagination args get the legacy
+          // "all citations" array directly.
+          const citations = db.getAllCitations();
+          return { content: [{ type: 'text', text: JSON.stringify(citations, null, 2) }] };
+        }
+        const page = db.getAllCitations({ cursor, limit });
+        return { content: [{ type: 'text', text: JSON.stringify(page, null, 2) }] };
+      }
+
+      case 'import-bibtex': {
+        const { bibtex } = ImportBibtexArgs.parse(args);
+        const parsed = parseBibtex(bibtex);
+        const imported: string[] = [];
+        const total = parsed.length;
+        for (let i = 0; i < parsed.length; i += 1) {
+          const entry = parsed[i];
+          if (entry.doi) {
+            db.addCitation({ ...entry, doi: entry.doi });
+            imported.push(entry.doi);
+          }
+          if (context.sendProgress) {
+            await context.sendProgress({
+              progress: i + 1,
+              total,
+              message: entry.doi
+                ? `imported ${entry.doi}`
+                : `skipped ${entry.bibtexKey ?? '(no DOI)'}`,
+            });
+          }
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Imported ${imported.length} citations${
+                imported.length ? `: ${imported.join(', ')}` : ''
+              }`,
+            },
+          ],
+        };
+      }
+
+      case 'search-arxiv': {
+        const { title } = SearchArxivArgs.parse(args);
+        const arxiv = new ArxivResolver();
+        const result = await arxiv.searchByTitle(title);
+        if (!result.ok) {
+          return {
+            content: [{ type: 'text', text: `arXiv search failed: ${result.error}` }],
+            isError: true,
+          };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify(result.value, null, 2) }] };
+      }
+
+      default:
+        return null;
+    }
+  } catch (error) {
+    if (error instanceof ZodError) {
       return {
         content: [
-          { type: 'text', text: `Imported ${imported.length} citations: ${imported.join(', ')}` },
+          { type: 'text', text: `Invalid arguments for ${name}: ${formatZodError(error)}` },
         ],
+        isError: true,
       };
     }
-
-    case 'search-arxiv': {
-      const title = args.title as string;
-      const arxiv = new ArxivResolver();
-      const results = await arxiv.searchByTitle(title);
-      return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
-    }
-
-    default:
-      return null;
+    throw error;
   }
+}
+
+function formatZodError(error: ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('; ');
 }

@@ -39,7 +39,8 @@
     "bibtex-parse": "^2.1.0",
     "commander": "^12.0.0",
     "ink": "^3.2.0",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "zod": "^4.4.3"
   },
   "optionalDependencies": {
     "playwright": "^1.41.2"

@@ -1,7 +1,15 @@
+import { z, ZodError } from 'zod';
 import type { Database } from '../../db/index';
 import type { AuthConfig } from '../../models/auth';
 import { UnpaywallResolver } from '../../retrieval/resolvers/unpaywall';
 import { OpenAccessDownloader } from '../../retrieval/downloaders/open-access';
+
+const DownloadPdfArgs = z.object({
+  doi: z.string().min(1, 'doi is required'),
+  pdfUrl: z.string().url().optional(),
+  useUnpaywall: z.boolean().optional(),
+  email: z.string().email().optional(),
+});
 
 export const retrievalToolDefinitions = [
   {
@@ -26,60 +34,77 @@ export async function handleRetrievalTool(
   db: Database,
   authConfig: AuthConfig = {}
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean } | null> {
-  switch (name) {
-    case 'download-pdf': {
-      const doi = args.doi as string;
-      const pdfUrl = args.pdfUrl as string | undefined;
-      const useUnpaywall = args.useUnpaywall as boolean | undefined;
-      const email = (args.email as string | undefined) || authConfig.email;
+  try {
+    switch (name) {
+      case 'download-pdf': {
+        const parsed = DownloadPdfArgs.parse(args);
+        const email = parsed.email || authConfig.email;
 
-      const downloader = new OpenAccessDownloader();
-      let resolvedUrl = pdfUrl;
+        const downloader = new OpenAccessDownloader({ email });
+        let resolvedUrl = parsed.pdfUrl;
 
-      if (!resolvedUrl && useUnpaywall && email) {
-        const unpaywall = new UnpaywallResolver(email);
-        const lookup = await unpaywall.getOpenAccessPdf(doi);
-        if (!lookup.ok) {
+        if (!resolvedUrl && parsed.useUnpaywall && email) {
+          const unpaywall = new UnpaywallResolver(email);
+          const lookup = await unpaywall.getOpenAccessPdf(parsed.doi);
+          if (!lookup.ok) {
+            return {
+              content: [{ type: 'text', text: `Unpaywall lookup failed: ${lookup.error}` }],
+              isError: true,
+            };
+          }
+          resolvedUrl = lookup.value || undefined;
+        }
+
+        if (!resolvedUrl) {
           return {
-            content: [{ type: 'text', text: `Unpaywall lookup failed: ${lookup.error}` }],
+            content: [
+              {
+                type: 'text',
+                text: 'No PDF URL available. Provide pdfUrl or use useUnpaywall with email.',
+              },
+            ],
+          };
+        }
+
+        const localPath = await downloader.download(parsed.doi, resolvedUrl);
+
+        const citation = db.getCitation(parsed.doi);
+        if (!citation) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `PDF saved to: ${localPath}, but DOI ${parsed.doi} not found in database. Import the citation first to track it.`,
+              },
+            ],
             isError: true,
           };
         }
-        resolvedUrl = lookup.value || undefined;
+
+        db.transaction(() => {
+          db.updatePdfPath(parsed.doi, localPath);
+          db.updateVerificationStatus(parsed.doi, 'downloaded');
+        });
+        return { content: [{ type: 'text', text: `PDF saved to: ${localPath}` }] };
       }
 
-      if (!resolvedUrl) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'No PDF URL available. Provide pdfUrl or use useUnpaywall with email.',
-            },
-          ],
-        };
-      }
-
-      const localPath = await downloader.download(doi, resolvedUrl);
-
-      const citation = db.getCitation(doi);
-      if (!citation) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `PDF saved to: ${localPath}, but DOI ${doi} not found in database. Import the citation first to track it.`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      db.updatePdfPath(doi, localPath);
-      db.updateVerificationStatus(doi, 'downloaded');
-      return { content: [{ type: 'text', text: `PDF saved to: ${localPath}` }] };
+      default:
+        return null;
     }
-
-    default:
-      return null;
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Invalid arguments for ${name}: ${error.issues
+              .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+              .join('; ')}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    throw error;
   }
 }

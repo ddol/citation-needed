@@ -255,11 +255,64 @@ export class Database {
     return this.rowToCitation(row);
   }
 
-  getAllCitations(): Citation[] {
-    const rows = this.db
-      .prepare('SELECT * FROM citations ORDER BY created_at DESC')
-      .all() as Record<string, unknown>[];
-    return rows.map((r) => this.rowToCitation(r));
+  /**
+   * List stored citations.
+   *
+   * `cursor` is a base64-encoded JSON snapshot of the last row seen
+   * (`{ createdAt, id }`) — pass `nextCursor` from the previous response to
+   * fetch the next page. Returns rows in ascending `(created_at, id)` order so
+   * pagination is stable when new rows arrive.
+   *
+   * For the legacy descending "all rows" view, call with no arguments.
+   */
+  getAllCitations(): Citation[];
+  getAllCitations(options: { cursor?: string; limit?: number }): {
+    citations: Citation[];
+    nextCursor?: string;
+  };
+  getAllCitations(options?: {
+    cursor?: string;
+    limit?: number;
+  }): Citation[] | { citations: Citation[]; nextCursor?: string } {
+    if (options === undefined) {
+      const rows = this.db
+        .prepare('SELECT * FROM citations ORDER BY created_at DESC')
+        .all() as Record<string, unknown>[];
+      return rows.map((r) => this.rowToCitation(r));
+    }
+
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const cursor = options.cursor ? decodeCursor(options.cursor) : null;
+
+    const rows = cursor
+      ? (this.db
+          .prepare(
+            `SELECT * FROM citations
+             WHERE (created_at > @createdAt)
+                OR (created_at = @createdAt AND id > @id)
+             ORDER BY created_at ASC, id ASC
+             LIMIT @limit`
+          )
+          .all({ createdAt: cursor.createdAt, id: cursor.id, limit: limit + 1 }) as Record<
+          string,
+          unknown
+        >[])
+      : (this.db
+          .prepare('SELECT * FROM citations ORDER BY created_at ASC, id ASC LIMIT @limit')
+          .all({ limit: limit + 1 }) as Record<string, unknown>[]);
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const citations = pageRows.map((r) => this.rowToCitation(r));
+    const nextCursor =
+      hasMore && pageRows.length > 0
+        ? encodeCursor({
+            createdAt: (pageRows[pageRows.length - 1].created_at as string) ?? '',
+            id: (pageRows[pageRows.length - 1].id as number) ?? 0,
+          })
+        : undefined;
+
+    return { citations, nextCursor };
   }
 
   searchCitations(query: string): Citation[] {
@@ -359,6 +412,29 @@ export class Database {
       createdAt: row.created_at as string | undefined,
       updatedAt: row.updated_at as string | undefined,
     };
+  }
+}
+
+interface CursorState {
+  createdAt: string;
+  id: number;
+}
+
+function encodeCursor(state: CursorState): string {
+  return Buffer.from(JSON.stringify(state), 'utf8').toString('base64');
+}
+
+function decodeCursor(cursor: string): CursorState | null {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(cursor, 'base64').toString('utf8')
+    ) as Partial<CursorState>;
+    if (typeof parsed.createdAt !== 'string' || typeof parsed.id !== 'number') {
+      return null;
+    }
+    return { createdAt: parsed.createdAt, id: parsed.id };
+  } catch {
+    return null;
   }
 }
 

@@ -36,6 +36,12 @@ export interface ProcessBibtexFailure {
   message: string;
 }
 
+export interface ProcessBibtexSkipped {
+  bibtexKey?: string;
+  label: string;
+  reason: string;
+}
+
 export interface ProcessBibtexResult {
   bibtexPath: string;
   paperPath: string;
@@ -45,6 +51,7 @@ export interface ProcessBibtexResult {
   markdownCount: number;
   skippedCount: number;
   failures: ProcessBibtexFailure[];
+  skippedEntries: ProcessBibtexSkipped[];
 }
 
 export async function processBibtexFile(
@@ -81,23 +88,26 @@ export async function processBibtexFile(
   let markdownCount = 0;
   let skippedCount = 0;
   const failures: ProcessBibtexFailure[] = [];
+  const skippedEntries: ProcessBibtexSkipped[] = [];
 
   for (const entry of parsed) {
     const fileStem = getCitationFileStem(entry);
     const label = getCitationDisplayName(entry);
 
     if (!entry.doi) {
+      const reason = 'no DOI';
       skippedCount += 1;
+      skippedEntries.push({ bibtexKey: entry.bibtexKey, label, reason });
       emitProgress({
         label,
         fileStem,
         stage: 'skipped',
-        message: 'Skipped: no DOI',
+        message: `Skipped: ${reason}`,
       });
       continue;
     }
 
-    db.addCitation({ ...entry, doi: entry.doi });
+    const stored = db.addCitation({ ...entry, doi: entry.doi });
     importedCount += 1;
     emitProgress({
       doi: entry.doi,
@@ -107,7 +117,28 @@ export async function processBibtexFile(
       message: 'Downloading PDF',
     });
 
+    const startedAt = Date.now();
     const retrieval = await retriever.retrievePdf(entry.doi, entry);
+    const durationMs = Date.now() - startedAt;
+
+    // Audit log: one retrieval_log row per attempt (success or failure) so the
+    // import history is queryable after the fact. Skip if we don't have a
+    // citation_id (legacy mock DBs in tests may not implement logRetrieval).
+    if (typeof db.logRetrieval === 'function' && stored.id != null) {
+      try {
+        db.logRetrieval({
+          citationId: stored.id,
+          source: `bibtex-import:${retrieval.source}`,
+          url: retrieval.pdfUrl,
+          success: retrieval.success,
+          errorMessage: retrieval.success ? undefined : retrieval.message,
+          durationMs,
+        });
+      } catch {
+        // Audit-log writes must never break the workflow; swallow silently.
+      }
+    }
+
     if (!retrieval.success || !retrieval.localPath) {
       failures.push({
         doi: entry.doi,
@@ -171,5 +202,6 @@ export async function processBibtexFile(
     markdownCount,
     skippedCount,
     failures,
+    skippedEntries,
   };
 }
