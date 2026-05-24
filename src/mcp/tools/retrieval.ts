@@ -28,10 +28,10 @@ export async function handleRetrievalTool(
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean } | null> {
   switch (name) {
     case 'download-pdf': {
-      const doi = args['doi'] as string;
-      const pdfUrl = args['pdfUrl'] as string | undefined;
-      const useUnpaywall = args['useUnpaywall'] as boolean | undefined;
-      const email = (args['email'] as string | undefined) || authConfig.email;
+      const doi = args.doi as string;
+      const pdfUrl = args.pdfUrl as string | undefined;
+      const useUnpaywall = args.useUnpaywall as boolean | undefined;
+      const email = (args.email as string | undefined) || authConfig.email;
 
       const downloader = new OpenAccessDownloader();
       let resolvedUrl = pdfUrl;
@@ -43,10 +43,12 @@ export async function handleRetrievalTool(
 
       if (!resolvedUrl) {
         return {
-          content: [{
-            type: 'text',
-            text: 'No PDF URL available. Provide pdfUrl or use useUnpaywall with email.',
-          }],
+          content: [
+            {
+              type: 'text',
+              text: 'No PDF URL available. Provide pdfUrl or use useUnpaywall with email.',
+            },
+          ],
         };
       }
 
@@ -55,10 +57,12 @@ export async function handleRetrievalTool(
       const citation = db.getCitation(doi);
       if (!citation) {
         return {
-          content: [{
-            type: 'text',
-            text: `PDF saved to: ${localPath}, but DOI ${doi} not found in database. Import the citation first to track it.`,
-          }],
+          content: [
+            {
+              type: 'text',
+              text: `PDF saved to: ${localPath}, but DOI ${doi} not found in database. Import the citation first to track it.`,
+            },
+          ],
           isError: true,
         };
       }

@@ -32,7 +32,8 @@ export class ArxivResolver {
         return [];
       }
 
-      return this.queryArxiv(broadQuery);
+      const broadResults = await this.queryArxiv(broadQuery);
+      return broadResults;
     } catch (err) {
       logger.warn('arXiv search failed', { title: normalizedTitle, err: String(err) });
       return [];
@@ -66,9 +67,8 @@ export class ArxivResolver {
   private parseAtomResponse(xml: string): ArxivResult[] {
     const results: ArxivResult[] = [];
     const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
-    let entryMatch: RegExpExecArray | null;
 
-    while ((entryMatch = entryRegex.exec(xml)) !== null) {
+    for (const entryMatch of xml.matchAll(entryRegex)) {
       const entry = entryMatch[1];
       const idMatch = /<id>([\s\S]*?)<\/id>/.exec(entry);
       const titleMatch = /<title>([\s\S]*?)<\/title>/.exec(entry);
@@ -79,9 +79,7 @@ export class ArxivResolver {
       if (!arxivIdMatch) continue;
 
       const arxivId = arxivIdMatch[1].replace(/v\d+$/, '');
-      const entryTitle = titleMatch
-        ? titleMatch[1].trim().replace(/\s+/g, ' ')
-        : '';
+      const entryTitle = titleMatch ? titleMatch[1].trim().replace(/\s+/g, ' ') : '';
 
       results.push({
         arxivId,
@@ -99,7 +97,10 @@ function normalizeTitle(title: string): string {
 }
 
 function stripQueryPunctuation(title: string): string {
-  return title.replace(/[^a-zA-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return title
+    .replace(/[^a-zA-Z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function shouldRetry(error: unknown): boolean {

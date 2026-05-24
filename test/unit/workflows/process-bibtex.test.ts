@@ -11,6 +11,7 @@ jest.mock('../../../src/retrieval/index', () => ({
   RetrievalOrchestrator: mockRetrievalOrchestrator,
 }));
 
+// eslint-disable-next-line import/first, import/order
 import { processBibtexFile } from '../../../src/workflows/process-bibtex';
 
 function makeTempRoot(): string {

@@ -68,7 +68,7 @@ export function ImportProgress({
       });
     };
 
-    void processBibtexFile(bibtexPath, {
+    processBibtexFile(bibtexPath, {
       ...options,
       onProgress: handleProgress,
     })

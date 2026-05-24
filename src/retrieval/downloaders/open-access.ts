@@ -4,11 +4,13 @@ import axios from 'axios';
 import { getCitationFileStem, sanitizeFilename, getPdfDir, ensureDir } from '../../utils/file';
 import { RateLimiter } from '../../utils/rate-limiter';
 import { createLogger } from '../../utils/logger';
+import { VERSION } from '../../utils/version';
 
 const logger = createLogger('open-access-downloader');
 
 export class OpenAccessDownloader {
   private storageDir: string;
+
   private rateLimiter: RateLimiter;
 
   constructor(storageDir?: string) {
@@ -29,7 +31,7 @@ export class OpenAccessDownloader {
       responseType: 'arraybuffer',
       timeout: 60000,
       headers: {
-        'User-Agent': `citation-needed/0.1.0 (mailto:${process.env.CITATION_NEEDED_EMAIL || 'citation-needed@example.com'})`,
+        'User-Agent': `citation-needed/${VERSION} (mailto:${process.env.CITATION_NEEDED_EMAIL || 'citation-needed@example.com'})`,
       },
     });
 

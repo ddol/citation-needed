@@ -33,7 +33,7 @@ export function registerAuthCommand(program: Command): void {
           username: options.username,
           passwordEnvVar: options.passwordEnv,
         });
-        render(<Text color="green">Proxy '{name}' added.</Text>);
+        render(<Text color="green">{`Proxy '${name}' added.`}</Text>);
       }
     );
 

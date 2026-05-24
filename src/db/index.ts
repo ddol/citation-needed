@@ -3,10 +3,7 @@ import path from 'path';
 import os from 'os';
 import type { Citation, VerificationStatus, AccessType } from '../models/citation';
 import type { RetrievalAttempt } from '../models/retrieval';
-import {
-  CREATE_CITATIONS_TABLE,
-  CREATE_RETRIEVAL_LOG_TABLE,
-} from './schema';
+import { CREATE_CITATIONS_TABLE, CREATE_RETRIEVAL_LOG_TABLE } from './schema';
 
 // Use require for better-sqlite3 (CommonJS native module)
 const BetterSqlite3 = require('better-sqlite3');
@@ -64,9 +61,9 @@ export class Database {
   }
 
   private migrateLegacyCitationSchema(): void {
-    const columns = this.db
-      .prepare('PRAGMA table_info(citations)')
-      .all() as Array<{ name: string }>;
+    const columns = this.db.prepare('PRAGMA table_info(citations)').all() as Array<{
+      name: string;
+    }>;
     const hasExpectedShape =
       columns.length === EXPECTED_CITATION_COLUMNS.length &&
       EXPECTED_CITATION_COLUMNS.every((expectedColumn) =>
@@ -167,9 +164,9 @@ export class Database {
   }
 
   private getCitationByDoi(doi: string): Citation | undefined {
-    const row = this.db
-      .prepare('SELECT * FROM citations WHERE doi = ?')
-      .get(doi) as Record<string, unknown> | undefined;
+    const row = this.db.prepare('SELECT * FROM citations WHERE doi = ?').get(doi) as
+      | Record<string, unknown>
+      | undefined;
     if (!row) return undefined;
     return this.rowToCitation(row);
   }
@@ -219,11 +216,13 @@ export class Database {
   logRetrieval(attempt: RetrievalAttempt): void {
     const now = new Date().toISOString();
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO retrieval_log
           (citation_id, source, url, success, error_message, duration_ms, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `)
+      `
+      )
       .run(
         attempt.citationId,
         attempt.source,
@@ -240,20 +239,18 @@ export class Database {
     if (!citation || citation.id == null) return [];
 
     const rows = this.db
-      .prepare(
-        'SELECT * FROM retrieval_log WHERE citation_id = ? ORDER BY created_at DESC'
-      )
+      .prepare('SELECT * FROM retrieval_log WHERE citation_id = ? ORDER BY created_at DESC')
       .all(citation.id) as Record<string, unknown>[];
 
     return rows.map((r) => ({
-      id: r['id'] as number,
-      citationId: r['citation_id'] as number,
-      source: r['source'] as string,
-      url: r['url'] as string | undefined,
-      success: Boolean(r['success']),
-      errorMessage: r['error_message'] as string | undefined,
-      durationMs: r['duration_ms'] as number | undefined,
-      createdAt: r['created_at'] as string | undefined,
+      id: r.id as number,
+      citationId: r.citation_id as number,
+      source: r.source as string,
+      url: r.url as string | undefined,
+      success: Boolean(r.success),
+      errorMessage: r.error_message as string | undefined,
+      durationMs: r.duration_ms as number | undefined,
+      createdAt: r.created_at as string | undefined,
     }));
   }
 
@@ -263,20 +260,20 @@ export class Database {
 
   private rowToCitation(row: Record<string, unknown>): Citation {
     return {
-      id: row['id'] as number,
-      doi: row['doi'] as string,
-      url: row['url'] as string | undefined,
-      title: row['title'] as string | undefined,
-      authors: row['authors'] as string | undefined,
-      year: row['year'] as number | undefined,
-      journal: row['journal'] as string | undefined,
-      bibtexKey: row['bibtex_key'] as string | undefined,
-      pdfPath: row['pdf_path'] as string | undefined,
-      verificationStatus: row['verification_status'] as Citation['verificationStatus'],
-      accessType: row['access_type'] as Citation['accessType'],
-      lastVerified: row['last_verified'] as string | undefined,
-      createdAt: row['created_at'] as string | undefined,
-      updatedAt: row['updated_at'] as string | undefined,
+      id: row.id as number,
+      doi: row.doi as string,
+      url: row.url as string | undefined,
+      title: row.title as string | undefined,
+      authors: row.authors as string | undefined,
+      year: row.year as number | undefined,
+      journal: row.journal as string | undefined,
+      bibtexKey: row.bibtex_key as string | undefined,
+      pdfPath: row.pdf_path as string | undefined,
+      verificationStatus: row.verification_status as Citation['verificationStatus'],
+      accessType: row.access_type as Citation['accessType'],
+      lastVerified: row.last_verified as string | undefined,
+      createdAt: row.created_at as string | undefined,
+      updatedAt: row.updated_at as string | undefined,
     };
   }
 }

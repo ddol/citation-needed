@@ -24,7 +24,7 @@ export class UnpaywallResolver {
     try {
       const url = `https://api.unpaywall.org/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(this.email)}`;
       const response = await axios.get<UnpaywallResponse>(url, { timeout: 15000 });
-      const data = response.data;
+      const { data } = response;
 
       if (!data.is_oa) return null;
 

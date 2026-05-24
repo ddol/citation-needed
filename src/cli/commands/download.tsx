@@ -32,7 +32,11 @@ export function registerDownloadCommand(program: Command): void {
       const localPath = await downloader.download(doi, pdfUrl, citation?.bibtexKey || doi);
 
       if (!citation) {
-        render(<Text color="yellow">Warning: DOI {doi} not found in database. PDF saved but citation not updated.</Text>);
+        render(
+          <Text color="yellow">
+            Warning: DOI {doi} not found in database. PDF saved but citation not updated.
+          </Text>
+        );
       } else {
         db.updatePdfPath(doi, localPath);
         db.updateVerificationStatus(doi, 'downloaded');

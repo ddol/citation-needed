@@ -19,13 +19,13 @@ export function createLogger(name: string): Logger {
     const minLevel = LEVELS[getConfiguredLevel()];
     if (LEVELS[level] < minLevel) return;
     const line = JSON.stringify({ ...meta, ts: new Date().toISOString(), level, name, msg });
-    process.stderr.write(line + '\n');
+    process.stderr.write(`${line}\n`);
   }
 
   return {
     debug: (msg, meta) => write('debug', msg, meta),
-    info:  (msg, meta) => write('info',  msg, meta),
-    warn:  (msg, meta) => write('warn',  msg, meta),
+    info: (msg, meta) => write('info', msg, meta),
+    warn: (msg, meta) => write('warn', msg, meta),
     error: (msg, meta) => write('error', msg, meta),
   };
 }

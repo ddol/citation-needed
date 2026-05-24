@@ -35,12 +35,9 @@ export function parseBibtex(bibtexString: string): ParsedEntry[] {
       url: getField('url'),
       title: getField('title'),
       authors: getField('author') || getField('authors'),
-      year: isNaN(year as number) ? undefined : year,
-      journal:
-        getField('journal') ||
-        getField('booktitle') ||
-        getField('publisher'),
-      bibtexKey: entry['key'] as string | undefined,
+      year: year !== undefined && Number.isNaN(year) ? undefined : year,
+      journal: getField('journal') || getField('booktitle') || getField('publisher'),
+      bibtexKey: entry.key as string | undefined,
     };
   });
 }

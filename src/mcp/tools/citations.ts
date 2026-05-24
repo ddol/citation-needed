@@ -50,7 +50,7 @@ export async function handleCitationTool(
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean } | null> {
   switch (name) {
     case 'get-citation': {
-      const doi = args['doi'] as string;
+      const doi = args.doi as string;
       const citation = db.getCitation(doi);
       if (!citation) {
         return { content: [{ type: 'text', text: `Citation not found for DOI: ${doi}` }] };
@@ -64,7 +64,7 @@ export async function handleCitationTool(
     }
 
     case 'import-bibtex': {
-      const bibtex = args['bibtex'] as string;
+      const bibtex = args.bibtex as string;
       const parsed = parseBibtex(bibtex);
       const imported: string[] = [];
       for (const entry of parsed) {
@@ -74,12 +74,14 @@ export async function handleCitationTool(
         }
       }
       return {
-        content: [{ type: 'text', text: `Imported ${imported.length} citations: ${imported.join(', ')}` }],
+        content: [
+          { type: 'text', text: `Imported ${imported.length} citations: ${imported.join(', ')}` },
+        ],
       };
     }
 
     case 'search-arxiv': {
-      const title = args['title'] as string;
+      const title = args.title as string;
       const arxiv = new ArxivResolver();
       const results = await arxiv.searchByTitle(title);
       return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };

@@ -1,0 +1,13 @@
+# Ensure node is on PATH when the hook runs from GUI clients (Tower, GitHub Desktop)
+# or any shell that didn't load a Homebrew profile.
+for candidate in \
+  "$HOME/.volta/bin" \
+  "$HOME/.nvm/versions/node/$(cat .nvmrc 2>/dev/null)/bin" \
+  "/opt/homebrew/opt/node@18/bin" \
+  "/opt/homebrew/bin" \
+  "/usr/local/bin"; do
+  [ -d "$candidate" ] && PATH="$candidate:$PATH"
+done
+export PATH
+
+npx lint-staged

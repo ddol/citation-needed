@@ -20,10 +20,18 @@ export function CitationsTable({ rows }: { rows: CitationRow[] }): React.ReactEl
   return (
     <Box flexDirection="column">
       <Box>
-        <Text bold color="cyan">{'DOI'.padEnd(30)}</Text>
-        <Text bold color="cyan">{'Title'.padEnd(50)}</Text>
-        <Text bold color="cyan">{'Year'.padEnd(6)}</Text>
-        <Text bold color="cyan">{'Status'}</Text>
+        <Text bold color="cyan">
+          {'DOI'.padEnd(30)}
+        </Text>
+        <Text bold color="cyan">
+          {'Title'.padEnd(50)}
+        </Text>
+        <Text bold color="cyan">
+          {'Year'.padEnd(6)}
+        </Text>
+        <Text bold color="cyan">
+          {'Status'}
+        </Text>
       </Box>
       {rows.map((row) => (
         <Box key={row.doi}>

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createLogger } from '../../utils/logger';
+import { VERSION } from '../../utils/version';
 
 const logger = createLogger('doi-resolver');
 
@@ -21,7 +22,7 @@ export class DoiResolver {
       const response = await axios.get<CrossrefResponse>(url, {
         timeout: 15000,
         headers: {
-          'User-Agent': `citation-needed/0.1.0 (mailto:${process.env.CITATION_NEEDED_EMAIL || 'citation-needed@example.com'})`,
+          'User-Agent': `citation-needed/${VERSION} (mailto:${process.env.CITATION_NEEDED_EMAIL || 'citation-needed@example.com'})`,
         },
       });
 
@@ -29,16 +30,17 @@ export class DoiResolver {
       if (!work) return null;
 
       const title = Array.isArray(work.title) ? work.title[0] : work.title;
-      const authors = (work.author || []).map(
-        (a: CrossrefAuthor) => `${a.given || ''} ${a.family || ''}`.trim()
+      const authors = (work.author || []).map((a: CrossrefAuthor) =>
+        `${a.given || ''} ${a.family || ''}`.trim()
       );
       const year =
         work['published-print']?.['date-parts']?.[0]?.[0] ||
         work['published-online']?.['date-parts']?.[0]?.[0] ||
         undefined;
       const journal =
-        (Array.isArray(work['container-title']) ? work['container-title'][0] : work['container-title']) ||
-        undefined;
+        (Array.isArray(work['container-title'])
+          ? work['container-title'][0]
+          : work['container-title']) || undefined;
 
       return {
         doi,

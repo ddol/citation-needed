@@ -21,8 +21,11 @@ const logger = createLogger('retrieval-orchestrator');
 
 export class RetrievalOrchestrator {
   private db: Database;
+
   private authConfig: AuthConfig;
+
   private downloader: OpenAccessDownloader;
+
   private storageDir?: string;
 
   constructor(db: Database, authConfig: AuthConfig = {}, storageDir?: string) {
@@ -32,10 +35,7 @@ export class RetrievalOrchestrator {
     this.downloader = new OpenAccessDownloader(storageDir);
   }
 
-  async retrievePdf(
-    doi: string,
-    identity?: CitationFileIdentity
-  ): Promise<RetrievalResult> {
+  async retrievePdf(doi: string, identity?: CitationFileIdentity): Promise<RetrievalResult> {
     const cachedCitation = this.db.getCitation(doi);
     if (cachedCitation?.pdfPath && fs.existsSync(cachedCitation.pdfPath)) {
       return {
@@ -62,10 +62,7 @@ export class RetrievalOrchestrator {
     return oaResult;
   }
 
-  private async tryOpenAccess(
-    doi: string,
-    fileStem: string
-  ): Promise<RetrievalResult> {
+  private async tryOpenAccess(doi: string, fileStem: string): Promise<RetrievalResult> {
     if (this.authConfig.email) {
       const unpaywall = new UnpaywallResolver(this.authConfig.email);
       const pdfUrl = await unpaywall.getOpenAccessPdf(doi);
@@ -75,7 +72,13 @@ export class RetrievalOrchestrator {
           this.db.updatePdfPath(doi, localPath);
           this.db.updateVerificationStatus(doi, 'downloaded');
           this.db.updateAccessType(doi, 'open-access');
-          return { success: true, pdfUrl, localPath, source: 'unpaywall', message: 'Downloaded via Unpaywall' };
+          return {
+            success: true,
+            pdfUrl,
+            localPath,
+            source: 'unpaywall',
+            message: 'Downloaded via Unpaywall',
+          };
         } catch (err) {
           logger.warn('Unpaywall download failed', { doi, err: String(err) });
         }
@@ -88,12 +91,18 @@ export class RetrievalOrchestrator {
       const results = await arxiv.searchByTitle(citation.title);
       if (results.length > 0) {
         try {
-          const pdfUrl = results[0].pdfUrl;
+          const { pdfUrl } = results[0];
           const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
           this.db.updatePdfPath(doi, localPath);
           this.db.updateVerificationStatus(doi, 'downloaded');
           this.db.updateAccessType(doi, 'open-access');
-          return { success: true, pdfUrl, localPath, source: 'arxiv', message: 'Downloaded via arXiv' };
+          return {
+            success: true,
+            pdfUrl,
+            localPath,
+            source: 'arxiv',
+            message: 'Downloaded via arXiv',
+          };
         } catch (err) {
           logger.warn('arXiv download failed', { doi, err: String(err) });
         }
@@ -103,19 +112,14 @@ export class RetrievalOrchestrator {
     return { success: false, source: 'open-access', message: 'No open-access PDF found' };
   }
 
-  private async tryAuthenticated(
-    doi: string,
-    fileStem: string
-  ): Promise<RetrievalResult> {
+  private async tryAuthenticated(doi: string, fileStem: string): Promise<RetrievalResult> {
     const proxy = this.authConfig.proxies?.[0];
     if (!proxy) {
       return { success: false, source: 'authenticated', message: 'No proxy configured' };
     }
 
     const authDownloader = new AuthenticatedDownloader(this.storageDir);
-    const password = proxy.passwordEnvVar
-      ? process.env[proxy.passwordEnvVar]
-      : undefined;
+    const password = proxy.passwordEnvVar ? process.env[proxy.passwordEnvVar] : undefined;
 
     try {
       const landingUrl = `https://doi.org/${doi}`;
@@ -128,7 +132,12 @@ export class RetrievalOrchestrator {
       this.db.updatePdfPath(doi, localPath);
       this.db.updateVerificationStatus(doi, 'downloaded');
       this.db.updateAccessType(doi, 'institutional');
-      return { success: true, localPath, source: 'authenticated', message: 'Downloaded via institutional proxy' };
+      return {
+        success: true,
+        localPath,
+        source: 'authenticated',
+        message: 'Downloaded via institutional proxy',
+      };
     } catch (err) {
       return { success: false, source: 'authenticated', message: String(err) };
     }
