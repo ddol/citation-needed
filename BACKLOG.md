@@ -11,8 +11,7 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 
 Tech debt, testing gaps, DX, docs, validation, minor code-quality fixes.
 
-- [docs] XS - Add .env.example file
-- [docs] XS - Fix README output directory examples to match actual defaults (papers/pdf/, papers/markdown/)
+_All Milestone 1 tasks are complete — see [Completed](#completed)._
 
 ---
 
@@ -119,6 +118,8 @@ Concurrency, deployment, OCR, advanced TUI, watch mode, config.
 - [tui] XS - Make CitationsTable column widths adaptive rather than hardcoded
 - [valid] XS - Validate email format before storing in auth config
 - [valid] XS - Validate DOI format before database insert
+- [docs] XS - Add .env.example file
+- [docs] XS - Fix README output directory examples to match actual defaults (papers/pdf/, papers/markdown/)
 
 - [fetch] L - (5) AuthenticatedDownloader — Playwright browser automation for proxy-gated content
 - [fetch] M - RetrievalOrchestrator — coordinated cascade: cache → Unpaywall → arXiv → authenticated
