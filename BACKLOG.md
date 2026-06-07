@@ -11,25 +11,6 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 
 Tech debt, testing gaps, DX, docs, validation, minor code-quality fixes.
 
-- [fetch] S - ArxivResolver, UnpaywallResolver, DoiResolver silently swallow errors — log and propagate message
-- [fetch] S - Surface RetrievalOrchestrator warning logs into RetrievalResult.message
-- [fetch] XS - Remove deprecated ArxivRetriever and UnpaywallRetriever re-exports
-- [fetch] XS - Remove dead publisher getAdapter() import in orchestrator or wire it up
-- [fetch] XS - Move hardcoded resolver timeouts (15 000 ms) and rate limit (1 000 ms) to config constants
-- [fetch] XS - Fix User-Agent in doi.ts and open-access.ts: read version from package.json, email from auth config
-- [db] S - Add indexes on doi and created_at columns
-- [db] S - Wrap processBibtexFile in a DB transaction — partial failure currently leaves DB inconsistent
-- [db] XS - Add CASCADE DELETE on retrieval_log foreign key to prevent orphaned rows
-- [db] XS - Add CHECK constraints on verification_status and access_type enum columns
-- [mcp] S - Add schema validation for MCP tool arguments — remove unsafe type casts
-- [mcp] S - Stream progress events from import-bibtex MCP tool during processing
-- [mcp] S - Add cursor-based pagination to list-citations MCP tool
-- [flow] S - Persist batch import failures to DB so they form an audit log
-- [flow] S - Report skipped entries (no DOI) in processBibtexFile output
-- [tui] XS - Colour-code citation status in CitationsTable
-- [tui] XS - Make CitationsTable column widths adaptive rather than hardcoded
-- [valid] XS - Validate email format before storing in auth config
-- [valid] XS - Validate DOI format before database insert
 - [docs] XS - Add .env.example file
 - [docs] XS - Fix README output directory examples to match actual defaults (papers/pdf/, papers/markdown/)
 
@@ -119,6 +100,25 @@ Concurrency, deployment, OCR, advanced TUI, watch mode, config.
 - [devx] XS - Remove ignoreDeprecations: "5.0" from tsconfig and fix root cause
 - [devx] XS - Add pretest type-check step to package.json scripts
 - [devx] XS - Add test:coverage script with threshold enforcement
+- [fetch] S - ArxivResolver, UnpaywallResolver, DoiResolver silently swallow errors — log and propagate message
+- [fetch] S - Surface RetrievalOrchestrator warning logs into RetrievalResult.message
+- [fetch] XS - Remove deprecated ArxivRetriever and UnpaywallRetriever re-exports
+- [fetch] XS - Remove dead publisher getAdapter() import in orchestrator or wire it up
+- [fetch] XS - Move hardcoded resolver timeouts (15 000 ms) and rate limit (1 000 ms) to config constants
+- [fetch] XS - Fix User-Agent in doi.ts and open-access.ts: read version from package.json, email from auth config
+- [db] S - Add indexes on doi and created_at columns
+- [db] S - Wrap processBibtexFile in a DB transaction — partial failure currently leaves DB inconsistent
+- [db] XS - Add CASCADE DELETE on retrieval_log foreign key to prevent orphaned rows
+- [db] XS - Add CHECK constraints on verification_status and access_type enum columns
+- [mcp] S - Add schema validation for MCP tool arguments — remove unsafe type casts
+- [mcp] S - Stream progress events from import-bibtex MCP tool during processing
+- [mcp] S - Add cursor-based pagination to list-citations MCP tool
+- [flow] S - Persist batch import failures to DB so they form an audit log
+- [flow] S - Report skipped entries (no DOI) in processBibtexFile output
+- [tui] XS - Colour-code citation status in CitationsTable
+- [tui] XS - Make CitationsTable column widths adaptive rather than hardcoded
+- [valid] XS - Validate email format before storing in auth config
+- [valid] XS - Validate DOI format before database insert
 
 - [fetch] L - (5) AuthenticatedDownloader — Playwright browser automation for proxy-gated content
 - [fetch] M - RetrievalOrchestrator — coordinated cascade: cache → Unpaywall → arXiv → authenticated
