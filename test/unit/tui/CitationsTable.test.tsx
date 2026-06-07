@@ -1,11 +1,29 @@
 import React from 'react';
-import * as ink from 'ink';
+import { useStdout } from 'ink';
 import { render } from 'ink-testing-library';
 import { CitationsTable } from '../../../src/tui/components/CitationsTable';
 
+// ink exports `useStdout` as a non-configurable getter, so `jest.spyOn(ink, …)`
+// throws "Cannot redefine property". Replace the module with a configurable
+// mock that keeps the real Box/Text/render and only stubs useStdout, letting us
+// drive the terminal width the component reads.
+jest.mock('ink', () => {
+  const actual = jest.requireActual('ink');
+  return { ...actual, useStdout: jest.fn() };
+});
+
+const mockedUseStdout = useStdout as jest.MockedFunction<typeof useStdout>;
+
+function mockTerminalWidth(columns: number | undefined): void {
+  mockedUseStdout.mockReturnValue({
+    stdout: columns === undefined ? undefined : { columns },
+  } as unknown as ReturnType<typeof useStdout>);
+}
+
 describe('CitationsTable', () => {
-  afterEach(() => {
-    jest.restoreAllMocks();
+  beforeEach(() => {
+    // Default: no stdout on the context, so the component uses its fallback width.
+    mockTerminalWidth(undefined);
   });
 
   test('renders the empty-state hint when there are no rows', () => {
@@ -65,9 +83,7 @@ describe('CitationsTable', () => {
   });
 
   test('keeps rendered lines within narrow terminal widths', () => {
-    jest.spyOn(ink, 'useStdout').mockReturnValue({
-      stdout: { columns: 50 },
-    } as ReturnType<typeof ink.useStdout>);
+    mockTerminalWidth(50);
 
     const { lastFrame } = render(
       <CitationsTable
