@@ -25,16 +25,18 @@ describe('extractPdfMarkdown', () => {
 
   test('reads PDF bytes, converts with pdf2md, and trims output', async () => {
     const pdfPath = tempPdfPath();
-    fs.writeFileSync(pdfPath, Buffer.from('%PDF-1.4\nmock'));
+    try {
+      fs.writeFileSync(pdfPath, Buffer.from('%PDF-1.4\nmock'));
 
-    (pdf2md as jest.Mock).mockResolvedValueOnce('\n\n# Heading\n\nBody\n\n');
+      (pdf2md as jest.Mock).mockResolvedValueOnce('\n\n# Heading\n\nBody\n\n');
 
-    const result = await extractPdfMarkdown(pdfPath);
+      const result = await extractPdfMarkdown(pdfPath);
 
-    expect(result).toBe('# Heading\n\nBody');
-    expect(pdf2md).toHaveBeenCalledTimes(1);
-    expect(Buffer.isBuffer((pdf2md as jest.Mock).mock.calls[0][0])).toBe(true);
-
-    fs.rmSync(path.dirname(pdfPath), { recursive: true, force: true });
+      expect(result).toBe('# Heading\n\nBody');
+      expect(pdf2md).toHaveBeenCalledTimes(1);
+      expect(Buffer.isBuffer((pdf2md as jest.Mock).mock.calls[0][0])).toBe(true);
+    } finally {
+      fs.rmSync(path.dirname(pdfPath), { recursive: true, force: true });
+    }
   });
 });

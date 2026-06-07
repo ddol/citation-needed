@@ -126,21 +126,22 @@ export async function handleCitationTool(
           // malformed DOI are skipped rather than inserted.
           const normalizedDoi = entry.doi ? normalizeDoi(entry.doi) : '';
           const accepted = normalizedDoi !== '' && isValidDoi(normalizedDoi);
+          // parseBibtex yields '' (not undefined) for a missing key/DOI, so use
+          // `||` — `??` would stop at the empty string and produce blank labels.
+          const label = entry.bibtexKey || entry.doi || '(no DOI)';
 
           if (accepted) {
             db.addCitation({ ...entry, doi: normalizedDoi });
             imported.push(normalizedDoi);
           } else {
-            skipped.push(entry.bibtexKey ?? entry.doi ?? '(no DOI)');
+            skipped.push(label);
           }
 
           if (context.sendProgress) {
             await context.sendProgress({
               progress: i + 1,
               total,
-              message: accepted
-                ? `imported ${normalizedDoi}`
-                : `skipped ${entry.bibtexKey ?? entry.doi ?? '(no DOI)'}`,
+              message: accepted ? `imported ${normalizedDoi}` : `skipped ${label}`,
             });
           }
         }
