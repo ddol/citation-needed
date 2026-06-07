@@ -1,6 +1,7 @@
 import { z, ZodError } from 'zod';
 import type { Database } from '../../db/index';
 import { parseBibtex } from '../../parsers/bibtex';
+import { isValidDoi, normalizeDoi } from '../../parsers/doi';
 import { ArxivResolver } from '../../retrieval/resolvers/arxiv';
 
 const GetCitationArgs = z.object({
@@ -116,20 +117,30 @@ export async function handleCitationTool(
         const { bibtex } = ImportBibtexArgs.parse(args);
         const parsed = parseBibtex(bibtex);
         const imported: string[] = [];
+        const skipped: string[] = [];
         const total = parsed.length;
         for (let i = 0; i < parsed.length; i += 1) {
           const entry = parsed[i];
-          if (entry.doi) {
-            db.addCitation({ ...entry, doi: entry.doi });
-            imported.push(entry.doi);
+          // Normalize and validate the DOI before it reaches the database — the
+          // same guard the BibTeX workflow applies. Entries with a missing or
+          // malformed DOI are skipped rather than inserted.
+          const normalizedDoi = entry.doi ? normalizeDoi(entry.doi) : '';
+          const accepted = normalizedDoi !== '' && isValidDoi(normalizedDoi);
+
+          if (accepted) {
+            db.addCitation({ ...entry, doi: normalizedDoi });
+            imported.push(normalizedDoi);
+          } else {
+            skipped.push(entry.bibtexKey ?? entry.doi ?? '(no DOI)');
           }
+
           if (context.sendProgress) {
             await context.sendProgress({
               progress: i + 1,
               total,
-              message: entry.doi
-                ? `imported ${entry.doi}`
-                : `skipped ${entry.bibtexKey ?? '(no DOI)'}`,
+              message: accepted
+                ? `imported ${normalizedDoi}`
+                : `skipped ${entry.bibtexKey ?? entry.doi ?? '(no DOI)'}`,
             });
           }
         }
@@ -139,6 +150,10 @@ export async function handleCitationTool(
               type: 'text',
               text: `Imported ${imported.length} citations${
                 imported.length ? `: ${imported.join(', ')}` : ''
+              }${
+                skipped.length
+                  ? `. Skipped ${skipped.length} (missing or invalid DOI): ${skipped.join(', ')}`
+                  : ''
               }`,
             },
           ],
