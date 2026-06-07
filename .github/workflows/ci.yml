@@ -1,0 +1,79 @@
+name: CI
+
+# Run quality checks only when code, tests, or their config change — a
+# docs-only change (e.g. README.md, BACKLOG.md) doesn't need the test suite.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'bin/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'jest.config.js'
+      - '.eslintrc.cjs'
+      - '.prettierrc'
+      - '.prettierignore'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'bin/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'jest.config.js'
+      - '.eslintrc.cjs'
+      - '.prettierrc'
+      - '.prettierignore'
+      - '.github/workflows/ci.yml'
+
+# A new push to the same branch/PR cancels in-flight runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      # `npm ci` pulls the better-sqlite3 prebuilt binary for this Node version,
+      # so the DB-backed tests run without a local rebuild.
+      - run: npm ci
+      - run: npm test
