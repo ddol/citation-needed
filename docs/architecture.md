@@ -42,7 +42,7 @@ workflows/process-bibtex.ts
     └──► verification/markdown.ts
               │
               ▼
-        markdown/*.md output
+        papers/markdown/*.md output
 ```
 
 ## Database Schema
@@ -56,8 +56,8 @@ Two tables in SQLite (`~/.citation-needed/citations.db`):
 
 When `citation-needed import-bibtex path/to/references.bib` runs:
 
-- PDFs are written to `path/to/papers/`
-- Markdown files are written to `path/to/markdown/`
+- PDFs are written to `path/to/papers/pdf/`
+- Markdown files are written to `path/to/papers/markdown/`
 
 You can override the PDF directory with `--paper-path`.
 
@@ -65,7 +65,7 @@ You can override the PDF directory with `--paper-path`.
 
 The MCP server (`src/mcp/server.ts`) exposes two groups of tools:
 
-| Module | Tools |
-|--------|-------|
+| Module               | Tools                                                     |
+| -------------------- | --------------------------------------------------------- |
 | `tools/citations.ts` | get-citation, list-citations, import-bibtex, search-arxiv |
-| `tools/retrieval.ts` | download-pdf |
+| `tools/retrieval.ts` | download-pdf                                              |
