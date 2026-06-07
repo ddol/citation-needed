@@ -11,25 +11,6 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 
 Tech debt, testing gaps, DX, docs, validation, minor code-quality fixes.
 
-- [test] L - Add tests for all CLI commands (import, list, download, auth, server)
-- [test] M - Add tests for OpenAccessDownloader
-- [test] M - Add tests for AuthenticatedDownloader
-- [test] M - Add tests for RetrievalOrchestrator integration paths
-- [test] S - Add tests for auth config load/save
-- [test] S - Add tests for DoiResolver
-- [test] S - Add tests for publisher adapter URL helpers (Springer, Elsevier, ACM)
-- [test] S - Add tests for PDF Markdown extraction (extractPdfMarkdown)
-- [test] S - Add tests for CitationsTable TUI component
-- [test] S - Expand MCP server tests beyond basic tool registration
-- [test] XS - Add tests for getCitationFileStem / getCitationDisplayName
-- [test] XS - Set jest coverageThreshold so CI fails below acceptable coverage
-- [devx] S - Add ESLint with TypeScript rules
-- [devx] S - Add Prettier with pre-commit hook
-- [devx] S - Enable TypeScript strict mode (noImplicitAny, noUnusedLocals, noImplicitReturns)
-- [devx] XS - Read version from package.json at runtime — remove 4 hardcoded "0.1.0" strings
-- [devx] XS - Remove ignoreDeprecations: "5.0" from tsconfig and fix root cause
-- [devx] XS - Add pretest type-check step to package.json scripts
-- [devx] XS - Add test:coverage script with threshold enforcement
 - [fetch] S - ArxivResolver, UnpaywallResolver, DoiResolver silently swallow errors — log and propagate message
 - [fetch] S - Surface RetrievalOrchestrator warning logs into RetrievalResult.message
 - [fetch] XS - Remove deprecated ArxivRetriever and UnpaywallRetriever re-exports
@@ -118,6 +99,26 @@ Concurrency, deployment, OCR, advanced TUI, watch mode, config.
 ---
 
 ## Completed
+
+- [test] L - Add tests for all CLI commands (import, list, download, auth, server)
+- [test] M - Add tests for OpenAccessDownloader
+- [test] M - Add tests for AuthenticatedDownloader
+- [test] M - Add tests for RetrievalOrchestrator integration paths
+- [test] S - Add tests for auth config load/save
+- [test] S - Add tests for DoiResolver
+- [test] S - Add tests for publisher adapter URL helpers (Springer, Elsevier, ACM)
+- [test] S - Add tests for PDF Markdown extraction (extractPdfMarkdown)
+- [test] S - Add tests for CitationsTable TUI component
+- [test] S - Expand MCP server tests beyond basic tool registration
+- [test] XS - Add tests for getCitationFileStem / getCitationDisplayName
+- [test] XS - Set jest coverageThreshold so CI fails below acceptable coverage
+- [devx] S - Add ESLint with TypeScript rules
+- [devx] S - Add Prettier with pre-commit hook
+- [devx] S - Enable TypeScript strict mode (noImplicitAny, noUnusedLocals, noImplicitReturns)
+- [devx] XS - Read version from package.json at runtime — remove 4 hardcoded "0.1.0" strings
+- [devx] XS - Remove ignoreDeprecations: "5.0" from tsconfig and fix root cause
+- [devx] XS - Add pretest type-check step to package.json scripts
+- [devx] XS - Add test:coverage script with threshold enforcement
 
 - [fetch] L - (5) AuthenticatedDownloader — Playwright browser automation for proxy-gated content
 - [fetch] M - RetrievalOrchestrator — coordinated cascade: cache → Unpaywall → arXiv → authenticated
