@@ -69,3 +69,10 @@ The MCP server (`src/mcp/server.ts`) exposes two groups of tools:
 | -------------------- | --------------------------------------------------------- |
 | `tools/citations.ts` | get-citation, list-citations, import-bibtex, search-arxiv |
 | `tools/retrieval.ts` | download-pdf                                              |
+
+## Planned Evolution
+
+Forward-looking plans — shared service layer, FTS5 full-text search, and the
+exploratory HTTP API, citation graph, storage adapter, and Zotero work — live
+in [docs/plans/](plans/README.md). Scheduled work is the Core section of
+[BACKLOG.md](../BACKLOG.md); everything else there is Exploratory.
