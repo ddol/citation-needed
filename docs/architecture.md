@@ -69,3 +69,9 @@ The MCP server (`src/mcp/server.ts`) exposes two groups of tools:
 | -------------------- | --------------------------------------------------------- |
 | `tools/citations.ts` | get-citation, list-citations, import-bibtex, search-arxiv |
 | `tools/retrieval.ts` | download-pdf                                              |
+
+## Planned Evolution
+
+Forward-looking plans — shared service layer, FTS5 full-text search, HTTP API,
+storage adapters, Zotero integration — live in [docs/plans/](plans/README.md).
+Adopted plan items are tracked in [BACKLOG.md](../BACKLOG.md) (Milestones 3–6).

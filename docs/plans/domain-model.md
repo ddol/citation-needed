@@ -1,0 +1,212 @@
+# Domain Model & Schema Evolution
+
+| Field         | Value                                                              |
+| ------------- | ------------------------------------------------------------------ |
+| Status        | **Adopted** (2026-07-12 review)                                    |
+| Milestone(s)  | M3 (phase A), M5 (phase B), M6 (phase C)                           |
+| Work-stream   | E — Platform & Scale (serves A, B, D)                              |
+| Depends on    | — (schema foundation for fts5, zotero, storage-adapters)           |
+| Absorbs       | Source exploration §2, §5, §18; decision questions 3, 4, 5, 13, 15 |
+| Last reviewed | 2026-07-12                                                         |
+
+## Intent
+
+Separate "the scholarly work" from "a file that represents it" and "an identifier
+that names it" — the source doc's Document/Manifestation/Identifier distinctions —
+using the **minimum migration** and none of its renames. This unblocks tracked
+Markdown extraction (FTS5), Zotero attachments as first-class files, and multiple
+files per paper, while preserving every existing record, query, and tool.
+
+## Current state
+
+- `citations` (`src/db/schema.ts:22`) conflates work + file + verification state:
+  - `doi TEXT UNIQUE` is the de-facto identity; both import paths hard-skip DOI-less
+    entries (`src/workflows/process-bibtex.ts:97`, `src/mcp/tools/citations.ts:127`),
+    so DOI-less documents are currently **unrepresentable**.
+  - `pdf_path` holds exactly one absolute local path — at most one manifestation,
+    non-portable across machines.
+  - `bibtex_key` is an inline column: a second identifier scheme squatting in the row.
+  - Extracted Markdown has **no column at all** — written to
+    `papers/markdown/<stem>.md` (`src/workflows/process-bibtex.ts:187`) and
+    recoverable only by re-deriving the stem via `getCitationFileStem`
+    (`src/utils/file.ts:33`).
+- `retrieval_log` (`src/db/schema.ts:45`) already cleanly separates the
+  download-attempt entity — that part of the source doc's concern is solved.
+- **No migration framework.** `initSchema` (`src/db/index.ts:54`) is
+  `CREATE TABLE IF NOT EXISTS` plus three ad-hoc migrators: `ensureAccessTypeColumn`
+  (`:80`), `migrateLegacyCitationSchema` table rebuild (`:88`),
+  `migrateRetrievalLogForeignKey` rebuild (`:158`). No `PRAGMA user_version` use.
+- No content hashes anywhere in the codebase.
+- Every SQL read/write already goes through the `Database` class — the single
+  chokepoint that makes the adapter approach below cheap.
+
+## Design
+
+Adopt the source doc's _distinctions_ without its _renames_: `citations` remains the
+document table.
+
+### Phase A — migration runner + manifestations (M3)
+
+A minimal versioned runner, not a framework (~40 lines):
+
+```ts
+// src/db/migrations.ts
+interface Migration {
+  version: number; // PRAGMA user_version after applying
+  name: string;
+  up(db: BetterSqlite3.Database): void;
+}
+
+export const migrations: Migration[] = [
+  /* ordered */
+];
+
+export function runMigrations(db: BetterSqlite3.Database): void {
+  const current = db.pragma('user_version', { simple: true }) as number;
+  for (const m of migrations.filter((m) => m.version > current)) {
+    db.transaction(() => {
+      m.up(db);
+      db.pragma(`user_version = ${m.version}`);
+    })();
+  }
+}
+```
+
+The three existing ad-hoc migrators keep running before the versioned steps as
+"bootstrap" (they are idempotent by construction); new schema changes go through
+`migrations` only.
+
+```sql
+CREATE TABLE manifestations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  citation_id INTEGER NOT NULL REFERENCES citations(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('pdf', 'markdown-extracted')),
+  path TEXT NOT NULL,
+  content_hash TEXT,
+  extractor_name TEXT,
+  extractor_version TEXT,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT,
+  UNIQUE (citation_id, kind, path)
+);
+CREATE INDEX idx_manifestations_citation_id ON manifestations (citation_id);
+```
+
+- **Single source of truth** (decided at review): manifestations own file
+  locations, and the `Database` class is the adapter. Reads derive
+  `Citation.pdfPath` from the pdf manifestation (join, with
+  `COALESCE(manifestation.path, pdf_path)` during the transition), so the external
+  MCP contract is unchanged; `updatePdfPath` upserts the manifestation row. The
+  legacy `citations.pdf_path` column is still **written for one transition
+  release** (downgrade safety), then goes dormant — kept in the schema forever
+  (source §18 back-compat constraint) but never read or written by new code.
+- **Backfill**: one-shot walk — existing `pdf_path` values (existence-checked) plus
+  stem-matched `papers/markdown/` files; hash what exists.
+- **Hashing at write time** (decided at review): streaming sha256 helper
+  (`src/utils/hash.ts`); `processBibtexFile` hashes PDFs and Markdown as they are
+  written, backfill covers legacy files. Hashes are what make incremental indexing
+  and re-embedding invalidation possible later
+  ([indexing-jobs.md](indexing-jobs.md),
+  [vector-hybrid-search.md](vector-hybrid-search.md)).
+
+### Phase B — identifiers (M5, with Zotero)
+
+```sql
+CREATE TABLE identifiers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  citation_id INTEGER NOT NULL REFERENCES citations(id) ON DELETE CASCADE,
+  scheme TEXT NOT NULL CHECK (scheme IN ('arxiv', 'pmid', 'zotero-key', 'zotero-library', 'bibtex-key')),
+  value TEXT NOT NULL,
+  UNIQUE (scheme, value)
+);
+```
+
+DOI deliberately **stays on `citations.doi`** — it is the UPSERT key for every
+lookup and write; moving it is high-risk, low-reward. `bibtex_key` column stays for
+compatibility; `identifiers` adds cross-scheme lookup on top.
+
+**DOI-less admission — committed at review**: an M5 item relaxes the DOI-required
+import guards. Identity for DOI-less items comes from `identifiers` (zotero-key /
+bibtex-key) plus a generated internal ID when no external identifier exists at
+all. This is the forcing function Zotero import surfaces (theses, reports, notes).
+
+### Phase C — locations as URIs (M6, with storage adapters)
+
+`manifestations.path` migrates to URI form (`file:///…`) when
+[storage-adapters.md](storage-adapters.md) phase 1 lands. A separate `locations`
+table is rejected until a single manifestation genuinely lives at two places.
+
+### Rejected / deferred alternatives
+
+- **Renaming `citations` → `documents`**: destructive to every query/test/tool for
+  zero user-visible gain.
+- **Moving DOI into `identifiers`**: breaks the UPSERT identity everywhere.
+- **Dual-write forever**: rejected at review — manifestations are the single
+  source; `pdf_path` writes are transition-only, then the column is dormant.
+- **A first-class Index Artifact table**: chunks and embeddings live in their own
+  plans and serve this role.
+- **Markdown research notes as first-class documents**: revisit once DOI-less
+  admission (M5) is in and real demand appears.
+- **Separate `locations` table**: premature; revisit with multi-location evidence.
+
+## Phasing
+
+1. **A (M3)**: migration runner → manifestations table → adapter reads +
+   transition write → backfill → write-time hashing. Prerequisite for
+   [fts5-full-text-search.md](fts5-full-text-search.md).
+2. **B (M5)**: identifiers table + DOI-less admission, populated by
+   [zotero-integration.md](zotero-integration.md) phase 2 and arXiv IDs already
+   known at resolve time.
+3. **C (M6)**: path → URI migration with storage adapters.
+
+## Proposed backlog items
+
+Milestone 3 (adopted 2026-07-12):
+
+- [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
+- [db] M - manifestations table as single source of truth for files (kind pdf|markdown-extracted, path, content_hash, extractor name+version, last_seen_at); Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
+- [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
+- [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
+
+Milestone 5 (adopted 2026-07-12):
+
+- [db] M - identifiers table (scheme+value UNIQUE: arxiv, pmid, zotero-key, zotero-library, bibtex-key); DOI stays on citations (see docs/plans/domain-model.md)
+- [db] M - Admit DOI-less citations: relax import guards; identity via identifiers + generated internal id (see docs/plans/domain-model.md)
+
+Annotates (not superseded): `[db] M - Citation deduplication via fuzzy title
+matching…` — should consult `identifiers` once available.
+
+## Testing
+
+- Migration tests: fresh DB reaches target `user_version`; legacy-DB fixture (pre-CHECK
+  schema) migrates with data intact; runner is idempotent on re-open.
+- Adapter consistency: `updatePdfPath` ⇒ manifestation row present; derived
+  `Citation.pdfPath` matches for pre- and post-backfill rows (COALESCE path).
+- Backfill idempotency: second run inserts zero rows.
+- Transition-window test: pdf_path column still written in the transition release;
+  dormant (unchanged) afterwards.
+- Hash helper: known-vector test + large-file streaming test.
+
+## Open questions
+
+None remaining. Resolved at the 2026-07-12 review:
+
+1. DOI-less documents → **committed**: admitted at M5 with identifiers-based
+   identity + generated internal ID (backlog item added).
+2. Hash timing → **at write time** in `processBibtexFile`; backfill covers legacy.
+3. `pdf_path` → **single source via adapter**: Database class derives it from
+   manifestations; column written for one transition release, then dormant, never
+   dropped.
+
+## Relationship to other plans
+
+- [fts5-full-text-search.md](fts5-full-text-search.md) — requires phase A
+  (manifestations + hashes) before chunking.
+- [zotero-integration.md](zotero-integration.md) — phase 2 requires phase B
+  (identifiers); attachment linking writes manifestations.
+- [storage-adapters.md](storage-adapters.md) — drives phase C (URIs,
+  `last_seen_at` availability).
+- [indexing-jobs.md](indexing-jobs.md) — stores per-stage provenance on
+  manifestations/chunks rows.
+- [service-layer.md](service-layer.md) — orthogonal; services read whatever schema
+  version exists.
