@@ -19,14 +19,9 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 
 The workflow the product must nail before anything else: import a `.bib` → PDFs download and extract (**already works**) → index → an agent over MCP can **find** (`search-citations`), **read** (`read-content`), and **check** (`verify-quote`) — grounded, checkable answers from the researcher's own corpus. Interim discovery: mount a community Semantic Scholar/OpenAlex MCP server alongside; the agent composes.
 
-### Slice 1 — kernel (no schema changes; the next PR)
+### Slice 1 — kernel
 
-- [search] M - Extract SearchService (src/services/search.ts) with shared zod contract; lexical mode over extended Database.searchCitations (see docs/plans/service-layer.md)
-- [db] S - Extend Database.searchCitations: LIKE over journal/bibtex_key/doi + limit/cursor pagination reusing encodeCursor
-- [mcp] M - MCP tool: search-citations over SearchService; trimmed result summaries (see docs/plans/service-layer.md)
-- [mcp] M - MCP tool: read-content — serve extracted Markdown by DOI, paginated; pdf_path-sibling stem fallback now, manifestations lookup later (see docs/plans/service-layer.md)
-- [mcp] M - MCP tool: verify-quote v1 — normalize a quoted passage, exact-match against extracted Markdown; verdict exact|not-found (see docs/plans/fts5-full-text-search.md)
-- [test] S - Core-tool tests: SearchService + search-citations, read-content, verify-quote v1
+_Shipped — see [Completed](#completed)._
 
 ### Slice 2 — grounded full-text search
 
@@ -160,6 +155,13 @@ _All Milestone 1 tasks are complete — see [Completed](#completed)._
 ---
 
 ## Completed
+
+- [search] M - Extract SearchService (src/services/search.ts) with shared zod contract; lexical mode over extended Database.searchCitations (see docs/plans/service-layer.md)
+- [db] S - Extend Database.searchCitations: LIKE over journal/bibtex_key/doi + limit/cursor pagination reusing encodeCursor
+- [mcp] M - MCP tool: search-citations over SearchService; trimmed result summaries (see docs/plans/service-layer.md)
+- [mcp] M - MCP tool: read-content — serve extracted Markdown by DOI, paginated; pdf_path-sibling stem fallback now, manifestations lookup later (see docs/plans/service-layer.md)
+- [mcp] M - MCP tool: verify-quote v1 — normalize a quoted passage, exact-match against extracted Markdown; verdict exact|not-found (see docs/plans/fts5-full-text-search.md)
+- [test] S - Core-tool tests: SearchService + search-citations, read-content, verify-quote v1
 
 - [test] L - Add tests for all CLI commands (import, list, download, auth, server)
 - [test] M - Add tests for OpenAccessDownloader
