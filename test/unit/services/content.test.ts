@@ -4,14 +4,12 @@ import fs from 'fs';
 import { Database } from '../../../src/db/index';
 import { ContentService, decodeOffsetCursor } from '../../../src/services/content';
 
-function makeTestDb(): { db: Database; dbPath: string } {
-  const dbPath = path.join(
-    os.homedir(),
-    '.citation-needed-test',
-    `svc-content-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-  );
-  const db = new Database(dbPath);
-  return { db, dbPath };
+// Each suite gets its own temp dir so parallel jest workers never race on a
+// shared cleanup path.
+function makeTestDb(): { db: Database; dbDir: string } {
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-svc-content-db-'));
+  const db = new Database(path.join(dbDir, 'test.db'));
+  return { db, dbDir };
 }
 
 function makeWorkspace(): string {
@@ -23,23 +21,18 @@ function makeWorkspace(): string {
 
 describe('ContentService', () => {
   let db: Database;
-  let dbPath: string;
+  let dbDir: string;
   let root: string;
 
   beforeEach(() => {
-    ({ db, dbPath } = makeTestDb());
+    ({ db, dbDir } = makeTestDb());
     root = makeWorkspace();
   });
 
   afterEach(() => {
     db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    fs.rmSync(dbDir, { recursive: true, force: true });
     fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  afterAll(() => {
-    const dir = path.join(os.homedir(), '.citation-needed-test');
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
   function seedCitation(doi: string, bibtexKey: string | undefined, markdownName?: string): void {

@@ -4,14 +4,12 @@ import fs from 'fs';
 import { Database } from '../../../src/db/index';
 import { normalizeForMatch, VerifyQuoteService } from '../../../src/services/verify-quote';
 
-function makeTestDb(): { db: Database; dbPath: string } {
-  const dbPath = path.join(
-    os.homedir(),
-    '.citation-needed-test',
-    `svc-verify-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-  );
-  const db = new Database(dbPath);
-  return { db, dbPath };
+// Each suite gets its own temp dir so parallel jest workers never race on a
+// shared cleanup path.
+function makeTestDb(): { db: Database; dbDir: string } {
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-svc-verify-db-'));
+  const db = new Database(path.join(dbDir, 'test.db'));
+  return { db, dbDir };
 }
 
 describe('normalizeForMatch', () => {
@@ -32,7 +30,7 @@ describe('normalizeForMatch', () => {
 
 describe('VerifyQuoteService', () => {
   let db: Database;
-  let dbPath: string;
+  let dbDir: string;
   let root: string;
 
   const SOURCE_TEXT =
@@ -41,7 +39,7 @@ describe('VerifyQuoteService', () => {
     'collected at urban intersections over two years of observation.\n';
 
   beforeEach(() => {
-    ({ db, dbPath } = makeTestDb());
+    ({ db, dbDir } = makeTestDb());
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-verify-'));
     fs.mkdirSync(path.join(root, 'papers', 'pdf'), { recursive: true });
     fs.mkdirSync(path.join(root, 'papers', 'markdown'), { recursive: true });
@@ -53,13 +51,8 @@ describe('VerifyQuoteService', () => {
 
   afterEach(() => {
     db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    fs.rmSync(dbDir, { recursive: true, force: true });
     fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  afterAll(() => {
-    const dir = path.join(os.homedir(), '.citation-needed-test');
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test('verifies a quote across hyphenation and typography differences', () => {

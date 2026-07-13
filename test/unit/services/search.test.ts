@@ -4,32 +4,25 @@ import fs from 'fs';
 import { Database } from '../../../src/db/index';
 import { SearchService } from '../../../src/services/search';
 
-function makeTestDb(): { db: Database; dbPath: string } {
-  const dbPath = path.join(
-    os.homedir(),
-    '.citation-needed-test',
-    `svc-search-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-  );
-  const db = new Database(dbPath);
-  return { db, dbPath };
+// Each suite gets its own temp dir so parallel jest workers never race on a
+// shared cleanup path.
+function makeTestDb(): { db: Database; dbDir: string } {
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-svc-search-'));
+  const db = new Database(path.join(dbDir, 'test.db'));
+  return { db, dbDir };
 }
 
 describe('SearchService', () => {
   let db: Database;
-  let dbPath: string;
+  let dbDir: string;
 
   beforeEach(() => {
-    ({ db, dbPath } = makeTestDb());
+    ({ db, dbDir } = makeTestDb());
   });
 
   afterEach(() => {
     db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-  });
-
-  afterAll(() => {
-    const dir = path.join(os.homedir(), '.citation-needed-test');
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dbDir, { recursive: true, force: true });
   });
 
   test('returns trimmed summaries with matched fields', () => {
