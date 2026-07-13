@@ -178,4 +178,40 @@ describe('Database', () => {
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0].title).toContain('Neural');
   });
+
+  test('searchCitations matches journal, bibtex key, and doi', () => {
+    db.addCitation({ doi: '10.1/j.001', title: 'Alpha', journal: 'Traffic Safety Review' });
+    db.addCitation({ doi: '10.1/k.002', title: 'Beta', bibtexKey: 'smith2024lidar' });
+    db.addCitation({ doi: '10.1/uniquedoi.003', title: 'Gamma' });
+
+    expect(db.searchCitations('traffic safety').map((c) => c.doi)).toEqual(['10.1/j.001']);
+    expect(db.searchCitations('smith2024').map((c) => c.doi)).toEqual(['10.1/k.002']);
+    expect(db.searchCitations('uniquedoi').map((c) => c.doi)).toEqual(['10.1/uniquedoi.003']);
+  });
+
+  test('searchCitations paginates with a stable cursor', () => {
+    for (let i = 0; i < 5; i += 1) {
+      db.addCitation({ doi: `10.1/page.${i}`, title: `Paged Paper ${i}` });
+    }
+
+    const first = db.searchCitations('Paged', { limit: 2 });
+    expect(first.citations).toHaveLength(2);
+    expect(first.nextCursor).toBeDefined();
+
+    // A row inserted mid-walk must not shift the already-cursored window.
+    db.addCitation({ doi: '10.1/page.late', title: 'Paged Paper Late' });
+
+    const second = db.searchCitations('Paged', { limit: 2, cursor: first.nextCursor });
+    expect(second.citations).toHaveLength(2);
+
+    const seen = [...first.citations, ...second.citations].map((c) => c.doi);
+    expect(new Set(seen).size).toBe(4);
+
+    const third = db.searchCitations('Paged', { limit: 10, cursor: second.nextCursor });
+    expect(third.nextCursor).toBeUndefined();
+    expect(third.citations).toHaveLength(2);
+    expect(third.citations.map((c) => c.doi)).toEqual(
+      expect.arrayContaining(['10.1/page.4', '10.1/page.late'])
+    );
+  });
 });

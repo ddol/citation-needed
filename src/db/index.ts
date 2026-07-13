@@ -307,16 +307,78 @@ export class Database {
     return { citations, nextCursor };
   }
 
-  searchCitations(query: string): Citation[] {
+  /**
+   * Search citations by substring across title, authors, journal, BibTeX key,
+   * and DOI.
+   *
+   * Mirrors `getAllCitations`: call with no options for the legacy descending
+   * array, or pass `{ cursor, limit }` for stable ascending `(created_at, id)`
+   * pagination.
+   */
+  searchCitations(query: string): Citation[];
+  searchCitations(
+    query: string,
+    options: { cursor?: string; limit?: number }
+  ): { citations: Citation[]; nextCursor?: string };
+  searchCitations(
+    query: string,
+    options?: { cursor?: string; limit?: number }
+  ): Citation[] | { citations: Citation[]; nextCursor?: string } {
     const like = `%${query}%`;
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM citations
-         WHERE title LIKE ? OR authors LIKE ?
-         ORDER BY created_at DESC`
-      )
-      .all(like, like) as Record<string, unknown>[];
-    return rows.map((r) => this.rowToCitation(r));
+    const matchClause = `(title LIKE @like OR authors LIKE @like OR journal LIKE @like
+         OR bibtex_key LIKE @like OR doi LIKE @like)`;
+
+    if (options === undefined) {
+      const rows = this.db
+        .prepare(
+          `SELECT * FROM citations
+           WHERE ${matchClause}
+           ORDER BY created_at DESC`
+        )
+        .all({ like }) as Record<string, unknown>[];
+      return rows.map((r) => this.rowToCitation(r));
+    }
+
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const cursor = options.cursor ? decodeCursor(options.cursor) : null;
+
+    const rows = cursor
+      ? (this.db
+          .prepare(
+            `SELECT * FROM citations
+             WHERE ${matchClause}
+               AND ((created_at > @createdAt)
+                OR (created_at = @createdAt AND id > @id))
+             ORDER BY created_at ASC, id ASC
+             LIMIT @limit`
+          )
+          .all({
+            like,
+            createdAt: cursor.createdAt,
+            id: cursor.id,
+            limit: limit + 1,
+          }) as Record<string, unknown>[])
+      : (this.db
+          .prepare(
+            `SELECT * FROM citations
+             WHERE ${matchClause}
+             ORDER BY created_at ASC, id ASC
+             LIMIT @limit`
+          )
+          .all({ like, limit: limit + 1 }) as Record<string, unknown>[]);
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const citations = pageRows.map((r) => this.rowToCitation(r));
+    const nextCursor =
+      hasMore && pageRows.length > 0
+        ? encodeCursor({
+            createdAt: (pageRows[pageRows.length - 1].created_at as string) ?? '',
+            id: (pageRows[pageRows.length - 1].id as number) ?? 0,
+          })
+        : undefined;
+
+    return { citations, nextCursor };
   }
 
   updatePdfPath(doi: string, pdfPath: string): void {
