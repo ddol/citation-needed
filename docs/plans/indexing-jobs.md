@@ -2,28 +2,25 @@
 
 | Field         | Value                                                                                                                            |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** (2026-07-12 scope cut — design parked; revisit when core-loop usage demands concurrency/resume)                  |
-| Milestone(s)  | M4                                                                                                                               |
+| Status        | **Exploratory** — revisit when core-loop usage demands concurrency/resume                                                        |
 | Work-stream   | E — Platform & Scale                                                                                                             |
 | Depends on    | [domain-model.md](domain-model.md) phase A (hashes); [fts5-full-text-search.md](fts5-full-text-search.md) for chunk/index stages |
-| Absorbs       | Source exploration §14, §15; decision question 14 (partially)                                                                    |
 | Last reviewed | 2026-07-12                                                                                                                       |
 
 ## Intent
 
 Make processing asynchronous, restartable, and incremental: a SQLite-backed job
-queue with an in-process worker loop, staged pipeline steps, and content-hash-based
-skip rules so the corpus is never reprocessed wholesale. Three existing Milestone 4
-seeds (concurrent downloads, resume, watch mode) are re-expressed as facets of this
-one model rather than three separate mechanisms.
+queue with an in-process worker loop, staged pipeline steps, and
+content-hash-based skip rules so the corpus is never reprocessed wholesale.
+Three related backlog items (concurrent downloads, resume, watch mode) are
+facets of this one model rather than three separate mechanisms.
 
 ## Current state
 
 - `processBibtexFile` (`src/workflows/process-bibtex.ts:58`) is a synchronous
   sequential loop: per-entry `onProgress` callbacks, failures collected in-memory,
   one `retrieval_log` row per attempt as the only durable record.
-- No job table, no resume, no concurrency, no watch mode — and M4 already has seed
-  items for exactly those three gaps.
+- No job table, no resume, no concurrency, no watch mode.
 - The only cache is the pre-download check for an existing local PDF inside
   `RetrievalOrchestrator` (DB `pdfPath` + file existence).
 - No job abstraction exists anywhere in the codebase.
@@ -49,42 +46,38 @@ CREATE INDEX idx_jobs_status ON jobs (status, id);
 ```
 
 An in-process worker loop claims `queued` jobs (single `UPDATE … WHERE id IN
-(SELECT …) RETURNING`), runs them through a simple promise pool with a configurable
-concurrency limit, and marks `done`/`failed` with `attempts` incremented.
-**Granularity (decided at review): one job per entry** with a `batch_id` payload
-field grouping them for reporting — fine-grained resume, natural concurrency unit.
-**Retry (decided at review): up to 3 automatic attempts with exponential backoff**
-for transient failures, then `failed` until an explicit `jobs retry`. Startup
-recovery: `running` jobs older than a threshold reset to `queued`.
+(SELECT …) RETURNING`), runs them through a simple promise pool with a
+configurable concurrency limit, and marks `done`/`failed` with `attempts`
+incremented. Granularity: **one job per entry** with a `batch_id` payload field
+grouping them for reporting — fine-grained resume, natural concurrency unit.
+Retry: up to **3 automatic attempts with exponential backoff** for transient
+failures, then `failed` until an explicit `jobs retry`. Startup recovery:
+`running` jobs older than a threshold reset to `queued`.
 
 ### Stages
 
-Trimmed from the source doc's ten stages to the five that exist or are planned:
+Five stages, matching what exists or is planned:
 
 ```
 resolve → download → extract → chunk → fts-index
 ```
 
-`embed` joins via [vector-hybrid-search.md](vector-hybrid-search.md); `classify` /
-`summarize` have no plan and stay out of scope. The stage list is data, so it
-extends without migration.
-
-2026-07-12 decomposition review: the **in-process worker loop is retained**
-(drain-and-exit + external cron was considered and declined). Snowball
-expansion and trend work from [citation-graph.md](citation-graph.md) arrive as
-additional job kinds; _scheduling_ of trends stays external (cron recipe in the
-composition docs — no scheduler in the core).
+`embed` joins via [vector-hybrid-search.md](vector-hybrid-search.md);
+`classify` / `summarize` have no plan and stay out of scope. The stage list is
+data, so it extends without migration — snowball expansion and trend runs from
+[citation-graph.md](citation-graph.md) arrive as additional job kinds, while
+_scheduling_ of trends stays external (cron; no scheduler in the core).
 
 Per-stage provenance (input hash, processor name + version, timestamps, error)
 lives on the `manifestations`/`chunks` rows the stage produces — not duplicated
 into job payloads. Jobs are the _coordination_ record; artifacts are the
 _provenance_ record.
 
-### Incremental rules (source §15, kept nearly wholesale)
+### Incremental rules
 
 - Unchanged `content_hash` short-circuits extract/chunk/index.
-- Extractor or chunker **version bump invalidates downstream stages only** (bump
-  chunker ⇒ re-chunk + re-index, no re-download).
+- Extractor or chunker **version bump invalidates downstream stages only**
+  (bump chunker ⇒ re-chunk + re-index, no re-download).
 - Path change with same hash **re-links** the manifestation; nothing recomputes,
   and (later) embeddings are never regenerated for a move.
 - Deleted/unavailable files mark the manifestation (`last_seen_at`, status);
@@ -92,85 +85,77 @@ _provenance_ record.
 
 ### Progress display
 
-**Decided at review**: once imports run as jobs, the Ink `ImportProgress` TUI
-reads the jobs table (polling) instead of in-memory callbacks — one source of
-truth, progress survives restarts, and externally-enqueued work (watch mode) is
-visible too.
+Once imports run as jobs, the Ink `ImportProgress` TUI reads the jobs table
+(polling) instead of in-memory callbacks — one source of truth, progress
+survives restarts, and externally-enqueued work (watch mode) is visible too.
 
-### Existing M4 seeds, re-expressed
+### Related backlog items expressed through this model
 
-| Existing seed                     | Becomes                                        |
+| Item                              | Becomes                                        |
 | --------------------------------- | ---------------------------------------------- |
 | Concurrent/parallel PDF downloads | worker-pool concurrency limit on download jobs |
 | Resume interrupted batch import   | job state replay on restart                    |
 | `watch` mode for new .bib files   | filesystem watcher that _enqueues_ import jobs |
 
-The M4 OCR seed becomes a future `extract`-stage variant (different extractor
+The OCR item becomes a future `extract`-stage variant (different extractor
 name/version — the provenance model already accommodates it).
 
 ### Rejected / deferred alternatives
 
-- **External queue frameworks** (BullMQ/Redis, pg-boss, etc.): the source doc
-  itself concludes a SQLite job table + worker loop is sufficient. Agreed.
-- **A separate daemon process**: in-process first; the MCP server or CLI command
+- **External queue frameworks** (BullMQ/Redis, pg-boss, etc.): a SQLite job
+  table + worker loop is sufficient at this scale.
+- **Drain-and-exit worker + external cron scheduling**: considered; the
+  in-process loop is retained. Trend _scheduling_ stays external regardless.
+- **A separate daemon process**: in-process; the MCP server or CLI command
   hosts the loop.
 - **classify/summarize stages**: no consumer, LLM enrichment is out of scope.
 - **Storing stage provenance in job payloads**: duplicates what
   manifestations/chunks already record.
-- **Per-batch jobs**: rejected at review in favor of per-entry + `batch_id`.
+- **Per-batch jobs**: per-entry + `batch_id` instead.
 
 ## Phasing
 
-1. **Jobs table + worker loop + `import-entry` kind**: `processBibtexFile` becomes
-   enqueue + drain, gaining resume and concurrency in one step (two M4 seeds);
+1. **Jobs table + worker loop + `import-entry` kind**: `processBibtexFile`
+   becomes enqueue + drain, gaining resume and concurrency in one step;
    `ImportProgress` switches to reading the jobs table.
 2. **`reindex-citation` kind**: the `index` CLI command from
    [fts5-full-text-search.md](fts5-full-text-search.md) re-implemented as jobs;
    incremental rules enforced here.
-3. **Watch producer**: fs watcher enqueues import jobs (third M4 seed).
+3. **Watch producer**: fs watcher enqueues import jobs.
 
-## Proposed backlog items
-
-Milestone 4 (adopted 2026-07-12):
+## Backlog items (all exploratory)
 
 - [flow] M - jobs table (kind, payload, status, attempts, last_error) + in-process worker loop; per-entry jobs with batch_id; 3 auto-retries with backoff then manual (see docs/plans/indexing-jobs.md)
 - [flow] M - Stage-based pipeline (resolve → download → extract → chunk → fts-index) with per-stage provenance on manifestations/chunks (see docs/plans/indexing-jobs.md)
 - [flow] S - Incremental re-index rules: skip unchanged content_hash; extractor/chunker version bump invalidates downstream stages only
+- [flow] L - Concurrent PDF downloads via job worker pool with configurable concurrency limit
+- [flow] M - Resume interrupted imports via persisted job state
+- [flow] L - `watch` mode as filesystem-watcher job producer
 - [cli] S - `jobs` CLI command: list, status, retry failed
-- [tui] S - ImportProgress reads the jobs table for progress — survives restarts, shows watch-mode work (see docs/plans/indexing-jobs.md)
+- [tui] S - ImportProgress reads the jobs table for progress
 - [test] M - Crash-resume and idempotency tests: kill worker mid-batch → restart completes without re-downloading; rerun produces zero new work
-
-**Rewrites in place** (three existing M4 seeds): concurrent downloads → "via job
-worker pool"; resume interrupted import → "via persisted job state"; watch mode →
-"as filesystem-watcher job producer" — each with a `(see
-docs/plans/indexing-jobs.md)` suffix. **Annotates**: the M4 OCR seed (future
-extract-stage variant).
 
 ## Testing
 
-- Crash-resume: enqueue N entries, kill the worker mid-batch, restart, assert all
-  reach `done` with no duplicate downloads (cache check respected).
+- Crash-resume: enqueue N entries, kill the worker mid-batch, restart, assert
+  all reach `done` with no duplicate downloads (cache check respected).
 - Idempotency: run the full pipeline twice; second run performs zero stage work
   (hash short-circuit observed via provenance timestamps).
-- Version-bump invalidation: bump chunker version, assert re-chunk + re-index run
-  while download/extract are skipped.
+- Version-bump invalidation: bump chunker version, assert re-chunk + re-index
+  run while download/extract are skipped.
 - Retry: transient failure succeeds on attempt ≤ 3; persistent failure lands in
   `failed` with `attempts = 3` and surfaces in `jobs` CLI.
-- Stuck-job recovery: `running` job older than threshold is reclaimed on startup.
+- Stuck-job recovery: `running` job older than threshold is reclaimed on
+  startup.
 
 ## Open questions
 
-None remaining. Resolved at the 2026-07-12 review:
-
-1. Granularity → **per entry** with a `batch_id` payload field.
-2. Retry policy → **3 automatic attempts with exponential backoff**, then manual
-   `jobs retry`.
-3. TUI → **ImportProgress reads the jobs table** once imports run as jobs.
+None currently.
 
 ## Relationship to other plans
 
-- [domain-model.md](domain-model.md) — provides the hashes and manifestation rows
-  the incremental rules key on.
+- [domain-model.md](domain-model.md) — provides the hashes and manifestation
+  rows the incremental rules key on.
 - [fts5-full-text-search.md](fts5-full-text-search.md) — its one-shot `index`
   command ships first and is deliberately absorbed here later.
 - [vector-hybrid-search.md](vector-hybrid-search.md) — adds the `embed` stage.

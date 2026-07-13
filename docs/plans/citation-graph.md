@@ -2,11 +2,9 @@
 
 | Field         | Value                                                                                                                                                                                              |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** (2026-07-12 scope cut — design parked; interim: compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed)                                                |
-| Milestone(s)  | — (created after the milestone→stream restructure; lives in streams C + A)                                                                                                                         |
+| Status        | **Exploratory** — interim: compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed                                                                                      |
 | Work-stream   | C — Coverage & Acquisition (discovery MCP tools: A; reference cross-check: B)                                                                                                                      |
 | Depends on    | [domain-model.md](domain-model.md) (migration runner; identifiers for dedupe), [indexing-jobs.md](indexing-jobs.md) (expansion job kinds), [service-layer.md](service-layer.md) (contract pattern) |
-| Absorbs       | 2026-07-12 product requirement (not part of the source exploration); supersedes the "Semantic Scholar API resolver" seed item                                                                      |
 | Last reviewed | 2026-07-12                                                                                                                                                                                         |
 
 ## Intent
@@ -16,25 +14,22 @@ research assistant: read a paper's references, follow who cites it, surface
 significant follow-on work and newer ideas, and expand the corpus by bounded
 snowballing — with downloads flowing through the existing retrieval cascade.
 
-Decomposition decision (2026-07-12): the system is **core + satellites** — the
-agent is the shell composing small tools — but the graph itself lives **in the
-core**, because its value is joins against corpus state (which papers are
-members, frontier promotion, verification cross-checks). What stays outside:
-scheduling (cron/launchd), trend digests (files a cron'd command writes), and
-any third-party scout tools (they feed the corpus through the pipe contract:
-BibTeX/JSONL → `citation-needed import`).
+The system is **core + satellites** — the agent is the shell composing small
+tools — and the graph belongs **in the core** when built, because its value is
+joins against corpus state (which papers are members, frontier promotion,
+verification cross-checks). What stays outside: scheduling (cron/launchd),
+trend digests (files a cron'd command writes), and any third-party scout tools
+(they feed the corpus through the pipe contract: BibTeX/JSONL →
+`citation-needed import`).
 
 ## Current state
 
 - No graph storage, no edges, no discovery tools anywhere in the codebase.
-- Seed items this plan supersedes or pairs with: the C/P2 "Semantic Scholar API
-  resolver … citation graph" line (superseded by GraphSource below); "Reference
-  list extraction from extracted Markdown" (becomes a cross-check source, not
-  the primary edge source).
 - Reusable pieces: `RateLimiter` (`src/utils/rate-limiter.ts`), the retrieval
   cascade for frontier promotion, `INSERT OR IGNORE` upsert semantics, the
-  adopted jobs pipeline (in-process worker loop confirmed kept at this review),
-  and the planned identifiers table for cross-source dedupe.
+  planned jobs pipeline, and the planned identifiers table for cross-source
+  dedupe. The reference-list-extraction item pairs with this plan as a
+  cross-check source, not the primary edge source.
 - External landscape (verified 2026-07): **Semantic Scholar** Academic Graph +
   Recommendations APIs — references/citations with `isInfluential`, recs from
   seed papers; free key ≈ 1 req/s, unauthenticated pool 5k req/5 min.
@@ -84,7 +79,7 @@ CREATE TABLE citation_edges (
 (corpus_status IN ('member', 'frontier'))`. Frontier rows are metadata-only
 stubs discovered through the graph; promotion to member = the existing
 retrieval + extraction pipeline. Stubs require a DOI until DOI-less admission
-(E/P2) lands. The identifiers table gains `semantic-scholar-id` / `openalex-id`
+lands. The identifiers table gains `semantic-scholar-id` / `openalex-id`
 schemes for cross-source dedupe.
 
 ### Agent-facing MCP tools (stream A)
@@ -98,20 +93,19 @@ schemes for cross-source dedupe.
   have (member / frontier / absent). The tool that makes external discovery
   results actionable against the local corpus.
 - `expand-corpus {seeds?, direction, depth, budget, filters}` — enqueues
-  bounded snowball jobs (phase 2).
+  bounded snowball jobs.
 
 ### Expansion & trends (stream C)
 
-- **Snowball job kind** in the adopted jobs pipeline: explicit invocations only
-  (MCP tool or CLI), depth ≤ 2 default, per-run API-call and new-stub budgets,
+- **Snowball job kind** in the jobs pipeline: explicit invocations only (MCP
+  tool or CLI), depth ≤ 2 default, per-run API-call and new-stub budgets,
   year/field filters, dedupe via identifiers. No standing autonomous crawl.
 - **Frontier promotion**: graph-source open-access PDF URLs join the retrieval
   cascade as an additional OA source (coverage win independent of the graph).
 - **`trends` CLI command**: new works citing corpus members since the last run
-  → writes a Markdown/JSON digest file for the agent (and the existing webhook
-  item can announce it). **Scheduling stays external** — a cron/launchd recipe
-  in the composition docs, no scheduler inside citation-needed (per the
-  autonomy decision: explicit expansion + scheduled trends, cron-invoked).
+  → writes a Markdown/JSON digest file for the agent (the webhook item can
+  announce it). **Scheduling stays external** — a cron/launchd recipe in the
+  composition docs, no scheduler inside citation-needed.
 
 ### Satellites & interop (pipe contract)
 
@@ -124,64 +118,49 @@ documented in the composition docs item).
 ### Rejected / deferred alternatives
 
 - **External tool sidecar as the first GraphSource** (Python
-  LitStudy/Paperfetcher bridge, Inciteful API): considered 2026-07-12,
-  superseded by the core+satellites decomposition — the graph joins corpus
-  state, and the clients are ~2 thin REST wrappers; an additional GraphSource
-  backed by such a tool remains possible later.
-- **A separate graph MCP server of our own**: declined — joins against corpus
-  state are the point; agents can still mount third-party graph servers
-  alongside.
+  LitStudy/Paperfetcher bridge, Inciteful API): superseded by the
+  core+satellites decomposition — the graph joins corpus state, and the clients
+  are ~2 thin REST wrappers; an additional GraphSource backed by such a tool
+  remains possible later.
+- **A separate graph MCP server of our own**: joins against corpus state are
+  the point; agents can still mount third-party graph servers alongside.
 - **Google Scholar scraping** (scholarly/SerpAPI/PyPaperBot): ToS-hostile,
   fragile, or paid. Permanently rejected.
 - **Generic crawler frameworks** (Scrapy/Crawlee): the queue they'd provide is
   the jobs plan; the graph is API data, not web pages.
-- **Standing autonomous crawler**: rejected at review — explicit budgeted
-  expansion plus cron-scheduled trends only.
+- **Standing autonomous crawler**: explicit budgeted expansion plus
+  cron-scheduled trends only.
 
 ## Phasing
 
-1. **Read-only graph (P1)**: GraphSource + Semantic Scholar client;
+1. **Read-only graph**: GraphSource + Semantic Scholar client;
    `citation_edges` + `corpus_status` migration; `get-references`,
    `get-citing-papers`, `related-papers`, `check-corpus` MCP tools; edges
-   cached on lookup. Needs only the migration runner — parallel with fts5.
-2. **Expansion (P2)**: `expand-corpus` snowball job kind + frontier promotion +
+   cached on lookup. Needs only the migration runner.
+2. **Expansion**: `expand-corpus` snowball job kind + frontier promotion +
    OA-URL cascade source + OpenAlex client.
-3. **Trends & cross-check (P2)**: `trends` digest command + cron recipe in the
+3. **Trends & cross-check**: `trends` digest command + cron recipe in the
    composition docs; extracted-reference cross-check (stream B).
 
-## Proposed backlog items
+## Backlog items (all exploratory)
 
-Stream C — P1:
+Phase 1:
 
-- [fetch] M - GraphSource interface + Semantic Scholar client (references/citations with isInfluential, recommendations; rate-limited, cached) — supersedes the S2 resolver seed (see docs/plans/citation-graph.md)
+- [fetch] M - GraphSource interface + Semantic Scholar client (references/citations with isInfluential, recommendations; rate-limited, cached) (see docs/plans/citation-graph.md)
 - [db] M - citation_edges table + corpus_status (member|frontier) on citations via migration runner (see docs/plans/citation-graph.md)
-- [test] S - GraphSource fixture tests: recorded API responses, edge idempotency, rate-limit respect
-
-Stream A — P1:
-
 - [mcp] M - MCP tools: get-references + get-citing-papers (sort by influence|recency); edges cached on lookup (see docs/plans/citation-graph.md)
 - [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
 - [mcp] S - MCP tool: check-corpus — batch DOI membership join: member|frontier|absent (see docs/plans/citation-graph.md)
+- [test] S - GraphSource fixture tests: recorded API responses, edge idempotency, rate-limit respect
 
-Stream C — P2:
+Phases 2–3:
 
-- [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required) (see docs/plans/citation-graph.md)
-- [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger (see docs/plans/citation-graph.md)
-- [fetch] S - Graph-source open-access PDF URLs as an additional retrieval-cascade source (see docs/plans/citation-graph.md)
-- [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron recipe in composition docs, no in-core scheduler (see docs/plans/citation-graph.md)
-
-Stream B — P2:
-
-- [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps (see docs/plans/citation-graph.md)
-
-Stream E — P2:
-
-- [db] S - identifiers schemes += semantic-scholar-id, openalex-id (extend CHECK) (see docs/plans/domain-model.md)
-- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends (see docs/plans/citation-graph.md)
-
-**Supersedes in place**: C/P2 `[fetch] L - Semantic Scholar API resolver…`.
-**Annotates**: `Reference list extraction` (cross-check pairing), OCR seed
-(extractor-filter evaluation, see fts5 doc).
+- [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required)
+- [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger
+- [fetch] S - Graph-source open-access PDF URLs as an additional retrieval-cascade source
+- [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler
+- [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps
+- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends
 
 ## Testing
 
@@ -198,7 +177,7 @@ Stream E — P2:
 
 1. Frontier visibility in search: do frontier stubs appear in search-citations
    results (flagged) or only via check-corpus/expansion reports?
-2. Edge staleness: refresh policy for cached citations counts / new-edge
+2. Edge staleness: refresh policy for cached citation counts / new-edge
    discovery on corpus members (piggyback on `trends` runs?).
 3. Citation contexts (S2 provides quote snippets around citations): store them
    as edge metadata for the assistant, or fetch on demand?
@@ -208,13 +187,13 @@ Stream E — P2:
 - [domain-model.md](domain-model.md) — migration runner hosts the edges/status
   migration; identifiers gains graph-source schemes; DOI-less admission lifts
   the stub-requires-DOI constraint.
-- [indexing-jobs.md](indexing-jobs.md) — snowball/trends run as job kinds on
-  the retained in-process loop; scheduling stays external.
+- [indexing-jobs.md](indexing-jobs.md) — snowball/trends run as job kinds;
+  scheduling stays external.
 - [service-layer.md](service-layer.md) — graph tools follow the shared
-  zod-contract pattern and join the operation mapping table.
-- [zotero-integration.md](zotero-integration.md) — complementary (augment
-  decision): the graph is the discovery/acquisition channel; Zotero remains the
-  curated-library workflow sync.
+  zod-contract pattern and appear in the operation mapping table.
+- [zotero-integration.md](zotero-integration.md) — complementary: the graph is
+  the discovery/acquisition channel; Zotero remains the curated-library
+  workflow sync.
 - [fts5-full-text-search.md](fts5-full-text-search.md) — independent; the
   extractor-filter evaluation recorded there pairs with the OCR/coverage story.
 - [http-api.md](http-api.md) — graph endpoints are deferred HTTP bindings of

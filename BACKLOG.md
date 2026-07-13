@@ -5,7 +5,7 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 **Sizes:** XS < 1 h · S 1–4 h · M half–full day · L 2–3 d · XL week+
 **Tags:** [fetch] [flow] [parse] [db] [cli] [mcp] [tui] [verify] [test] [auth] [deploy] [docs] [devx] [util] [cfg] [search] [valid] [api] [storage]
 
-**Scope (2026-07-12 ruthless cut):** work is either **Core** — the one workflow below, scheduled — or **Exploratory** — designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use. Work-streams are retained inside Exploratory (ordered by former priority) for future re-triage:
+**Scope:** work is either **Core** — the one workflow below, scheduled — or **Exploratory** — designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use. Work-streams organize the Exploratory section for future re-triage:
 
 - **A — Grounded Answers**: on the agent's find → read → cite path via MCP
 - **B — Trust & Verification**: lets a claim or the corpus's state be checked
@@ -115,7 +115,7 @@ _Deferred (stream A future): semantic + hybrid search modes — parked in docs/p
 - [test] M - HTTP integration tests: routes, problem+json shapes, MCP/HTTP search parity
 - [docs] S - docs/http-api.md usage reference
 - [flow] L - `watch` mode as filesystem-watcher job producer: monitor a directory for new .bib files and auto-import (see docs/plans/indexing-jobs.md)
-- [tui] S - Evaluate plain output + standard tools (fzf/less) instead of Ink/React before investing in the TUI items below (2026-07-12 decomposition review)
+- [tui] S - Evaluate plain output + standard tools (fzf/less) instead of Ink/React before investing in the TUI items below
 - [parse] S - CSV metadata import (title + DOI columns)
 - [mcp] S - MCP tool: delete-citation
 - [flow] L - Zotero 7 local HTTP API import (localhost:23119) with incremental pull

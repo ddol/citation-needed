@@ -72,6 +72,7 @@ The MCP server (`src/mcp/server.ts`) exposes two groups of tools:
 
 ## Planned Evolution
 
-Forward-looking plans — shared service layer, FTS5 full-text search, HTTP API,
-storage adapters, Zotero integration — live in [docs/plans/](plans/README.md).
-Adopted plan items are tracked in [BACKLOG.md](../BACKLOG.md) (Milestones 3–6).
+Forward-looking plans — shared service layer, FTS5 full-text search, and the
+exploratory HTTP API, citation graph, storage adapter, and Zotero work — live
+in [docs/plans/](plans/README.md). Scheduled work is the Core section of
+[BACKLOG.md](../BACKLOG.md); everything else there is Exploratory.

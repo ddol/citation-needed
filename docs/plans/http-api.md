@@ -2,20 +2,18 @@
 
 | Field         | Value                                                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** (2026-07-12 scope cut — design parked; build when a real non-MCP client appears)                                            |
-| Milestone(s)  | M5 (new)                                                                                                                                    |
+| Status        | **Exploratory** — build when a real non-MCP client appears                                                                                  |
 | Work-stream   | D — Researcher Workflow (frontend enabler)                                                                                                  |
 | Depends on    | [service-layer.md](service-layer.md) (hard); [fts5-full-text-search.md](fts5-full-text-search.md) (soft — more valuable after, not blocked) |
-| Absorbs       | Source exploration §10, §11, §16 (minimal link exposure), Phase 3                                                                           |
 | Last reviewed | 2026-07-12                                                                                                                                  |
 
 ## Intent
 
 A small, versioned HTTP API so non-MCP clients (web UI, Zotero plugin, scripts,
-other languages) can search and read the corpus. Per the unified-surface principle
-([service-layer.md](service-layer.md)), HTTP is a **later thin gateway** over the
-same services and zod contracts — never a second implementation. The core `/search`
-endpoint stays deterministic and LLM-free.
+other languages) can search and read the corpus. Per the unified-surface
+principle ([service-layer.md](service-layer.md)), HTTP is a **thin gateway**
+over the same services and zod contracts — never a second implementation. The
+core `/search` endpoint stays deterministic and LLM-free.
 
 ## Current state
 
@@ -32,20 +30,19 @@ endpoint stays deterministic and LLM-free.
 
 ### Framework: hono + @hono/node-server + @hono/zod-openapi
 
-The transitive presence of hono is **irrelevant** to the decision (it must become a
-direct dependency either way). The real reasons:
+The transitive presence of hono is **irrelevant** to the decision (it must
+become a direct dependency either way). The real reasons:
 
-1. **zod-first**: `@hono/zod-openapi` derives the OpenAPI spec from the same zod
-   schemas the service layer already defines — one contract source, no
-   hand-maintained YAML, no drift (this is the unified-surface principle applied
-   to specs).
+1. **zod-first**: `@hono/zod-openapi` derives the OpenAPI spec from the same
+   zod schemas the service layer already defines — one contract source, no
+   hand-maintained YAML, no drift.
 2. Tiny footprint fits a local-first tool; TS-first typing.
 
-Runners-up, recorded: **fastify** (solid, but JSON-Schema-native — fights the zod
-investment through a conversion bridge); **express** (weakest typing, no spec
-story).
+Runners-up, recorded: **fastify** (solid, but JSON-Schema-native — fights the
+zod investment through a conversion bridge); **express** (weakest typing, no
+spec story).
 
-### v1 endpoints (trimmed hard from source §10)
+### v1 endpoints
 
 | Endpoint                      | Notes                                                    |
 | ----------------------------- | -------------------------------------------------------- |
@@ -55,8 +52,8 @@ story).
 | `GET /api/v1/citations/{doi}` | single lookup                                            |
 | `POST /api/v1/search`         | body = SearchService request contract, verbatim          |
 
-The resource is named **citations**, not documents — it mirrors the actual schema;
-[domain-model.md](domain-model.md) explicitly rejects the rename.
+The resource is named **citations**, not documents — it mirrors the actual
+schema; [domain-model.md](domain-model.md) rejects the rename.
 
 ```json
 // GET /api/v1/capabilities
@@ -83,24 +80,22 @@ New `serve` CLI command (`server` is taken by MCP stdio):
 citation-needed serve --port 4871 --host 127.0.0.1
 ```
 
-**Port 4871 confirmed at review.** Loopback bind by default. Optional static
-bearer token via `CITATION_NEEDED_API_TOKEN`, required automatically for
-non-loopback binds. Not multi-tenant, no user accounts (source-doc non-goal,
-kept). Port/host move into the persistent config file when the M4 `[cfg]` seed
-lands; env vars suffice until then.
+Loopback bind by default. Optional static bearer token via
+`CITATION_NEEDED_API_TOKEN`, required automatically for non-loopback binds. Not
+multi-tenant, no user accounts. Port/host move into the persistent config file
+when that lands; env vars suffice until then.
 
-### OpenAPI (inverted from the source doc)
+### OpenAPI
 
-The source doc asks for a hand-written `openapi/citation-needed-v1.yaml` first.
-Inverted: the spec is **generated from the route zod schemas**, served live at
-`GET /api/v1/openapi.json`; the YAML file is a build artifact emitted by a script
-for client generation (TypeScript first; Python/Rust/Rails from the same file).
+The spec is **generated from the route zod schemas**, served live at
+`GET /api/v1/openapi.json`; the YAML file is a build artifact emitted by a
+script for client generation (TypeScript first; Python/Rust/Rails from the same
+file). No hand-written spec.
 
-### Errors: RFC 7807 problem+json (decided at review)
+### Errors: RFC 7807 problem+json
 
-Responses use `application/problem+json` per RFC 7807: `type`, `title`, `status`,
-`detail`, plus an `issues` extension member carrying zod issues on validation
-failures.
+Responses use `application/problem+json`: `type`, `title`, `status`, `detail`,
+plus an `issues` extension member carrying zod issues on validation failures.
 
 ```json
 {
@@ -116,15 +111,14 @@ failures.
 
 ### Rejected / deferred alternatives
 
-- **LLM endpoints** (`/answer`, `/summarize`, `/classify`, `/compare`): out of the
-  deterministic core (the source doc's own constraint) and the only endpoints that
-  would need API keys. Out.
-- **Client `storageMappings` request context** (source §16): the v1 client is on
-  the same machine; overbuild.
+- **LLM endpoints** (`/answer`, `/summarize`, `/classify`, `/compare`): outside
+  the deterministic core and the only endpoints that would need API keys.
+- **Client storage-mapping request context**: the v1 client is on the same
+  machine; overbuild.
 - **Capability negotiation**: a static capabilities JSON suffices.
-- **Serving MCP over HTTP/SSE**: separate concern; revisit if a remote MCP client
-  appears.
-- **Ad-hoc error envelope**: rejected at review in favor of RFC 7807.
+- **Serving MCP over HTTP/SSE**: separate concern; revisit if a remote MCP
+  client appears.
+- **Ad-hoc error envelope**: RFC 7807 instead.
 
 ## Phasing
 
@@ -134,9 +128,7 @@ failures.
    SearchService; parity test vs MCP.
 3. **Spec + docs**: `/api/v1/openapi.json`, YAML build artifact, usage doc.
 
-## Proposed backlog items
-
-Milestone 5 (adopted 2026-07-12):
+## Backlog items (all exploratory)
 
 - [api] M - Add hono + @hono/node-server + @hono/zod-openapi; `serve` CLI command (--port default 4871, loopback default) (see docs/plans/http-api.md)
 - [api] M - GET /api/v1/health, /capabilities, /citations (cursor pagination), /citations/{doi}
@@ -146,42 +138,33 @@ Milestone 5 (adopted 2026-07-12):
 - [test] M - HTTP integration tests: routes, problem+json shapes, MCP/HTTP search parity
 - [docs] S - docs/http-api.md usage reference
 
-**Annotates**: M4 `Docker container image` and `Systemd service unit` seeds (they
-serve this API) and the M4 `[cfg]` persistent-config seed (port/host/token
-consumer).
-
 ## Testing
 
-- Route integration tests with an injected app instance (hono's `app.request()`),
-  no real port.
+- Route integration tests with an injected app instance (hono's
+  `app.request()`), no real port.
 - Error-shape tests: problem+json 400 with zod issues, 404, 401 with/without
   token — `content-type: application/problem+json` asserted.
 - **Flagship parity test**: the same search request through the MCP handler and
-  `POST /api/v1/search` returns identical result sets (both are thin bindings of
-  SearchService).
+  `POST /api/v1/search` returns identical result sets (both are thin bindings
+  of SearchService).
 - Capabilities truthfulness: response matches actual build state (e.g.
   `fullTextSearch` flips only when FTS tables exist).
 
 ## Open questions
 
-Resolved at the 2026-07-12 review:
-
-1. Default port → **4871**.
-2. Error shape → **RFC 7807 problem+json** with a zod `issues` extension member.
-
-Still open:
-
-3. Should `serve` also host a minimal static search page later, or does the web UI
-   stay a separate artifact? (Deferred until a web UI is actually wanted.)
+1. Should `serve` also host a minimal static search page later, or does the
+   web UI stay a separate artifact? (Deferred until a web UI is actually
+   wanted.)
 
 ## Relationship to other plans
 
-- [service-layer.md](service-layer.md) — provides the services and zod contracts;
-  this plan adds the HTTP column to its operation mapping table.
-- [fts5-full-text-search.md](fts5-full-text-search.md) — flips `fullTextSearch`
-  capability; snippets flow through `/search` unchanged.
-- [storage-adapters.md](storage-adapters.md) — later adds `/citations/{doi}/links`.
-- [zotero-integration.md](zotero-integration.md) — the Zotero plugin / web UI
-  frontends consume this API.
-- [vector-hybrid-search.md](vector-hybrid-search.md) — flips `vectorSearch`
+- [service-layer.md](service-layer.md) — provides the services and zod
+  contracts; this plan owns the HTTP column of the operation mapping table.
+- [fts5-full-text-search.md](fts5-full-text-search.md) — flips the
+  `fullTextSearch` capability; snippets flow through `/search` unchanged.
+- [storage-adapters.md](storage-adapters.md) — later adds
+  `/citations/{doi}/links`.
+- [zotero-integration.md](zotero-integration.md) — a Zotero plugin / web UI
+  would consume this API.
+- [vector-hybrid-search.md](vector-hybrid-search.md) — flips the `vectorSearch`
   capability; adds modes to the same `/search` contract.
