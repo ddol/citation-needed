@@ -11,7 +11,7 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 - **B — Trust & Verification**: lets a claim or the corpus's state be checked
 - **C — Coverage & Acquisition**: raises the fraction of relevant papers present and readable
 - **D — Researcher Workflow**: fits existing human workflows and frontends
-- **E — Platform & Scale**: foundations the other streams stand on
+- **E — Platform & Scale**: the foundations the other streams stand on
 
 ---
 

@@ -17,11 +17,11 @@ contract. Also home to **verify-quote**, the namesake anti-hallucination tool.
 ## Current state
 
 - **Extraction output is untracked.** `processBibtexFile` writes
-  `papers/markdown/<stem>.md` to disk (`src/workflows/process-bibtex.ts:186`) and
+  `papers/markdown/<stem>.md` to disk (`src/workflows/process-bibtex.ts:188`) and
   records nothing in the DB — no path column, no hash. Indexing therefore depends
   on [domain-model.md](domain-model.md) phase A (manifestations) landing first.
 - **No page boundaries survive extraction.** `@opendocsg/pdf2md` returns one
-  flattened Markdown string (`src/verification/markdown.ts:12`), so
+  flattened Markdown string (`src/verification/markdown.ts:14`), so
   page-level provenance is **impossible with the current extractor**.
   Provenance is section-level (see Design).
 - No FTS5 virtual tables exist anywhere; search is `LIKE` on title/authors

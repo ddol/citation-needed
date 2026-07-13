@@ -25,7 +25,7 @@ query, and tool.
     non-portable across machines.
   - `bibtex_key` is an inline column: a second identifier scheme squatting in the row.
   - Extracted Markdown has **no column at all** — written to
-    `papers/markdown/<stem>.md` (`src/workflows/process-bibtex.ts:187`) and
+    `papers/markdown/<stem>.md` (`src/workflows/process-bibtex.ts:188`) and
     recoverable only by re-deriving the stem via `getCitationFileStem`
     (`src/utils/file.ts:33`).
 - `retrieval_log` (`src/db/schema.ts:45`) already cleanly separates the
