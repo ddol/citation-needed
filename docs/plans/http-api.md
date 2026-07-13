@@ -2,7 +2,7 @@
 
 | Field         | Value                                                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Adopted** (2026-07-12 review)                                                                                                             |
+| Status        | **Exploratory** (2026-07-12 scope cut — design parked; build when a real non-MCP client appears)                                            |
 | Milestone(s)  | M5 (new)                                                                                                                                    |
 | Work-stream   | D — Researcher Workflow (frontend enabler)                                                                                                  |
 | Depends on    | [service-layer.md](service-layer.md) (hard); [fts5-full-text-search.md](fts5-full-text-search.md) (soft — more valuable after, not blocked) |

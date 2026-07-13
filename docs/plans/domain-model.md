@@ -1,13 +1,13 @@
 # Domain Model & Schema Evolution
 
-| Field         | Value                                                              |
-| ------------- | ------------------------------------------------------------------ |
-| Status        | **Adopted** (2026-07-12 review)                                    |
-| Milestone(s)  | M3 (phase A), M5 (phase B), M6 (phase C)                           |
-| Work-stream   | E — Platform & Scale (serves A, B, D)                              |
-| Depends on    | — (schema foundation for fts5, zotero, storage-adapters)           |
-| Absorbs       | Source exploration §2, §5, §18; decision questions 3, 4, 5, 13, 15 |
-| Last reviewed | 2026-07-12                                                         |
+| Field         | Value                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| Status        | **Adopted — CORE** (2026-07-12 scope cut: phase A is core slice 2; phases B/C exploratory) |
+| Milestone(s)  | M3 (phase A), M5 (phase B), M6 (phase C)                                                   |
+| Work-stream   | E — Platform & Scale (serves A, B, D)                                                      |
+| Depends on    | — (schema foundation for fts5, zotero, storage-adapters)                                   |
+| Absorbs       | Source exploration §2, §5, §18; decision questions 3, 4, 5, 13, 15                         |
+| Last reviewed | 2026-07-12                                                                                 |
 
 ## Intent
 
@@ -124,6 +124,8 @@ CREATE TABLE identifiers (
 DOI deliberately **stays on `citations.doi`** — it is the UPSERT key for every
 lookup and write; moving it is high-risk, low-reward. `bibtex_key` column stays for
 compatibility; `identifiers` adds cross-scheme lookup on top.
+[citation-graph.md](citation-graph.md) extends the scheme CHECK with
+`semantic-scholar-id` / `openalex-id` for cross-source graph dedupe.
 
 **DOI-less admission — committed at review**: an M5 item relaxes the DOI-required
 import guards. Identity for DOI-less items comes from `identifiers` (zotero-key /

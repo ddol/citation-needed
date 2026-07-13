@@ -2,7 +2,7 @@
 
 | Field         | Value                                                                                                                                                                   |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Adopted** (2026-07-12 review)                                                                                                                                         |
+| Status        | **Exploratory** (2026-07-12 scope cut — design parked; Better BibTeX auto-export already covers Zotero→corpus with zero code)                                           |
 | Milestone(s)  | M3 (import), M5 (integration)                                                                                                                                           |
 | Work-stream   | D — Researcher Workflow                                                                                                                                                 |
 | Depends on    | [domain-model.md](domain-model.md) phase B (identifiers) for phase 2; [storage-adapters.md](storage-adapters.md) soft (attachment linking works with plain paths first) |
@@ -160,3 +160,6 @@ None remaining. Resolved at the 2026-07-12 review:
 - [indexing-jobs.md](indexing-jobs.md) — local-API incremental import enqueues jobs.
 - [service-layer.md](service-layer.md) — the importer should reuse ImportService
   once its phase 2 lands.
+- [citation-graph.md](citation-graph.md) — complementary (augment decision,
+  2026-07-12): the graph is the discovery/acquisition channel; Zotero remains
+  the curated-library workflow sync.

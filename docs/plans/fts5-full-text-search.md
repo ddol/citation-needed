@@ -1,13 +1,13 @@
 # FTS5 Full-Text Search
 
-| Field         | Value                                                                            |
-| ------------- | -------------------------------------------------------------------------------- |
-| Status        | **Adopted** (2026-07-12 review)                                                  |
-| Milestone(s)  | M3 (+ one benchmark item in M4)                                                  |
-| Work-stream   | A — Grounded Answers (verify-quote item: B — Trust & Verification)               |
-| Depends on    | [service-layer.md](service-layer.md), [domain-model.md](domain-model.md) phase A |
-| Absorbs       | Source exploration §4, §7, §20, §21, Phase 2; decision questions 1–3             |
-| Last reviewed | 2026-07-12                                                                       |
+| Field         | Value                                                                                                                             |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | **Adopted — CORE** (2026-07-12 scope cut: core slice 2, incl. verify-quote v1/v2; benchmark + extractor-filter items exploratory) |
+| Milestone(s)  | M3 (+ one benchmark item in M4)                                                                                                   |
+| Work-stream   | A — Grounded Answers (verify-quote item: B — Trust & Verification)                                                                |
+| Depends on    | [service-layer.md](service-layer.md), [domain-model.md](domain-model.md) phase A                                                  |
+| Absorbs       | Source exploration §4, §7, §20, §21, Phase 2; decision questions 1–3                                                              |
+| Last reviewed | 2026-07-12                                                                                                                        |
 
 ## Intent
 
@@ -156,8 +156,11 @@ deliberate stepping stone before the job model re-implements it as `reindex` job
 - **Trigram tokenizer** for identifiers/titles: no demonstrated need yet.
 - **Abstract-field search**: no `abstract` column exists — blocked on the M3
   Crossref-enrichment seed item.
-- **Page-marker injection or extractor swap** for page provenance: ties into the
-  M4 OCR seed; revisit when the extractor changes.
+- **Page-marker injection or extractor swap** for page provenance: ties into
+  the OCR seed. At the 2026-07-12 decomposition review an **external extractor
+  filter contract** (configurable stdin PDF → stdout Markdown command;
+  user-wired marker/nougat/OCR, pdf2md default) was adopted for evaluation —
+  the Unix answer to better extraction without adopting heavy dependencies.
 - **Lazy per-document re-chunking**: rejected at review in favor of eager full
   re-chunk on version bump.
 
@@ -187,6 +190,10 @@ Milestone 3 (adopted 2026-07-12):
 Milestone 4 (adopted 2026-07-12):
 
 - [test] S - FTS benchmark script: index size and query latency at 1k/10k docs, with a size-per-document budget (see docs/plans/fts5-full-text-search.md)
+
+Added at the 2026-07-12 decomposition review (stream C, P2):
+
+- [verify] M - Evaluate external extractor filter contract: configurable stdin-PDF→stdout-Markdown command (marker/nougat/OCR user-wired; pdf2md default) (see docs/plans/fts5-full-text-search.md)
 
 **Supersedes in place**: M3 `[search] L - Full-text search of extracted Markdown
 content using SQLite FTS5`. **Annotates**: M3 markdown post-processing and quality

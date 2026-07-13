@@ -5,7 +5,7 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 **Sizes:** XS < 1 h · S 1–4 h · M half–full day · L 2–3 d · XL week+
 **Tags:** [fetch] [flow] [parse] [db] [cli] [mcp] [tui] [verify] [test] [auth] [deploy] [docs] [devx] [util] [cfg] [search] [valid] [api] [storage]
 
-**Work-streams** (product view, adopted 2026-07-12 — one stream per item, "serves X" notes where it enables another):
+**Scope (2026-07-12 ruthless cut):** work is either **Core** — the one workflow below, scheduled — or **Exploratory** — designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use. Work-streams are retained inside Exploratory (ordered by former priority) for future re-triage:
 
 - **A — Grounded Answers**: on the agent's find → read → cite path via MCP
 - **B — Trust & Verification**: lets a claim or the corpus's state be checked
@@ -13,75 +13,71 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 - **D — Researcher Workflow**: fits existing human workflows and frontends
 - **E — Platform & Scale**: foundations the other streams stand on
 
-**Priorities:** P0 blocks the core agent loop · P1 trust multiplier / major friction remover · P2 coverage & enablers · P3 polish/ops.
-Execution focus order: A/E-P0 → A/B-P1 → P2 (D before C where independent) → P3. Technical dependencies in [docs/plans/](docs/plans/README.md) still gate sequencing.
-
-_Streams replaced the former Milestones 2–6 on 2026-07-12; "Milestone" labels inside docs/plans/ refer to those pre-restructure sections. Milestone 1 is kept below as history._
-
 ---
 
-## Milestone 1 — Cleanup
+## Core — grounded answers from your own library
 
-Tech debt, testing gaps, DX, docs, validation, minor code-quality fixes.
+The workflow the product must nail before anything else: import a `.bib` → PDFs download and extract (**already works**) → index → an agent over MCP can **find** (`search-citations`), **read** (`read-content`), and **check** (`verify-quote`) — grounded, checkable answers from the researcher's own corpus. Interim discovery: mount a community Semantic Scholar/OpenAlex MCP server alongside; the agent composes.
 
-_All Milestone 1 tasks are complete — see [Completed](#completed)._
-
----
-
-## Stream A — Grounded Answers
-
-The agent's core loop via MCP: find → read → cite with provenance. (docs/plans/service-layer.md, docs/plans/fts5-full-text-search.md)
-
-### P0 — blocks the agent loop
+### Slice 1 — kernel (no schema changes; the next PR)
 
 - [search] M - Extract SearchService (src/services/search.ts) with shared zod contract; lexical mode over extended Database.searchCitations (see docs/plans/service-layer.md)
 - [db] S - Extend Database.searchCitations: LIKE over journal/bibtex_key/doi + limit/cursor pagination reusing encodeCursor
 - [mcp] M - MCP tool: search-citations over SearchService; trimmed result summaries (see docs/plans/service-layer.md)
-- [mcp] M - MCP tool: read-content — serve extracted Markdown by DOI, paginated; manifestations lookup with stem fallback; section-addressed once chunks exist (see docs/plans/service-layer.md)
-- [mcp] S - Generate MCP tool inputSchema from the shared zod contracts for all tools — removes hand-maintained JSON Schema blocks (see docs/plans/service-layer.md)
-- [test] S - SearchService unit tests + search-citations MCP handler tests
+- [mcp] M - MCP tool: read-content — serve extracted Markdown by DOI, paginated; pdf_path-sibling stem fallback now, manifestations lookup later (see docs/plans/service-layer.md)
+- [mcp] M - MCP tool: verify-quote v1 — normalize a quoted passage, exact-match against extracted Markdown; verdict exact|not-found (see docs/plans/fts5-full-text-search.md)
+- [test] S - Core-tool tests: SearchService + search-citations, read-content, verify-quote v1
+
+### Slice 2 — grounded full-text search
+
+- [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
+- [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
+- [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
+- [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
 - [db] S - Spike: assert FTS5 available in bundled better-sqlite3 (CREATE VIRTUAL TABLE smoke test in CI, macOS ARM64 + Linux)
-- [verify] S - Heading-based Markdown chunker: sectionPath from heading trail, ~2000-char max split; runs after markdown post-processing (see docs/plans/fts5-full-text-search.md)
+- [verify] S - Heading-based Markdown chunker: sectionPath from heading trail, ~2000-char max split (see docs/plans/fts5-full-text-search.md)
 - [db] M - chunks table (citation_id, manifestation_id, ordinal, section_path, text, content_hash) via migration runner
 - [search] M - External-content FTS5 tables (chunks_fts, citations_fts; porter unicode61) with sync triggers (see docs/plans/fts5-full-text-search.md)
 - [search] M - SearchService lexical mode on FTS5: bm25 ranking, snippet() highlights, section provenance; LIKE fallback pre-index
 - [cli] S - `index` CLI command: one-shot (re)index into chunks + FTS; idempotent by content_hash; eager re-chunk on chunker version bump
+- [mcp] S - verify-quote v2: FTS fuzzy fallback + section provenance + closest-miss via chunks (see docs/plans/fts5-full-text-search.md)
+- [test] S - Search fixture corpus + golden-query tests (phrase, stemming, unicode, section scope)
 
-### P1
+---
 
+## Exploratory
+
+Deliberately unscheduled until the core loop is proven in use. Nothing is deleted — designs stay parked in their plan docs (statuses: Exploratory). Items keep their `(see docs/plans/…)` refs and are ordered by former priority within each stream.
+
+### Stream A — Grounded Answers (beyond the core)
+
+- [mcp] S - Generate MCP tool inputSchema from the shared zod contracts for all tools — removes hand-maintained JSON Schema blocks (see docs/plans/service-layer.md)
 - [search] S - SearchService filters: year range, verification status, access type, has-pdf
-- [verify] M - Markdown post-processing: remove artefact lines, normalise headings (runs before FTS chunking — see docs/plans/fts5-full-text-search.md; serves B)
-- [test] S - Search fixture corpus + golden-query tests (phrase, stemming, unicode, section scope, filters)
+- [verify] M - Markdown post-processing: remove artefact lines, normalise headings (improves chunk quality — see docs/plans/fts5-full-text-search.md; serves B)
+- [mcp] M - MCP tools: get-references + get-citing-papers (sort by influence|recency); edges cached on lookup (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool: check-corpus — batch DOI membership join: member|frontier|absent (see docs/plans/citation-graph.md)
 
 _Deferred (stream A future): semantic + hybrid search modes — parked in docs/plans/vector-hybrid-search.md until FTS5 quality is observed on a real corpus._
 
----
+### Stream B — Trust & Verification
 
-## Stream B — Trust & Verification
-
-Anti-hallucination: claims and corpus state are checkable — the product's namesake. (docs/plans/fts5-full-text-search.md § verify-quote, docs/plans/storage-adapters.md)
-
-### P1
-
-- [mcp] M - MCP tool: verify-quote — normalize a quoted passage, exact-match against chunks then FTS fuzzy fallback; return section provenance or closest miss (see docs/plans/fts5-full-text-search.md)
 - [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check — see docs/plans/storage-adapters.md)
 - [verify] S - Quality metrics for extracted Markdown (word count, section count, table detection; doubles as chunker input validation)
-
-### P2
-
 - [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI)
 - [cli] XS - `stats` CLI command: citation status summary and database size
 - [storage] S - Availability checks: last_seen_at refresh, unavailable status surfaced in search results and `verify` CLI (see docs/plans/storage-adapters.md)
+- [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps (see docs/plans/citation-graph.md)
 
----
+### Stream C — Coverage & Acquisition
 
-## Stream C — Coverage & Acquisition
-
-More relevant papers present and readable.
-
-### P2
-
-- [fetch] L - Semantic Scholar API resolver for open-access links and citation graph (citation graph = related-papers discovery; serves A)
+- [fetch] M - GraphSource interface + Semantic Scholar client (references/citations with isInfluential, recommendations; rate-limited, cached) (see docs/plans/citation-graph.md)
+- [db] M - citation_edges table + corpus_status (member|frontier) on citations via migration runner (see docs/plans/citation-graph.md)
+- [test] S - GraphSource fixture tests: recorded API responses, edge idempotency, rate-limit respect
+- [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required) (see docs/plans/citation-graph.md)
+- [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger (see docs/plans/citation-graph.md)
+- [fetch] S - Graph-source open-access PDF URLs as an additional retrieval-cascade source (see docs/plans/citation-graph.md)
+- [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler (see docs/plans/citation-graph.md)
 - [fetch] M - Metadata enrichment from Crossref: abstract, keywords, licence, ISSN (abstract unlocks abstract search; serves A)
 - [fetch] L - Implement Springer Link PDF resolution via publisher adapter
 - [fetch] L - Implement Elsevier ScienceDirect PDF resolution via publisher adapter
@@ -90,29 +86,18 @@ More relevant papers present and readable.
 - [fetch] M - Wire publisher adapters into RetrievalOrchestrator fallback chain
 - [fetch] M - Exponential backoff retry for failed HTTP download attempts
 - [auth] M - API key management for publisher APIs (Elsevier, Springer)
-- [verify] XL - OCR fallback for scanned PDFs (tesseract.js or external API) — future extract-stage variant (see docs/plans/indexing-jobs.md)
-- [verify] L - Reference list extraction from extracted Markdown (cited-papers discovery; serves A)
-
-### P3
-
+- [verify] M - Evaluate external extractor filter contract: configurable stdin-PDF→stdout-Markdown command (marker/nougat/OCR user-wired; pdf2md default) (see docs/plans/fts5-full-text-search.md)
+- [verify] XL - OCR fallback for scanned PDFs (tesseract.js or external API) — future extract-stage variant, may become a user-wired extractor filter (see docs/plans/indexing-jobs.md)
+- [verify] L - Reference list extraction from extracted Markdown (cited-papers discovery; cross-checked against graph edges — see docs/plans/citation-graph.md)
 - [fetch] S - DoiResolver: populate isOpenAccess field — currently always undefined
 - [auth] XL - SAML/Shibboleth SSO authentication for institutional access
 - [auth] M - Proxy rotation across multiple configured institutional proxies — currently only proxies[0] used
 
----
-
-## Stream D — Researcher Workflow
-
-Fits how researchers and their frontends already work. (docs/plans/zotero-integration.md, docs/plans/http-api.md)
-
-### P1
+### Stream D — Researcher Workflow
 
 - [parse] M - Zotero JSON export import: metadata + capture item key, library id, tags, collections, attachment paths (see docs/plans/zotero-integration.md)
 - [docs] S - Document Better BibTeX auto-export (pinned keys, file field) as the zero-code Zotero → citation-needed path (see docs/plans/zotero-integration.md)
 - [flow] M - Link Zotero storage and linked-file attachment PDFs as manifestations instead of re-downloading (see docs/plans/zotero-integration.md)
-
-### P2
-
 - [cli] M - `search` CLI command as second-surface adapter over SearchService + MCP/CLI parity test (see docs/plans/service-layer.md)
 - [parse] S - Opt-in --update import mode: gap-fill null fields, overwrite only non-protected fields, report changes (see docs/plans/zotero-integration.md)
 - [parse] M - RIS reference format import (.ris files)
@@ -130,9 +115,7 @@ Fits how researchers and their frontends already work. (docs/plans/zotero-integr
 - [test] M - HTTP integration tests: routes, problem+json shapes, MCP/HTTP search parity
 - [docs] S - docs/http-api.md usage reference
 - [flow] L - `watch` mode as filesystem-watcher job producer: monitor a directory for new .bib files and auto-import (see docs/plans/indexing-jobs.md)
-
-### P3
-
+- [tui] S - Evaluate plain output + standard tools (fzf/less) instead of Ink/React before investing in the TUI items below (2026-07-12 decomposition review)
 - [parse] S - CSV metadata import (title + DOI columns)
 - [mcp] S - MCP tool: delete-citation
 - [flow] L - Zotero 7 local HTTP API import (localhost:23119) with incremental pull
@@ -142,25 +125,9 @@ Fits how researchers and their frontends already work. (docs/plans/zotero-integr
 - [tui] M - Interactive TUI: paginated, sortable, filterable citations table
 - [tui] M - Interactive TUI: live per-citation download progress bars
 
----
-
-## Stream E — Platform & Scale
-
-Foundations the other streams stand on. (docs/plans/domain-model.md, docs/plans/indexing-jobs.md, docs/plans/storage-adapters.md)
-
-### P0 — prerequisites for the A-stream chain
-
-- [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
-- [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
-- [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
-- [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
-
-### P1
+### Stream E — Platform & Scale
 
 - [flow] M - CitationService/ImportService consolidation: MCP and CLI import delegate to one service; MCP import-bibtex gains full pipeline by default with a metadata-only option (see docs/plans/service-layer.md; serves A, D)
-
-### P2
-
 - [db] M - identifiers table (scheme+value UNIQUE: arxiv, pmid, zotero-key, zotero-library, bibtex-key); DOI stays on citations (see docs/plans/domain-model.md; serves D)
 - [db] M - Admit DOI-less citations: relax import guards; identity via identifiers + generated internal id (see docs/plans/domain-model.md; serves C, D)
 - [db] M - Citation deduplication via fuzzy title matching before insert — consult identifiers table once available (see docs/plans/domain-model.md)
@@ -177,11 +144,18 @@ Foundations the other streams stand on. (docs/plans/domain-model.md, docs/plans/
 - [db] S - Normalize manifestation paths to file:// URIs (migration + write-path change)
 - [cfg] M - Persistent config file (~/.citation-needed/config.json) for default flags (consumed by HTTP API port/token — see docs/plans/http-api.md)
 - [deploy] M - npm publish pipeline and versioned GitHub Releases
-
-### P3
-
+- [db] S - identifiers schemes += semantic-scholar-id, openalex-id (extend CHECK) (see docs/plans/domain-model.md)
+- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends (see docs/plans/citation-graph.md)
 - [deploy] L - Docker container image and Compose file for server mode (also serves the HTTP API — see docs/plans/http-api.md)
 - [deploy] S - Systemd service unit file for persistent MCP server daemon (and the `serve` HTTP daemon — see docs/plans/http-api.md)
+
+---
+
+## Milestone 1 — Cleanup (history)
+
+Tech debt, testing gaps, DX, docs, validation, minor code-quality fixes.
+
+_All Milestone 1 tasks are complete — see [Completed](#completed)._
 
 ---
 

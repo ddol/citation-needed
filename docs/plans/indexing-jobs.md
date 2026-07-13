@@ -2,7 +2,7 @@
 
 | Field         | Value                                                                                                                            |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Adopted** (2026-07-12 review)                                                                                                  |
+| Status        | **Exploratory** (2026-07-12 scope cut — design parked; revisit when core-loop usage demands concurrency/resume)                  |
 | Milestone(s)  | M4                                                                                                                               |
 | Work-stream   | E — Platform & Scale                                                                                                             |
 | Depends on    | [domain-model.md](domain-model.md) phase A (hashes); [fts5-full-text-search.md](fts5-full-text-search.md) for chunk/index stages |
@@ -68,6 +68,12 @@ resolve → download → extract → chunk → fts-index
 `embed` joins via [vector-hybrid-search.md](vector-hybrid-search.md); `classify` /
 `summarize` have no plan and stay out of scope. The stage list is data, so it
 extends without migration.
+
+2026-07-12 decomposition review: the **in-process worker loop is retained**
+(drain-and-exit + external cron was considered and declined). Snowball
+expansion and trend work from [citation-graph.md](citation-graph.md) arrive as
+additional job kinds; _scheduling_ of trends stays external (cron recipe in the
+composition docs — no scheduler in the core).
 
 Per-stage provenance (input hash, processor name + version, timestamps, error)
 lives on the `manifestations`/`chunks` rows the stage produces — not duplicated
@@ -170,5 +176,7 @@ None remaining. Resolved at the 2026-07-12 review:
 - [vector-hybrid-search.md](vector-hybrid-search.md) — adds the `embed` stage.
 - [zotero-integration.md](zotero-integration.md) — local-API incremental import
   would enqueue jobs rather than run inline.
+- [citation-graph.md](citation-graph.md) — snowball expansion and trend runs
+  execute as job kinds on this loop; scheduling stays external.
 - [service-layer.md](service-layer.md) — orthogonal; a future JobService could
   expose job status through MCP/HTTP if needed.

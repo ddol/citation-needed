@@ -30,20 +30,34 @@ repository.
 
 ## Plan status
 
-| Plan                                                 | Status            | Milestone(s)    | Depends on                  |
-| ---------------------------------------------------- | ----------------- | --------------- | --------------------------- |
-| [service-layer.md](service-layer.md)                 | Adopted           | M3              | —                           |
-| [domain-model.md](domain-model.md)                   | Adopted           | M3 / M5 / M6    | —                           |
-| [fts5-full-text-search.md](fts5-full-text-search.md) | Adopted           | M3 (+ M4 bench) | service-layer, domain-model |
-| [indexing-jobs.md](indexing-jobs.md)                 | Adopted           | M4              | domain-model, fts5          |
-| [http-api.md](http-api.md)                           | Adopted           | M5              | service-layer (fts5 soft)   |
-| [zotero-integration.md](zotero-integration.md)       | Adopted           | M3 / M5         | domain-model B              |
-| [storage-adapters.md](storage-adapters.md)           | Adopted (phase 1) | M6              | domain-model A + C          |
-| [vector-hybrid-search.md](vector-hybrid-search.md)   | Deferred          | M6              | fts5, indexing-jobs         |
+| Plan                                                 | Status                   | Milestone(s)    | Depends on                  |
+| ---------------------------------------------------- | ------------------------ | --------------- | --------------------------- |
+| [service-layer.md](service-layer.md)                 | Adopted — CORE (slice 1) | M3              | —                           |
+| [domain-model.md](domain-model.md)                   | Adopted — CORE (phase A) | M3 / M5 / M6    | —                           |
+| [fts5-full-text-search.md](fts5-full-text-search.md) | Adopted — CORE (slice 2) | M3 (+ M4 bench) | service-layer, domain-model |
+| [indexing-jobs.md](indexing-jobs.md)                 | Exploratory              | M4              | domain-model, fts5          |
+| [http-api.md](http-api.md)                           | Exploratory              | M5              | service-layer (fts5 soft)   |
+| [zotero-integration.md](zotero-integration.md)       | Exploratory              | M3 / M5         | domain-model B              |
+| [storage-adapters.md](storage-adapters.md)           | Exploratory              | M6              | domain-model A + C          |
+| [vector-hybrid-search.md](vector-hybrid-search.md)   | Deferred (≈ Exploratory) | M6              | fts5, indexing-jobs         |
+| [citation-graph.md](citation-graph.md)               | Exploratory              | — (streams C+A) | domain-model, indexing-jobs |
 
 Reviewed 2026-07-12: all decisions from the triage + deep-dives are recorded in
 each doc's "Open questions" section; adopted items are merged into
 [BACKLOG.md](../../BACKLOG.md).
+
+## Core scope (2026-07-12 ruthless cut)
+
+The scheduled surface is one workflow: **grounded answers from your own
+library** — import → download/extract (works today) → index → find
+(`search-citations`) → read (`read-content`) → check (`verify-quote`), all over
+MCP. Two slices, 18 items: [BACKLOG.md](../../BACKLOG.md) § Core. Everything
+else is **Exploratory** — designed, parked in these docs, unscheduled until the
+core loop proves valuable in daily use. Interim discovery: compose a community
+Semantic Scholar/OpenAlex MCP server alongside citation-needed. Notable
+demotions with the cut: the citation-graph plan (compose externally meanwhile),
+the zod-inputSchema migration for existing tools, and all HTTP / Zotero / jobs /
+storage work.
 
 ## Work-streams (product view, adopted 2026-07-12)
 
@@ -57,21 +71,29 @@ header table names its stream. The product review also added the two missing
 loop steps as tools: `read-content` ([service-layer.md](service-layer.md), A/P0)
 and `verify-quote` ([fts5-full-text-search.md](fts5-full-text-search.md), B/P1).
 
-## Recommended landing order
+### Decomposition principles (2026-07-12)
 
-1. **service-layer** — zero schema change, zero deps; gives every later plan a
-   stable seam (first PR: SearchService + ContentService, `search-citations` +
-   `read-content` MCP tools, tests).
-2. **domain-model phase A** — migration runner + manifestations; unblocks
-   everything schema-shaped. (Zotero JSON _import_ is parse-only and can land any
-   time.)
-3. **fts5** — chunks, FTS tables, `index` command bridge.
-4. **http-api** (M5) and **zotero phase 2** (M5) — parallel once their
-   dependencies exist.
-5. **indexing-jobs** (M4) — absorbs the `index` command; adds resume/concurrency/watch.
-6. **storage-adapters** (M6, phase 1 only — indirection + availability; HTTPS/S3
-   parked in-doc). **vector-hybrid-search** is Deferred until FTS5 quality is
-   observed on a real corpus.
+The research assistant is **core + satellites**: the agent is the shell,
+composing small tools (MCP servers, CLIs, cron). citation-needed owns the
+grounded corpus _and its citation graph_ ([citation-graph.md](citation-graph.md)
+— graph value is joins against corpus state); satellites handle scheduling
+(cron/launchd), trend digests (files), and third-party scouts, composing
+through the pipe contract: BibTeX/JSONL in via `citation-needed import`, digest
+files out, and the SQLite DB is **not** a public API for siblings (read-only at
+most). No scheduler lives in the core. Recorded evaluations: external extractor
+filter contract (fts5 doc), TUI slimming (stream D/P3).
+
+## Landing order (post scope cut)
+
+1. **Core slice 1 — kernel** (service-layer): SearchService + `search-citations`,
+   `read-content`, `verify-quote` v1, tests. No schema changes, no new
+   dependencies — one PR.
+2. **Core slice 2 — grounded full-text search** (domain-model phase A + fts5):
+   migration runner → manifestations → hashes → chunker → chunks → FTS5 →
+   `index` command → verify-quote v2.
+3. **Re-triage Exploratory** against real usage of the core loop
+   ([BACKLOG.md](../../BACKLOG.md) § Exploratory — streams and former
+   priorities retained there).
 
 ## Corrections vs. the source exploration doc
 

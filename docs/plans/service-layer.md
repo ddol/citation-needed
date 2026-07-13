@@ -1,13 +1,13 @@
 # Service Layer & Unified API Surface
 
-| Field         | Value                                                   |
-| ------------- | ------------------------------------------------------- |
-| Status        | **Adopted** (2026-07-12 review)                         |
-| Milestone(s)  | M3                                                      |
-| Work-stream   | A — Grounded Answers                                    |
-| Depends on    | — (foundation; no schema change, no new dependencies)   |
-| Absorbs       | Source exploration §3, §9 (lexical parts), §17, Phase 1 |
-| Last reviewed | 2026-07-12                                              |
+| Field         | Value                                                                                                                               |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | **Adopted — CORE** (2026-07-12 scope cut: SearchService, search-citations, read-content are kernel slice 1; phases 2–4 exploratory) |
+| Milestone(s)  | M3                                                                                                                                  |
+| Work-stream   | A — Grounded Answers                                                                                                                |
+| Depends on    | — (foundation; no schema change, no new dependencies)                                                                               |
+| Absorbs       | Source exploration §3, §9 (lexical parts), §17, Phase 1                                                                             |
+| Last reviewed | 2026-07-12                                                                                                                          |
 
 ## Intent
 
@@ -66,6 +66,11 @@ arg mapping derive from the same schemas when those adapters arrive.
 | import-bibtex       | ImportService.import (2) | `import-bibtex` (full, opt-out) | `import-bibtex` (full)    | deferred                              |
 | download-pdf        | RetrievalService (3)     | `download-pdf`                  | `download`                | deferred                              |
 | search-arxiv        | thin resolver call       | `search-arxiv`                  | —                         | deferred                              |
+| get-references      | GraphService (graph)     | `get-references` — planned      | —                         | deferred                              |
+| get-citing-papers   | GraphService (graph)     | `get-citing-papers` — planned   | —                         | deferred                              |
+| related-papers      | GraphService (graph)     | `related-papers` — planned      | —                         | deferred                              |
+| check-corpus        | GraphService (graph)     | `check-corpus` — planned        | —                         | deferred                              |
+| expand-corpus       | GraphService (graph)     | `expand-corpus` — planned       | —                         | deferred                              |
 
 ### SearchService (first slice)
 
@@ -224,3 +229,5 @@ None remaining. Resolved at the 2026-07-12 review:
 - [domain-model.md](domain-model.md) — orthogonal (schema); no dependency either way.
 - [zotero-integration.md](zotero-integration.md) — its importer should reuse
   ImportService once phase 2 lands.
+- [citation-graph.md](citation-graph.md) — GraphService follows the same shared
+  zod-contract pattern; its operations appear in the mapping table above.

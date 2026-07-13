@@ -1,13 +1,13 @@
 # Storage Adapters & External Files
 
-| Field         | Value                                                                          |
-| ------------- | ------------------------------------------------------------------------------ |
-| Status        | **Adopted — phase 1 only** (2026-07-12 review); phases 2–3 parked in-doc       |
-| Milestone(s)  | M6                                                                             |
-| Work-stream   | E — Platform & Scale (availability item: B — Trust & Verification)             |
-| Depends on    | [domain-model.md](domain-model.md) phase A (manifestations) and phase C (URIs) |
-| Absorbs       | Source exploration §6, §16, Phases 4 + 7; decision questions 10, 11            |
-| Last reviewed | 2026-07-12                                                                     |
+| Field         | Value                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| Status        | **Exploratory** (2026-07-12 scope cut — all phases parked; mounted paths keep working today) |
+| Milestone(s)  | M6                                                                                           |
+| Work-stream   | E — Platform & Scale (availability item: B — Trust & Verification)                           |
+| Depends on    | [domain-model.md](domain-model.md) phase A (manifestations) and phase C (URIs)               |
+| Absorbs       | Source exploration §6, §16, Phases 4 + 7; decision questions 10, 11                          |
+| Last reviewed | 2026-07-12                                                                                   |
 
 ## Intent
 
