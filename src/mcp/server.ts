@@ -7,6 +7,7 @@ import type { AuthConfig } from '../models/auth';
 import { citationToolDefinitions, handleCitationTool } from './tools/citations';
 import type { ToolContext } from './tools/citations';
 import { retrievalToolDefinitions, handleRetrievalTool } from './tools/retrieval';
+import { groundingToolDefinitions, handleGroundingTool } from './tools/grounding';
 import { VERSION } from '../utils/version';
 
 export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server {
@@ -19,7 +20,7 @@ export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server 
   const resolvedAuth = authConfig ?? loadAuthConfig();
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...citationToolDefinitions, ...retrievalToolDefinitions],
+    tools: [...citationToolDefinitions, ...retrievalToolDefinitions, ...groundingToolDefinitions],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -50,6 +51,9 @@ export function createMcpServer(db?: Database, authConfig?: AuthConfig): Server 
 
       const retrievalResult = await handleRetrievalTool(name, safeArgs, resolvedDb, resolvedAuth);
       if (retrievalResult) return retrievalResult;
+
+      const groundingResult = await handleGroundingTool(name, safeArgs, resolvedDb);
+      if (groundingResult) return groundingResult;
 
       return {
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],
