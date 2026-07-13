@@ -54,7 +54,12 @@ export function decodeOffsetCursor(cursor: string): number {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8')) as {
       offset?: unknown;
     };
-    if (typeof parsed.offset !== 'number' || parsed.offset < 0) {
+    if (
+      typeof parsed.offset !== 'number' ||
+      !Number.isInteger(parsed.offset) ||
+      parsed.offset < 0 ||
+      parsed.offset > Number.MAX_SAFE_INTEGER
+    ) {
       throw new Error('Invalid cursor');
     }
     return parsed.offset;
