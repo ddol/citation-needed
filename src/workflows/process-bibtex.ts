@@ -103,6 +103,18 @@ export interface ProcessBibtexResult {
   skippedEntries: ProcessBibtexSkipped[];
 }
 
+function addCitationForImport(
+  db: Database,
+  citation: ParsedEntry
+): { stored?: ParsedEntry & { id?: number }; inserted: boolean } {
+  if (typeof db.addCitationWithResult === 'function') {
+    const result = db.addCitationWithResult(citation);
+    return { stored: result.citation, inserted: result.inserted };
+  }
+
+  return { stored: db.addCitation(citation), inserted: true };
+}
+
 export async function processBibtexFile(
   bibtexPath: string,
   options: ProcessBibtexOptions = {}
@@ -173,10 +185,8 @@ export async function processBibtexFile(
       continue;
     }
 
-    const existing =
-      typeof db.getCitation === 'function' ? db.getCitation(normalizedDoi) : undefined;
-    const stored = db.addCitation(normalizedEntry);
-    if (!existing) importedCount += 1;
+    const { stored, inserted } = addCitationForImport(db, normalizedEntry);
+    if (inserted) importedCount += 1;
     emitProgress({
       doi: normalizedDoi,
       label,

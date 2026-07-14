@@ -270,8 +270,11 @@ describe('processBibtexFile', () => {
     const bibtexDir = path.join(tempRoot, 'refs');
     const bibtexPath = path.join(bibtexDir, 'library.bib');
     const existingCitation = { id: 7, doi: '10.1234/test.paper' };
-    const getCitation = jest.fn().mockReturnValue(existingCitation);
-    const addCitation = jest.fn().mockReturnValue(existingCitation);
+    const addCitation = jest.fn();
+    const addCitationWithResult = jest.fn().mockReturnValue({
+      citation: existingCitation,
+      inserted: false,
+    });
 
     fs.mkdirSync(bibtexDir, { recursive: true });
     fs.writeFileSync(
@@ -282,7 +285,7 @@ describe('processBibtexFile', () => {
 
     try {
       const result = await processBibtexFile(bibtexPath, {
-        db: { getCitation, addCitation } as never,
+        db: { addCitation, addCitationWithResult } as never,
         retrievePdf: async () => ({
           success: false,
           source: 'cache',
@@ -292,9 +295,10 @@ describe('processBibtexFile', () => {
       });
 
       expect(result.importedCount).toBe(0);
-      expect(addCitation).toHaveBeenCalledWith(
+      expect(addCitationWithResult).toHaveBeenCalledWith(
         expect.objectContaining({ doi: '10.1234/test.paper' })
       );
+      expect(addCitation).not.toHaveBeenCalled();
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }

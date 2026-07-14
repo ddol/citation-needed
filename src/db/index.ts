@@ -66,6 +66,11 @@ export interface ChunkMatch {
   snippet: string;
 }
 
+export interface AddCitationResult {
+  citation: Citation;
+  inserted: boolean;
+}
+
 export class Database {
   private db: InstanceType<typeof BetterSqlite3>;
 
@@ -246,7 +251,7 @@ export class Database {
     return row?.sql ?? null;
   }
 
-  addCitation(citation: Citation): Citation {
+  addCitationWithResult(citation: Citation): AddCitationResult {
     if (!citation.doi || citation.doi.trim() === '') {
       throw new Error('Citation must have a non-empty DOI');
     }
@@ -259,7 +264,7 @@ export class Database {
         (@doi, @url, @title, @authors, @year, @journal, @bibtexKey,
          @verificationStatus, @accessType, @createdAt, @updatedAt)
     `);
-    stmt.run({
+    const result = stmt.run({
       doi: citation.doi,
       url: citation.url || null,
       title: citation.title || null,
@@ -272,7 +277,14 @@ export class Database {
       createdAt: now,
       updatedAt: now,
     });
-    return this.getCitationByDoi(citation.doi) || citation;
+    return {
+      citation: this.getCitationByDoi(citation.doi) || citation,
+      inserted: result.changes > 0,
+    };
+  }
+
+  addCitation(citation: Citation): Citation {
+    return this.addCitationWithResult(citation).citation;
   }
 
   getCitation(doi: string): Citation | undefined {

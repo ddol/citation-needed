@@ -91,6 +91,18 @@ describe('Database', () => {
     expect(found?.title).toBe('First');
   });
 
+  test('addCitationWithResult reports whether a row was inserted', () => {
+    const doi = '10.1234/test.inserted';
+
+    const first = db.addCitationWithResult({ doi, title: 'First' });
+    const second = db.addCitationWithResult({ doi, title: 'Second' });
+
+    expect(first.inserted).toBe(true);
+    expect(first.citation.doi).toBe(doi);
+    expect(second.inserted).toBe(false);
+    expect(second.citation.title).toBe('First');
+  });
+
   test('getAllCitations returns all records', () => {
     db.addCitation({ doi: '10.1/a', title: 'A' });
     db.addCitation({ doi: '10.1/b', title: 'B' });
