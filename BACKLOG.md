@@ -123,14 +123,6 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 
 ---
 
-## Milestone 1 — Cleanup (history)
-
-Tech debt, testing gaps, DX, docs, validation, minor code-quality fixes.
-
-_All Milestone 1 tasks are complete — see [Completed](#completed)._
-
----
-
 ## Completed
 
 - [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
