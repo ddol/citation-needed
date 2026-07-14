@@ -19,14 +19,6 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 
 The workflow the product must nail before anything else: import a `.bib` → PDFs download and extract (**already works**) → index → an agent over MCP can **find** (`search-citations`), **read** (`read-content`), and **check** (`verify-quote`) — grounded, checkable answers from the researcher's own corpus. Interim discovery: mount a community Semantic Scholar/OpenAlex MCP server alongside; the agent composes.
 
-### Slice 1 — kernel
-
-_Shipped — see [Completed](#completed)._
-
-### Slice 2 — grounded full-text search
-
-_Shipped — see [Completed](#completed)._
-
 ---
 
 ## Exploratory
