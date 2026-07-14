@@ -23,7 +23,7 @@ export class ContentService {
     const citation = this.db.getCitation(request.doi);
     if (!citation) return { status: 'unknown-doi' };
 
-    const markdownPath = resolveMarkdownPath(citation);
+    const markdownPath = resolveMarkdownPath(citation, this.db);
     if (!markdownPath) return { status: 'no-markdown' };
 
     const full = fs.readFileSync(markdownPath, 'utf-8');
