@@ -25,18 +25,7 @@ _Shipped — see [Completed](#completed)._
 
 ### Slice 2 — grounded full-text search
 
-- [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
-- [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
-- [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
-- [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
-- [db] S - Spike: assert FTS5 available in bundled better-sqlite3 (CREATE VIRTUAL TABLE smoke test in CI, macOS ARM64 + Linux)
-- [verify] S - Heading-based Markdown chunker: sectionPath from heading trail, ~2000-char max split (see docs/plans/fts5-full-text-search.md)
-- [db] M - chunks table (citation_id, manifestation_id, ordinal, section_path, text, content_hash) via migration runner
-- [search] M - External-content FTS5 tables (chunks_fts, citations_fts; porter unicode61) with sync triggers (see docs/plans/fts5-full-text-search.md)
-- [search] M - SearchService lexical mode on FTS5: bm25 ranking, snippet() highlights, section provenance; LIKE fallback pre-index
-- [cli] S - `index` CLI command: one-shot (re)index into chunks + FTS; idempotent by content_hash; eager re-chunk on chunker version bump
-- [mcp] S - verify-quote v2: FTS fuzzy fallback + section provenance + closest-miss via chunks (see docs/plans/fts5-full-text-search.md)
-- [test] S - Search fixture corpus + golden-query tests (phrase, stemming, unicode, section scope)
+_Shipped — see [Completed](#completed)._
 
 ---
 
@@ -155,6 +144,19 @@ _All Milestone 1 tasks are complete — see [Completed](#completed)._
 ---
 
 ## Completed
+
+- [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
+- [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
+- [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
+- [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
+- [db] S - Spike: assert FTS5 available in bundled better-sqlite3 (CREATE VIRTUAL TABLE smoke test in CI, macOS ARM64 + Linux)
+- [verify] S - Heading-based Markdown chunker: sectionPath from heading trail, ~2000-char max split (see docs/plans/fts5-full-text-search.md)
+- [db] M - chunks table (citation_id, manifestation_id, ordinal, section_path, text, content_hash) via migration runner
+- [search] M - External-content FTS5 tables (chunks_fts, citations_fts; porter unicode61) with sync triggers (see docs/plans/fts5-full-text-search.md)
+- [search] M - SearchService lexical mode on FTS5: bm25 ranking, snippet() highlights, section provenance; LIKE fallback pre-index
+- [cli] S - `index` CLI command: one-shot (re)index into chunks + FTS; idempotent by content_hash; eager re-chunk on chunker version bump
+- [mcp] S - verify-quote v2: FTS fuzzy fallback + section provenance + closest-miss via chunks (see docs/plans/fts5-full-text-search.md)
+- [test] S - Search fixture corpus + golden-query tests (phrase, stemming, unicode, section scope)
 
 - [search] M - Extract SearchService (src/services/search.ts) with shared zod contract; lexical mode over extended Database.searchCitations (see docs/plans/service-layer.md)
 - [db] S - Extend Database.searchCitations: LIKE over journal/bibtex_key/doi + limit/cursor pagination reusing encodeCursor

@@ -47,10 +47,18 @@ workflows/process-bibtex.ts
 
 ## Database Schema
 
-Two tables in SQLite (`~/.citation-needed/citations.db`):
+SQLite (`~/.citation-needed/citations.db`), evolved through versioned
+migrations (`PRAGMA user_version`, `src/db/migrations.ts`):
 
-- **citations** – core citation data (doi, title, authors, pdf_path, verification_status, …)
+- **citations** – core citation data (doi, title, authors, verification_status, …)
 - **retrieval_log** – log of every PDF retrieval attempt (source, success, duration)
+- **manifestations** – files representing a citation (PDF, extracted Markdown) with
+  content hashes; the source of truth for file locations (`pdf_path` is a
+  transition fallback)
+- **chunks** – heading-based sections of extracted Markdown with `sectionPath`
+  provenance
+- **chunks_fts / citations_fts** – external-content FTS5 indexes (porter
+  unicode61), kept in sync by triggers; populated by `citation-needed index`
 
 ## CLI Output Defaults
 
@@ -69,6 +77,7 @@ The MCP server (`src/mcp/server.ts`) exposes two groups of tools:
 | -------------------- | --------------------------------------------------------- |
 | `tools/citations.ts` | get-citation, list-citations, import-bibtex, search-arxiv |
 | `tools/retrieval.ts` | download-pdf                                              |
+| `tools/grounding.ts` | search-citations, read-content, verify-quote              |
 
 ## Planned Evolution
 
