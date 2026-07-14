@@ -42,8 +42,12 @@ Set the password via environment variable at runtime:
 
 ```bash
 export PROXY_PASSWORD="your_secret_password"
-citation-needed download 10.1016/j.example.2024.001
+citation-needed import-bibtex references.bib
 ```
+
+Proxy credentials are used by the import/retrieval cascade when open-access
+resolution fails. The standalone `download` CLI command does not use configured
+institutional proxies; it requires `--url` or `--email` for an Unpaywall lookup.
 
 ## Unpaywall
 

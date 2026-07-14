@@ -2,9 +2,9 @@
 
 ![citation needed](https://imgs.xkcd.com/comics/wikipedian_protester.png)
 
-> Citation retrieval and Markdown extraction sidecar for AI agents — turns BibTeX references into local PDF and Markdown folders.
+> Citation retrieval, indexing, and Markdown extraction sidecar for AI agents — turns BibTeX references into a local, searchable PDF/Markdown corpus.
 
-`citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, and converts those PDFs into Markdown using JavaScript.
+`citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, converts those PDFs into Markdown using JavaScript, and indexes extracted Markdown for grounded MCP search, reading, and quote checking.
 
 ---
 
@@ -16,7 +16,8 @@
 - 🔒 **Authenticated PDF download** — via Playwright for proxy-gated content (optional)
 - 📝 **PDF to Markdown extraction** — convert downloaded PDFs into Markdown in JavaScript
 - 📁 **Automatic output folders** — write PDFs to `papers/pdf/` and Markdown to `papers/markdown/` by default
-- 🤖 **MCP server** — Model Context Protocol tools for citation metadata and retrieval
+- 🔎 **Local full-text index** — chunk extracted Markdown into SQLite FTS5 tables with section provenance
+- 🤖 **MCP server** — Model Context Protocol tools for citation metadata, retrieval, search, content reading, and quote verification
 
 ---
 
@@ -52,25 +53,37 @@ citation-needed import-bibtex references.bib --paper-path ./downloaded-papers
 # List stored citations
 citation-needed list
 
+# Index extracted Markdown into the full-text search tables
+citation-needed index
+
 # Download a single PDF manually if needed
 citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12345
+
+# Configure auth data used by import/retrieval flows
+citation-needed auth set-email you@university.edu
+citation-needed auth add-proxy campus https://proxy.university.edu \
+  --login-url https://proxy.university.edu/login \
+  --username jdoe \
+  --password-env PROXY_PASSWORD
 
 # Start the MCP server (stdio transport)
 citation-needed server
 ```
 
-By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. File naming is determined by the current retrieval and conversion pipeline. Use `--paper-path` to change the PDF output directory for that run.
+By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. File naming prefers the BibTeX key, then DOI. Use `--paper-path` and `--markdown-path` to change output directories for that run.
+
+The standalone `download` command only downloads a PDF and updates an existing citation when that DOI is already in the database. It requires either `--url` or `--email` for an Unpaywall lookup; the fuller retrieval cascade, Markdown extraction, and proxy-authenticated fallback live in `import-bibtex`.
 
 ---
 
 ## Environment Variables
 
-| Variable                  | Default                           | Description                                                |
-| ------------------------- | --------------------------------- | ---------------------------------------------------------- |
-| `CITATION_NEEDED_DIR`     | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)        |
-| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                                    |
-| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads            |
-| `CITATION_NEEDED_EMAIL`   | _(unset)_                         | Contact email sent to Unpaywall and the Crossref User-Agent |
+| Variable                  | Default                           | Description                                                      |
+| ------------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| `CITATION_NEEDED_DIR`     | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)              |
+| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                                          |
+| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                  |
+| `CITATION_NEEDED_EMAIL`   | _(unset)_                         | Contact email sent to Unpaywall and the Crossref User-Agent      |
 | `LOG_LEVEL`               | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent` |
 
 See `.env.example` for a copy-paste starter.
@@ -94,13 +107,18 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 
 ### MCP Tools
 
-| Tool             | Description                                           | Required params |
-| ---------------- | ----------------------------------------------------- | --------------- |
-| `get-citation`   | Get citation details                                  | `doi`           |
-| `import-bibtex`  | Import citations from BibTeX string into the database | `bibtex`        |
-| `download-pdf`   | Download PDF for a citation                           | `doi`           |
-| `list-citations` | List all citations                                    | —               |
-| `search-arxiv`   | Search arXiv by paper title                           | `title`         |
+| Tool               | Description                                         | Required params |
+| ------------------ | --------------------------------------------------- | --------------- |
+| `get-citation`     | Get citation details                                | `doi`           |
+| `list-citations`   | List citations, optionally cursor-paginated         | —               |
+| `import-bibtex`    | Import citation metadata from a BibTeX string       | `bibtex`        |
+| `search-arxiv`     | Search arXiv by paper title                         | `title`         |
+| `download-pdf`     | Download PDF from `pdfUrl` or Unpaywall             | `doi`           |
+| `search-citations` | Search metadata and indexed Markdown                | `query`         |
+| `read-content`     | Read extracted Markdown by DOI                      | `doi`           |
+| `verify-quote`     | Check a quote against one paper or the whole corpus | `quote`         |
+
+`import-bibtex` over MCP currently imports metadata only. Use the CLI `import-bibtex` command for the full download and Markdown extraction pipeline, then run `citation-needed index` before relying on body-text search and section-provenance quote checks.
 
 ---
 
@@ -122,7 +140,7 @@ src/
 ├── parsers/              # BibTeX, DOI, URL parsers
 ├── db/                   # SQLite database (schema + Database class)
 ├── retrieval/
-│   ├── resolvers/        # arXiv, Unpaywall, DOI/Crossref resolvers
+│   ├── resolvers/        # arXiv, Unpaywall, and Crossref/DOI helper resolvers
 │   ├── downloaders/      # Open-access + authenticated PDF downloaders
 │   ├── publishers/       # Publisher URL adapters (Springer, Elsevier, ACM)
 │   └── index.ts          # RetrievalOrchestrator
