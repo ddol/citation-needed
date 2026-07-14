@@ -5,13 +5,12 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 **Sizes:** XS < 1 h · S 1–4 h · M half–full day · L 2–3 d · XL week+
 **Tags:** [fetch] [flow] [parse] [db] [cli] [mcp] [tui] [verify] [test] [auth] [deploy] [docs] [devx] [util] [cfg] [search] [valid] [api] [storage]
 
-**Scope:** work is either **Core** — the one workflow below, scheduled — or **Exploratory** — designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use. Work-streams organize the Exploratory section for future re-triage:
+**Scope:** work is either **Core** — the one workflow below, scheduled — or **Exploratory** — designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use. The Exploratory section is ordered by user-flow priority:
 
-- **A — Grounded Answers**: on the agent's find → read → cite path via MCP
-- **B — Trust & Verification**: lets a claim or the corpus's state be checked
-- **C — Coverage & Acquisition**: raises the fraction of relevant papers present and readable
-- **D — Researcher Workflow**: fits existing human workflows and frontends
-- **E — Platform & Scale**: the foundations the other streams stand on
+- **Flow A — Own-library authoring**: a researcher uses their own paper library in their own work.
+- **Flow B — Claims from papers already held**: a researcher checks other authors' claims when the relevant papers are already present.
+- **Flow C — Claims from papers not yet held**: a researcher checks other authors' claims when relevant papers may be missing.
+- **Infrastructure**: foundations, secondary surfaces, scale, packaging, and deployment.
 
 ---
 
@@ -23,91 +22,77 @@ The workflow the product must nail before anything else: import a `.bib` → PDF
 
 ## Exploratory
 
-Deliberately unscheduled until the core loop is proven in use. Nothing is deleted — designs stay parked in their plan docs (statuses: Exploratory). Items keep their `(see docs/plans/…)` refs and are ordered by former priority within each stream.
+Deliberately unscheduled until the core loop is proven in use. Nothing is deleted — designs stay parked in their plan docs (statuses: Exploratory). Items keep their `(see docs/plans/…)` refs and are ordered by the flow rubric above.
 
-### Stream A — Grounded Answers (beyond the core)
+### Flow A — Own-library authoring
 
-- [mcp] S - Generate MCP tool inputSchema from the shared zod contracts for all tools — removes hand-maintained JSON Schema blocks (see docs/plans/service-layer.md)
+- [flow] M - CitationService/ImportService consolidation: MCP and CLI import delegate to one service; MCP import-bibtex gains full pipeline by default with a metadata-only option (see docs/plans/service-layer.md; serves A, D)
+- [docs] S - Document Better BibTeX auto-export (pinned keys, file field) as the zero-code Zotero → citation-needed path (see docs/plans/zotero-integration.md)
+- [flow] M - Link Zotero storage and linked-file attachment PDFs as manifestations instead of re-downloading (see docs/plans/zotero-integration.md)
 - [search] S - SearchService filters: year range, verification status, access type, has-pdf
 - [verify] M - Markdown post-processing: remove artefact lines, normalise headings (improves chunk quality — see docs/plans/fts5-full-text-search.md; serves B)
-- [mcp] M - MCP tools: get-references + get-citing-papers (sort by influence|recency); edges cached on lookup (see docs/plans/citation-graph.md)
-- [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
-- [mcp] S - MCP tool: check-corpus — batch DOI membership join: member|frontier|absent (see docs/plans/citation-graph.md)
+- [verify] S - Quality metrics for extracted Markdown (word count, section count, table detection; doubles as chunker input validation)
+- [test] S - FTS benchmark script: index size and query latency at 1k/10k docs, with a size-per-document budget (see docs/plans/fts5-full-text-search.md; serves A)
+- [cli] M - `search` CLI command as second-surface adapter over SearchService + MCP/CLI parity test (see docs/plans/service-layer.md)
+- [parse] M - Zotero JSON export import: metadata + capture item key, library id, tags, collections, attachment paths (see docs/plans/zotero-integration.md)
+- [parse] S - Opt-in --update import mode: gap-fill null fields, overwrite only non-protected fields, report changes (see docs/plans/zotero-integration.md)
+- [fetch] M - Metadata enrichment from Crossref: abstract, keywords, licence, ISSN (abstract unlocks abstract search; serves A)
+- [db] M - tags + collections join tables populated from Zotero import; SearchService and API filters (see docs/plans/zotero-integration.md)
+- [search] S - Emit zotero://select links in search/MCP/API results when item key known (verify supported URL forms first)
+- [mcp] S - Generate MCP tool inputSchema from the shared zod contracts for all tools — removes hand-maintained JSON Schema blocks (see docs/plans/service-layer.md)
+- [verify] M - Evaluate external extractor filter contract: configurable stdin-PDF→stdout-Markdown command (marker/nougat/OCR user-wired; pdf2md default) (see docs/plans/fts5-full-text-search.md)
+- [verify] XL - OCR fallback for scanned PDFs (tesseract.js or external API) — future extract-stage variant, may become a user-wired extractor filter (see docs/plans/indexing-jobs.md)
+- [db] M - identifiers table (scheme+value UNIQUE: arxiv, pmid, zotero-key, zotero-library, bibtex-key); DOI stays on citations (see docs/plans/domain-model.md; serves D)
+- [parse] M - RIS reference format import (.ris files)
+- [cli] M - `export` CLI command: write BibTeX/RIS/JSON from database
+- [parse] S - CSV metadata import (title + DOI columns)
 
-_Deferred (stream A future): semantic + hybrid search modes — parked in docs/plans/vector-hybrid-search.md until FTS5 quality is observed on a real corpus._
+_Deferred (Flow A future): semantic + hybrid search modes — parked in docs/plans/vector-hybrid-search.md until FTS5 quality is observed on a real corpus._
 
-### Stream B — Trust & Verification
+### Flow B — Claims from papers already held
 
 - [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check — see docs/plans/storage-adapters.md)
-- [verify] S - Quality metrics for extracted Markdown (word count, section count, table detection; doubles as chunker input validation)
 - [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI)
 - [cli] XS - `stats` CLI command: citation status summary and database size
 - [storage] S - Availability checks: last_seen_at refresh, unavailable status surfaced in search results and `verify` CLI (see docs/plans/storage-adapters.md)
+- [verify] L - Reference list extraction from extracted Markdown (cited-papers discovery; cross-checked against graph edges — see docs/plans/citation-graph.md)
 - [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps (see docs/plans/citation-graph.md)
+- [cli] S - `update` CLI command: re-download or refresh metadata for a single citation
+- [mcp] S - MCP tool: update-citation metadata
 
-### Stream C — Coverage & Acquisition
+### Flow C — Claims from papers not yet held
 
+- [mcp] S - MCP tool: check-corpus — batch DOI membership join: member|frontier|absent (see docs/plans/citation-graph.md)
 - [fetch] M - GraphSource interface + Semantic Scholar client (references/citations with isInfluential, recommendations; rate-limited, cached) (see docs/plans/citation-graph.md)
 - [db] M - citation_edges table + corpus_status (member|frontier) on citations via migration runner (see docs/plans/citation-graph.md)
 - [test] S - GraphSource fixture tests: recorded API responses, edge idempotency, rate-limit respect
-- [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required) (see docs/plans/citation-graph.md)
-- [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger (see docs/plans/citation-graph.md)
 - [fetch] S - Graph-source open-access PDF URLs as an additional retrieval-cascade source (see docs/plans/citation-graph.md)
+- [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger (see docs/plans/citation-graph.md)
+- [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required) (see docs/plans/citation-graph.md)
+- [mcp] M - MCP tools: get-references + get-citing-papers (sort by influence|recency); edges cached on lookup (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
 - [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler (see docs/plans/citation-graph.md)
-- [fetch] M - Metadata enrichment from Crossref: abstract, keywords, licence, ISSN (abstract unlocks abstract search; serves A)
+- [fetch] S - DoiResolver: populate isOpenAccess field — currently always undefined
+- [fetch] M - Exponential backoff retry for failed HTTP download attempts
+- [auth] M - Proxy rotation across multiple configured institutional proxies — currently only proxies[0] used
 - [fetch] L - Implement Springer Link PDF resolution via publisher adapter
 - [fetch] L - Implement Elsevier ScienceDirect PDF resolution via publisher adapter
 - [fetch] L - Implement ACM Digital Library PDF resolution via publisher adapter
-- [fetch] L - PubMed/NCBI E-utilities resolver for life-sciences papers
 - [fetch] M - Wire publisher adapters into RetrievalOrchestrator fallback chain
-- [fetch] M - Exponential backoff retry for failed HTTP download attempts
 - [auth] M - API key management for publisher APIs (Elsevier, Springer)
-- [verify] M - Evaluate external extractor filter contract: configurable stdin-PDF→stdout-Markdown command (marker/nougat/OCR user-wired; pdf2md default) (see docs/plans/fts5-full-text-search.md)
-- [verify] XL - OCR fallback for scanned PDFs (tesseract.js or external API) — future extract-stage variant, may become a user-wired extractor filter (see docs/plans/indexing-jobs.md)
-- [verify] L - Reference list extraction from extracted Markdown (cited-papers discovery; cross-checked against graph edges — see docs/plans/citation-graph.md)
-- [fetch] S - DoiResolver: populate isOpenAccess field — currently always undefined
+- [fetch] L - PubMed/NCBI E-utilities resolver for life-sciences papers
 - [auth] XL - SAML/Shibboleth SSO authentication for institutional access
-- [auth] M - Proxy rotation across multiple configured institutional proxies — currently only proxies[0] used
-
-### Stream D — Researcher Workflow
-
-- [parse] M - Zotero JSON export import: metadata + capture item key, library id, tags, collections, attachment paths (see docs/plans/zotero-integration.md)
-- [docs] S - Document Better BibTeX auto-export (pinned keys, file field) as the zero-code Zotero → citation-needed path (see docs/plans/zotero-integration.md)
-- [flow] M - Link Zotero storage and linked-file attachment PDFs as manifestations instead of re-downloading (see docs/plans/zotero-integration.md)
-- [cli] M - `search` CLI command as second-surface adapter over SearchService + MCP/CLI parity test (see docs/plans/service-layer.md)
-- [parse] S - Opt-in --update import mode: gap-fill null fields, overwrite only non-protected fields, report changes (see docs/plans/zotero-integration.md)
-- [parse] M - RIS reference format import (.ris files)
-- [cli] M - `export` CLI command: write BibTeX/RIS/JSON from database
-- [cli] S - `update` CLI command: re-download or refresh metadata for a single citation
-- [mcp] S - MCP tool: update-citation metadata
-- [db] S - Store Zotero item key + library id in identifiers table on import
-- [db] M - tags + collections join tables populated from Zotero import; SearchService and API filters (see docs/plans/zotero-integration.md)
-- [search] S - Emit zotero://select links in search/MCP/API results when item key known (verify supported URL forms first)
-- [api] M - Add hono + @hono/node-server + @hono/zod-openapi; `serve` CLI command (--port default 4871, loopback default) (see docs/plans/http-api.md)
-- [api] M - GET /api/v1/health, /capabilities, /citations (cursor pagination), /citations/{doi}
-- [api] M - POST /api/v1/search bound to SearchService via the shared zod contract
-- [api] M - OpenAPI: serve /api/v1/openapi.json generated from route schemas; emit openapi/citation-needed-v1.yaml as build artifact
-- [api] S - RFC 7807 problem+json error responses; static bearer-token auth (required for non-loopback binds) + request logging
-- [test] M - HTTP integration tests: routes, problem+json shapes, MCP/HTTP search parity
-- [docs] S - docs/http-api.md usage reference
-- [flow] L - `watch` mode as filesystem-watcher job producer: monitor a directory for new .bib files and auto-import (see docs/plans/indexing-jobs.md)
-- [tui] S - Evaluate plain output + standard tools (fzf/less) instead of Ink/React before investing in the TUI items below
-- [parse] S - CSV metadata import (title + DOI columns)
-- [mcp] S - MCP tool: delete-citation
-- [flow] L - Zotero 7 local HTTP API import (localhost:23119) with incremental pull
-- [flow] M - Webhook notification on batch import completion (configurable URL)
-- [tui] S - ImportProgress reads the jobs table for progress — survives restarts, shows watch-mode work (see docs/plans/indexing-jobs.md)
-- [tui] L - Interactive TUI: multi-select bulk operations (delete, re-download)
-- [tui] M - Interactive TUI: paginated, sortable, filterable citations table
-- [tui] M - Interactive TUI: live per-citation download progress bars
-
-### Stream E — Platform & Scale
-
-- [flow] M - CitationService/ImportService consolidation: MCP and CLI import delegate to one service; MCP import-bibtex gains full pipeline by default with a metadata-only option (see docs/plans/service-layer.md; serves A, D)
-- [db] M - identifiers table (scheme+value UNIQUE: arxiv, pmid, zotero-key, zotero-library, bibtex-key); DOI stays on citations (see docs/plans/domain-model.md; serves D)
 - [db] M - Admit DOI-less citations: relax import guards; identity via identifiers + generated internal id (see docs/plans/domain-model.md; serves C, D)
 - [db] M - Citation deduplication via fuzzy title matching before insert — consult identifiers table once available (see docs/plans/domain-model.md)
+- [db] S - identifiers schemes += semantic-scholar-id, openalex-id (extend CHECK) (see docs/plans/domain-model.md)
+
+### Infrastructure — foundations, secondary surfaces, scale
+
+- [db] S - Store Zotero item key + library id in identifiers table on import
 - [db] S - Database backup and restore commands
+- [storage] M - StorageAdapter interface + LocalFileAdapter; route all PDF/markdown reads through it (see docs/plans/storage-adapters.md)
+- [db] S - Normalize manifestation paths to file:// URIs (migration + write-path change)
+- [cfg] M - Persistent config file (~/.citation-needed/config.json) for default flags (consumed by HTTP API port/token — see docs/plans/http-api.md)
 - [flow] M - jobs table (kind, payload, status, attempts, last_error) + in-process worker loop; per-entry jobs with batch_id; 3 auto-retries with backoff then manual (see docs/plans/indexing-jobs.md)
 - [flow] M - Stage-based pipeline (resolve → download → extract → chunk → fts-index) with per-stage provenance on manifestations/chunks (see docs/plans/indexing-jobs.md)
 - [flow] S - Incremental re-index rules: skip unchanged content_hash; extractor/chunker version bump invalidates downstream stages only
@@ -115,13 +100,24 @@ _Deferred (stream A future): semantic + hybrid search modes — parked in docs/p
 - [flow] M - Resume interrupted imports via persisted job state (see docs/plans/indexing-jobs.md)
 - [cli] S - `jobs` CLI command: list, status, retry failed
 - [test] M - Crash-resume and idempotency tests: kill worker mid-batch → restart completes without re-downloading; rerun produces zero new work
-- [test] S - FTS benchmark script: index size and query latency at 1k/10k docs, with a size-per-document budget (see docs/plans/fts5-full-text-search.md; serves A)
-- [storage] M - StorageAdapter interface + LocalFileAdapter; route all PDF/markdown reads through it (see docs/plans/storage-adapters.md)
-- [db] S - Normalize manifestation paths to file:// URIs (migration + write-path change)
-- [cfg] M - Persistent config file (~/.citation-needed/config.json) for default flags (consumed by HTTP API port/token — see docs/plans/http-api.md)
-- [deploy] M - npm publish pipeline and versioned GitHub Releases
-- [db] S - identifiers schemes += semantic-scholar-id, openalex-id (extend CHECK) (see docs/plans/domain-model.md)
+- [api] M - Add hono + @hono/node-server + @hono/zod-openapi; `serve` CLI command (--port default 4871, loopback default) (see docs/plans/http-api.md)
+- [api] M - GET /api/v1/health, /capabilities, /citations (cursor pagination), /citations/{doi}
+- [api] M - POST /api/v1/search bound to SearchService via the shared zod contract
+- [api] M - OpenAPI: serve /api/v1/openapi.json generated from route schemas; emit openapi/citation-needed-v1.yaml as build artifact
+- [api] S - RFC 7807 problem+json error responses; static bearer-token auth (required for non-loopback binds) + request logging
+- [test] M - HTTP integration tests: routes, problem+json shapes, MCP/HTTP search parity
+- [docs] S - docs/http-api.md usage reference
 - [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends (see docs/plans/citation-graph.md)
+- [flow] L - `watch` mode as filesystem-watcher job producer: monitor a directory for new .bib files and auto-import (see docs/plans/indexing-jobs.md)
+- [tui] S - Evaluate plain output + standard tools (fzf/less) instead of Ink/React before investing in the TUI items below
+- [mcp] S - MCP tool: delete-citation
+- [flow] L - Zotero 7 local HTTP API import (localhost:23119) with incremental pull
+- [flow] M - Webhook notification on batch import completion (configurable URL)
+- [tui] S - ImportProgress reads the jobs table for progress — survives restarts, shows watch-mode work (see docs/plans/indexing-jobs.md)
+- [tui] L - Interactive TUI: multi-select bulk operations (delete, re-download)
+- [tui] M - Interactive TUI: paginated, sortable, filterable citations table
+- [tui] M - Interactive TUI: live per-citation download progress bars
+- [deploy] M - npm publish pipeline and versioned GitHub Releases
 - [deploy] L - Docker container image and Compose file for server mode (also serves the HTTP API — see docs/plans/http-api.md)
 - [deploy] S - Systemd service unit file for persistent MCP server daemon (and the `serve` HTTP daemon — see docs/plans/http-api.md)
 
