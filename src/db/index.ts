@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { Citation, VerificationStatus, AccessType } from '../models/citation';
+import type { Manifestation, ManifestationInput, ManifestationKind } from '../models/manifestation';
 import type { RetrievalAttempt } from '../models/retrieval';
 import {
   CREATE_CITATIONS_TABLE,
@@ -9,6 +10,7 @@ import {
   CREATE_INDEXES,
   createCitationsTableStatement,
 } from './schema';
+import { ensureFtsSchema, runMigrations } from './migrations';
 
 // Use require for better-sqlite3 (CommonJS native module)
 const BetterSqlite3 = require('better-sqlite3');
@@ -32,6 +34,38 @@ const EXPECTED_CITATION_COLUMNS = [
   'updated_at',
 ] as const;
 
+// Every citation read derives the effective PDF path from manifestations
+// (the source of truth), falling back to the legacy pdf_path column for
+// rows that predate the backfill.
+const CITATION_SELECT = `SELECT citations.*, (
+    SELECT m.path FROM manifestations m
+    WHERE m.citation_id = citations.id AND m.kind = 'pdf'
+    ORDER BY m.id DESC LIMIT 1
+  ) AS manifest_pdf_path
+  FROM citations`;
+
+export interface ChunkInput {
+  ordinal: number;
+  sectionPath: string[];
+  text: string;
+}
+
+export interface ChunkRecord {
+  ordinal: number;
+  sectionPath?: string[];
+  text: string;
+}
+
+export interface ChunkCandidate extends ChunkRecord {
+  doi: string;
+}
+
+export interface ChunkMatch {
+  chunkOrdinal: number;
+  sectionPath?: string[];
+  snippet: string;
+}
+
 export class Database {
   private db: InstanceType<typeof BetterSqlite3>;
 
@@ -48,6 +82,8 @@ export class Database {
 
     this.db = new BetterSqlite3(resolvedPath);
     this.db.pragma('foreign_keys = ON');
+    // Cascade deletes must fire the FTS sync triggers on chunks.
+    this.db.pragma('recursive_triggers = ON');
     this.initSchema();
   }
 
@@ -58,6 +94,10 @@ export class Database {
     this.migrateLegacyCitationSchema();
     this.migrateRetrievalLogForeignKey();
     this.ensureIndexes();
+    runMigrations(this.db);
+    // Defensive: the legacy rebuild above drops the citations table (and with
+    // it the FTS sync triggers); recreate anything missing idempotently.
+    ensureFtsSchema(this.db);
   }
 
   private ensureIndexes(): void {
@@ -240,7 +280,7 @@ export class Database {
   }
 
   private getCitationByDoi(doi: string): Citation | undefined {
-    const row = this.db.prepare('SELECT * FROM citations WHERE doi = ?').get(doi) as
+    const row = this.db.prepare(`${CITATION_SELECT} WHERE doi = ?`).get(doi) as
       | Record<string, unknown>
       | undefined;
     if (!row) return undefined;
@@ -267,9 +307,10 @@ export class Database {
     limit?: number;
   }): Citation[] | { citations: Citation[]; nextCursor?: string } {
     if (options === undefined) {
-      const rows = this.db
-        .prepare('SELECT * FROM citations ORDER BY created_at DESC')
-        .all() as Record<string, unknown>[];
+      const rows = this.db.prepare(`${CITATION_SELECT} ORDER BY created_at DESC`).all() as Record<
+        string,
+        unknown
+      >[];
       return rows.map((r) => this.rowToCitation(r));
     }
 
@@ -279,7 +320,7 @@ export class Database {
     const rows = cursor
       ? (this.db
           .prepare(
-            `SELECT * FROM citations
+            `${CITATION_SELECT}
              WHERE (created_at > @createdAt)
                 OR (created_at = @createdAt AND id > @id)
              ORDER BY created_at ASC, id ASC
@@ -290,7 +331,7 @@ export class Database {
           unknown
         >[])
       : (this.db
-          .prepare('SELECT * FROM citations ORDER BY created_at ASC, id ASC LIMIT @limit')
+          .prepare(`${CITATION_SELECT} ORDER BY created_at ASC, id ASC LIMIT @limit`)
           .all({ limit: limit + 1 }) as Record<string, unknown>[]);
 
     const hasMore = rows.length > limit;
@@ -331,7 +372,7 @@ export class Database {
     if (options === undefined) {
       const rows = this.db
         .prepare(
-          `SELECT * FROM citations
+          `${CITATION_SELECT}
            WHERE ${matchClause}
            ORDER BY created_at DESC`
         )
@@ -345,7 +386,7 @@ export class Database {
     const rows = cursor
       ? (this.db
           .prepare(
-            `SELECT * FROM citations
+            `${CITATION_SELECT}
              WHERE ${matchClause}
                AND ((created_at > @createdAt)
                 OR (created_at = @createdAt AND id > @id))
@@ -360,7 +401,7 @@ export class Database {
           }) as Record<string, unknown>[])
       : (this.db
           .prepare(
-            `SELECT * FROM citations
+            `${CITATION_SELECT}
              WHERE ${matchClause}
              ORDER BY created_at ASC, id ASC
              LIMIT @limit`
@@ -383,9 +424,235 @@ export class Database {
 
   updatePdfPath(doi: string, pdfPath: string): void {
     const now = new Date().toISOString();
+    // Transition dual-write: manifestations are the source of truth; the
+    // legacy column is still written for one release (downgrade safety).
     this.db
       .prepare('UPDATE citations SET pdf_path = ?, updated_at = ? WHERE doi = ?')
       .run(pdfPath, now, doi);
+    const row = this.db.prepare('SELECT id FROM citations WHERE doi = ?').get(doi) as
+      | { id?: number }
+      | undefined;
+    if (row?.id != null) {
+      this.upsertManifestation({ citationId: row.id, kind: 'pdf', path: pdfPath });
+    }
+  }
+
+  /**
+   * Insert or refresh a manifestation row. Refreshes last_seen_at and fills
+   * hash/extractor fields without ever nulling values a previous writer
+   * recorded (COALESCE against the incoming row).
+   */
+  upsertManifestation(input: ManifestationInput): number {
+    const now = new Date().toISOString();
+    const row = this.db
+      .prepare(
+        `INSERT INTO manifestations
+           (citation_id, kind, path, content_hash, extractor_name, extractor_version,
+            created_at, last_seen_at)
+         VALUES (@citationId, @kind, @path, @contentHash, @extractorName, @extractorVersion,
+            @now, @now)
+         ON CONFLICT (citation_id, kind, path) DO UPDATE SET
+           content_hash = COALESCE(excluded.content_hash, manifestations.content_hash),
+           extractor_name = COALESCE(excluded.extractor_name, manifestations.extractor_name),
+           extractor_version = COALESCE(excluded.extractor_version, manifestations.extractor_version),
+           last_seen_at = excluded.last_seen_at
+         RETURNING id`
+      )
+      .get({
+        citationId: input.citationId,
+        kind: input.kind,
+        path: input.path,
+        contentHash: input.contentHash ?? null,
+        extractorName: input.extractorName ?? null,
+        extractorVersion: input.extractorVersion ?? null,
+        now,
+      }) as { id: number };
+    return row.id;
+  }
+
+  getManifestation(citationId: number, kind: ManifestationKind): Manifestation | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM manifestations
+         WHERE citation_id = ? AND kind = ?
+         ORDER BY id DESC LIMIT 1`
+      )
+      .get(citationId, kind) as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return {
+      id: row.id as number,
+      citationId: row.citation_id as number,
+      kind: row.kind as ManifestationKind,
+      path: row.path as string,
+      contentHash: (row.content_hash as string | null) ?? undefined,
+      extractorName: (row.extractor_name as string | null) ?? undefined,
+      extractorVersion: (row.extractor_version as string | null) ?? undefined,
+      createdAt: row.created_at as string,
+      lastSeenAt: (row.last_seen_at as string | null) ?? undefined,
+    };
+  }
+
+  /** True when the FTS5 virtual tables exist (they do after migrations run). */
+  hasFtsIndex(): boolean {
+    const row = this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chunks_fts'")
+      .get() as { name?: string } | undefined;
+    return row?.name === 'chunks_fts';
+  }
+
+  /**
+   * Replace all chunks for a manifestation in one transaction. The FTS index
+   * stays consistent via the sync triggers. content_hash is the hash of the
+   * SOURCE Markdown (shared by every chunk row) so unchanged documents can be
+   * skipped on re-index.
+   */
+  replaceChunks(args: {
+    manifestationId: number;
+    citationId: number;
+    contentHash: string;
+    chunkerVersion: number;
+    chunks: ChunkInput[];
+  }): void {
+    const del = this.db.prepare('DELETE FROM chunks WHERE manifestation_id = ?');
+    const ins = this.db.prepare(
+      `INSERT INTO chunks
+         (citation_id, manifestation_id, ordinal, section_path, text, content_hash, chunker_version)
+       VALUES (@citationId, @manifestationId, @ordinal, @sectionPath, @text, @contentHash, @chunkerVersion)`
+    );
+    this.db.transaction(() => {
+      del.run(args.manifestationId);
+      for (const chunk of args.chunks) {
+        ins.run({
+          citationId: args.citationId,
+          manifestationId: args.manifestationId,
+          ordinal: chunk.ordinal,
+          sectionPath: JSON.stringify(chunk.sectionPath),
+          text: chunk.text,
+          contentHash: args.contentHash,
+          chunkerVersion: args.chunkerVersion,
+        });
+      }
+    })();
+  }
+
+  /** Source hash + chunker version of the existing index for a manifestation. */
+  getChunkIndexState(
+    manifestationId: number
+  ): { contentHash: string; chunkerVersion: number } | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT content_hash, chunker_version FROM chunks WHERE manifestation_id = ? LIMIT 1'
+      )
+      .get(manifestationId) as { content_hash: string; chunker_version: number } | undefined;
+    if (!row) return undefined;
+    return { contentHash: row.content_hash, chunkerVersion: row.chunker_version };
+  }
+
+  getChunksForCitation(citationId: number): ChunkRecord[] {
+    const rows = this.db
+      .prepare(
+        'SELECT ordinal, section_path, text FROM chunks WHERE citation_id = ? ORDER BY ordinal'
+      )
+      .all(citationId) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      ordinal: row.ordinal as number,
+      sectionPath: parseSectionPath(row.section_path),
+      text: row.text as string,
+    }));
+  }
+
+  /**
+   * Ranked full-text search across citation metadata (citations_fts) and
+   * extracted-body chunks (chunks_fts), merged per citation by best bm25 rank.
+   * Offset-paginated: bm25 ordering has no stable natural cursor.
+   */
+  searchFts(
+    query: string,
+    options: { limit?: number; offset?: number } = {}
+  ): { results: Array<{ citation: Citation; matches: ChunkMatch[] }>; hasMore: boolean } {
+    const match = toFtsQuery(query);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const offset = Math.max(options.offset ?? 0, 0);
+
+    const rows = this.db
+      .prepare(
+        `WITH meta AS (
+           SELECT rowid AS citation_id, citations_fts.rank AS rank
+           FROM citations_fts WHERE citations_fts MATCH @match
+         ),
+         chunk_hits AS (
+           SELECT c.citation_id AS citation_id, MIN(chunks_fts.rank) AS rank
+           FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid
+           WHERE chunks_fts MATCH @match
+           GROUP BY c.citation_id
+         ),
+         combined AS (
+           SELECT citation_id, MIN(rank) AS rank FROM (
+             SELECT citation_id, rank FROM meta
+             UNION ALL
+             SELECT citation_id, rank FROM chunk_hits
+           ) GROUP BY citation_id
+         )
+         SELECT citations.*, (
+             SELECT m.path FROM manifestations m
+             WHERE m.citation_id = citations.id AND m.kind = 'pdf'
+             ORDER BY m.id DESC LIMIT 1
+           ) AS manifest_pdf_path
+         FROM combined JOIN citations ON citations.id = combined.citation_id
+         ORDER BY combined.rank ASC, citations.id ASC
+         LIMIT @limit OFFSET @offset`
+      )
+      .all({ match, limit: limit + 1, offset }) as Record<string, unknown>[];
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+    const matchStmt = this.db.prepare(
+      `SELECT c.ordinal AS ordinal, c.section_path AS section_path,
+              snippet(chunks_fts, 0, '<b>', '</b>', '…', 12) AS snip
+       FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid
+       WHERE chunks_fts MATCH @match AND c.citation_id = @citationId
+       ORDER BY chunks_fts.rank LIMIT 3`
+    );
+
+    const results = pageRows.map((row) => ({
+      citation: this.rowToCitation(row),
+      matches: (matchStmt.all({ match, citationId: row.id }) as Record<string, unknown>[]).map(
+        (m) => ({
+          chunkOrdinal: m.ordinal as number,
+          sectionPath: parseSectionPath(m.section_path),
+          snippet: m.snip as string,
+        })
+      ),
+    }));
+
+    return { results, hasMore };
+  }
+
+  /** Top chunk candidates for verify-quote's fuzzy fallback. */
+  searchChunkCandidates(
+    ftsMatch: string,
+    options: { doi?: string; limit?: number } = {}
+  ): ChunkCandidate[] {
+    const limit = Math.min(Math.max(options.limit ?? 5, 1), 20);
+    const doiClause = options.doi ? 'AND cit.doi = @doi' : '';
+    const rows = this.db
+      .prepare(
+        `SELECT cit.doi AS doi, c.ordinal AS ordinal, c.section_path AS section_path,
+                c.text AS text
+         FROM chunks_fts
+         JOIN chunks c ON c.id = chunks_fts.rowid
+         JOIN citations cit ON cit.id = c.citation_id
+         WHERE chunks_fts MATCH @match ${doiClause}
+         ORDER BY chunks_fts.rank LIMIT @limit`
+      )
+      .all({ match: ftsMatch, doi: options.doi, limit }) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      doi: row.doi as string,
+      ordinal: row.ordinal as number,
+      sectionPath: parseSectionPath(row.section_path),
+      text: row.text as string,
+    }));
   }
 
   updateVerificationStatus(doi: string, status: VerificationStatus): void {
@@ -459,7 +726,7 @@ export class Database {
       year: row.year as number | undefined,
       journal: row.journal as string | undefined,
       bibtexKey: row.bibtex_key as string | undefined,
-      pdfPath: row.pdf_path as string | undefined,
+      pdfPath: ((row.manifest_pdf_path ?? row.pdf_path) as string | null) ?? undefined,
       verificationStatus: row.verification_status as Citation['verificationStatus'],
       accessType: row.access_type as Citation['accessType'],
       lastVerified: row.last_verified as string | undefined,
@@ -467,6 +734,43 @@ export class Database {
       updatedAt: row.updated_at as string | undefined,
     };
   }
+}
+
+function parseSectionPath(raw: unknown): string[] | undefined {
+  if (typeof raw !== 'string' || raw === '') return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.every((p) => typeof p === 'string')) {
+      return parsed as string[];
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build a safe FTS5 MATCH expression from free text: a fully double-quoted
+ * query becomes one phrase; otherwise each whitespace token is quoted and
+ * joined (implicit AND), so user input can never inject FTS operators.
+ */
+export function toFtsQuery(query: string): string {
+  const trimmed = query.trim();
+  const inner = trimmed.slice(1, -1);
+  if (
+    trimmed.length > 1 &&
+    trimmed.startsWith('"') &&
+    trimmed.endsWith('"') &&
+    !inner.includes('"')
+  ) {
+    return `"${inner}"`;
+  }
+  const tokens = trimmed
+    .split(/\s+/)
+    .map((token) => token.replace(/"/g, ''))
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) return '""';
+  return tokens.map((token) => `"${token}"`).join(' ');
 }
 
 interface CursorState {
