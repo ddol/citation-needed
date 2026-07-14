@@ -1,11 +1,11 @@
 # FTS5 Full-Text Search
 
-| Field         | Value                                                                                                 |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| Status        | **Core — slice 2** (verify-quote v1 ships in slice 1; benchmark + extractor-filter items exploratory) |
-| Work-stream   | A — Grounded Answers (verify-quote: B — Trust & Verification)                                         |
-| Depends on    | [service-layer.md](service-layer.md), [domain-model.md](domain-model.md) phase A                      |
-| Last reviewed | 2026-07-12                                                                                            |
+| Field         | Value                                                                            |
+| ------------- | -------------------------------------------------------------------------------- |
+| Status        | **Core — slices 1–2 shipped** (benchmark + extractor-filter items exploratory)   |
+| Work-stream   | A — Grounded Answers (verify-quote: B — Trust & Verification)                    |
+| Depends on    | [service-layer.md](service-layer.md), [domain-model.md](domain-model.md) phase A |
+| Last reviewed | 2026-07-14                                                                       |
 
 ## Intent
 
@@ -16,18 +16,19 @@ contract. Also home to **verify-quote**, the namesake anti-hallucination tool.
 
 ## Current state
 
-- **Extraction output is untracked.** `processBibtexFile` writes
-  `papers/markdown/<stem>.md` to disk (`src/workflows/process-bibtex.ts:188`) and
-  records nothing in the DB — no path column, no hash. Indexing therefore depends
-  on [domain-model.md](domain-model.md) phase A (manifestations) landing first.
+- Live: heading chunker (`src/services/chunker.ts`), `chunks` table,
+  external-content FTS5 tables with sync triggers (`src/db/migrations.ts`;
+  `citations_fts` covers title/authors/journal/bibtex_key/doi),
+  `citation-needed index` (`src/services/indexer.ts`), SearchService lexical
+  mode on FTS5 with LIKE rescue for pre-index databases, and verify-quote v2
+  (exact → FTS close-match with section provenance).
 - **No page boundaries survive extraction.** `@opendocsg/pdf2md` returns one
   flattened Markdown string (`src/verification/markdown.ts:14`), so
   page-level provenance is **impossible with the current extractor**.
   Provenance is section-level (see Design).
-- No FTS5 virtual tables exist anywhere; search is `LIKE` on title/authors
-  (`src/db/index.ts:310`).
-- better-sqlite3's bundled SQLite normally compiles FTS5 in, but this must be
-  proven by a smoke test, not assumed (phase 1 spike).
+- The indexer and verify-quote resolve Markdown through the shared stem-based
+  locator; manifestation-first resolution is
+  [domain-model.md](domain-model.md) phase A2 (core, slice 3).
 - Related exploratory items: markdown post-processing should run **before**
   chunking (artefact lines poison ranking); the quality-metrics item doubles as
   chunker input validation.
@@ -71,7 +72,7 @@ CREATE VIRTUAL TABLE chunks_fts USING fts5(
 );
 
 CREATE VIRTUAL TABLE citations_fts USING fts5(
-  title, authors, journal,
+  title, authors, journal, bibtex_key, doi,
   content='citations',
   content_rowid='id',
   tokenize='porter unicode61'
@@ -141,8 +142,9 @@ interface VerifyQuoteResponse {
 
 ### Backfill bridge: `index` CLI command
 
-A one-shot command walks citations → resolves the markdown manifestation (or
-stem match during transition) → hashes → chunks → populates FTS. Idempotent by
+A one-shot command walks citations → resolves extracted Markdown through the
+shared locator (manifestation-first from slice 3, stem match for legacy rows)
+→ hashes → chunks → populates FTS. Idempotent by
 `content_hash`; on a chunker version bump it eagerly re-chunks everything
 (simple and correct at this corpus size;
 [indexing-jobs.md](indexing-jobs.md) would make it incremental later).
@@ -174,11 +176,11 @@ service-layer kernel.)
 
 ## Backlog items
 
-Core — slice 1:
+Core — slice 1 (shipped — see BACKLOG.md § Completed):
 
 - [mcp] M - MCP tool: verify-quote v1 — normalize a quoted passage, exact-match against extracted Markdown; verdict exact|not-found (see docs/plans/fts5-full-text-search.md)
 
-Core — slice 2:
+Core — slice 2 (shipped — see BACKLOG.md § Completed):
 
 - [db] S - Spike: assert FTS5 available in bundled better-sqlite3 (CREATE VIRTUAL TABLE smoke test in CI, macOS ARM64 + Linux)
 - [verify] S - Heading-based Markdown chunker: sectionPath from heading trail, ~2000-char max split (see docs/plans/fts5-full-text-search.md)

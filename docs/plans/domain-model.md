@@ -1,11 +1,11 @@
 # Domain Model & Schema Evolution
 
-| Field         | Value                                                    |
-| ------------- | -------------------------------------------------------- |
-| Status        | **Core — slice 2** (phase A; phases B/C exploratory)     |
-| Work-stream   | E — Platform & Scale (serves A, B, D)                    |
-| Depends on    | — (schema foundation for fts5, zotero, storage-adapters) |
-| Last reviewed | 2026-07-12                                               |
+| Field         | Value                                                         |
+| ------------- | ------------------------------------------------------------- |
+| Status        | **Core — slice 2 shipped · slice 3** (phases B/C exploratory) |
+| Work-stream   | E — Platform & Scale (serves A, B, D)                         |
+| Depends on    | — (schema foundation for fts5, zotero, storage-adapters)      |
+| Last reviewed | 2026-07-14                                                    |
 
 ## Intent
 
@@ -17,26 +17,34 @@ query, and tool.
 
 ## Current state
 
-- `citations` (`src/db/schema.ts:22`) conflates work + file + verification state:
-  - `doi TEXT UNIQUE` is the de-facto identity; both import paths hard-skip DOI-less
-    entries (`src/workflows/process-bibtex.ts:97`, `src/mcp/tools/citations.ts:127`),
-    so DOI-less documents are currently **unrepresentable**.
-  - `pdf_path` holds exactly one absolute local path — at most one manifestation,
-    non-portable across machines.
-  - `bibtex_key` is an inline column: a second identifier scheme squatting in the row.
-  - Extracted Markdown has **no column at all** — written to
-    `papers/markdown/<stem>.md` (`src/workflows/process-bibtex.ts:188`) and
-    recoverable only by re-deriving the stem via `getCitationFileStem`
-    (`src/utils/file.ts:33`).
+- Phase A is live: versioned migration runner (`src/db/migrations.ts`,
+  `PRAGMA user_version`; the three ad-hoc migrators run first as idempotent
+  bootstrap), `manifestations` table owning file locations, `Database` deriving
+  `Citation.pdfPath` from the pdf manifestation with
+  `COALESCE(manifestation.path, pdf_path)`, transition dual-write of
+  `pdf_path`, sha256 hashing at write time (`src/utils/hash.ts`), and
+  import-time provenance recording (`src/workflows/process-bibtex.ts`).
+- Legacy-DB backfill is not a migration: manifestation rows for files that
+  predate the table appear when `citation-needed index` walks the corpus
+  (`src/services/indexer.ts`) or an import touches the row.
+- **Readers still bypass manifestations.** `resolveMarkdownPath`
+  (`src/services/markdown-locator.ts`) locates extracted Markdown by the
+  pdf-path-sibling stem heuristic, so:
+  - imports with a custom `--markdown-path` produce content that
+    `read-content`, `verify-quote`, and `index` cannot find, even though the
+    manifestation row records the true path;
+  - a citation with Markdown but no `pdfPath` is unreadable (the locator
+    returns null immediately);
+  - the source of truth is written but never read.
+- `citations` (`src/db/schema.ts:22`) remains the document table:
+  - `doi TEXT UNIQUE` is the identity; both import paths hard-skip DOI-less
+    entries, so DOI-less documents are **unrepresentable** (phase B).
+  - `bibtex_key` is an inline column: a second identifier scheme squatting in
+    the row (phase B).
 - `retrieval_log` (`src/db/schema.ts:45`) already cleanly separates the
   download-attempt entity.
-- **No migration framework.** `initSchema` (`src/db/index.ts:54`) is
-  `CREATE TABLE IF NOT EXISTS` plus three ad-hoc migrators: `ensureAccessTypeColumn`
-  (`:80`), `migrateLegacyCitationSchema` table rebuild (`:88`),
-  `migrateRetrievalLogForeignKey` rebuild (`:158`). No `PRAGMA user_version` use.
-- No content hashes anywhere in the codebase.
-- Every SQL read/write already goes through the `Database` class — the single
-  chokepoint that makes the adapter approach below cheap.
+- Every SQL read/write goes through the `Database` class — the single
+  chokepoint that keeps the adapter approach cheap.
 
 ## Design
 
@@ -107,6 +115,25 @@ CREATE INDEX idx_manifestations_citation_id ON manifestations (citation_id);
   ([indexing-jobs.md](indexing-jobs.md),
   [vector-hybrid-search.md](vector-hybrid-search.md)).
 
+### Phase A2 — manifestation-first reads (core, slice 3)
+
+`resolveMarkdownPath` stays the single content-resolution chokepoint but gains
+the `Database`: resolve `manifestations(kind = 'markdown-extracted')` first
+(existence-checked; newest row wins, which `Database.getManifestation` already
+implements), falling back to the stem heuristic only for legacy databases
+whose rows predate manifestations. A fallback hit **self-heals** by upserting
+the manifestation row it just found, so every successful legacy read converges
+the database toward full manifestation coverage.
+
+The `pdfPath` precondition disappears: markdown-only citations resolve. The
+locator remains the seam where [storage-adapters.md](storage-adapters.md)
+phase 1 later routes reads through `LocalFileAdapter`.
+
+**Fallback removal criterion**: once a release has shipped with self-healing
+reads plus the `index` backfill walk, and fallback hits have stopped appearing
+in logs, the stem heuristic is deleted (`getCitationFileStem` remains for
+write-side naming only).
+
 ### Phase B — identifiers (exploratory)
 
 ```sql
@@ -151,22 +178,28 @@ is rejected until a single manifestation genuinely lives at two places.
 
 ## Phasing
 
-1. **A (core, slice 2)**: migration runner → manifestations table → adapter
-   reads + transition write → backfill → write-time hashing. Prerequisite for
-   [fts5-full-text-search.md](fts5-full-text-search.md).
-2. **B (exploratory)**: identifiers table + DOI-less admission, populated by
+1. **A (core, slice 2 — shipped)**: migration runner → manifestations table →
+   adapter reads + transition write → backfill → write-time hashing.
+2. **A2 (core, slice 3)**: manifestation-first locator with self-healing stem
+   fallback → fallback deletion once trusted.
+3. **B (exploratory)**: identifiers table + DOI-less admission, populated by
    [zotero-integration.md](zotero-integration.md) and arXiv IDs known at
    resolve time.
-3. **C (exploratory)**: path → URI migration with storage adapters.
+4. **C (exploratory)**: path → URI migration with storage adapters.
 
 ## Backlog items
 
-Core — slice 2:
+Core — slice 2 (shipped — see BACKLOG.md § Completed):
 
 - [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
 - [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
 - [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
 - [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
+
+Core — slice 3:
+
+- [storage] S - Manifestation-first content resolution: markdown-locator reads manifestations(kind='markdown-extracted') via Database, existence-checked; legacy stem fallback self-heals a manifestation row on hit (see docs/plans/domain-model.md)
+- [test] S - Locator coverage: custom --markdown-path import readable via MCP, markdown-only manifestation, manifestation row with missing file (see docs/plans/domain-model.md)
 
 Exploratory:
 
@@ -185,6 +218,10 @@ Exploratory:
 - Transition-window test: pdf_path column still written in the transition
   release; dormant (unchanged) afterwards.
 - Hash helper: known-vector test + large-file streaming test.
+- Locator (slice 3): manifestation row wins over stem candidates; custom
+  markdown-dir fixture resolves; markdown-only citation (no pdfPath) resolves;
+  manifestation whose file is deleted degrades without crashing; a fallback
+  hit upserts the row (second read is served from manifestations).
 
 ## Open questions
 
@@ -194,8 +231,8 @@ None currently.
 
 - [fts5-full-text-search.md](fts5-full-text-search.md) — requires phase A
   (manifestations + hashes) before chunking.
-- [service-layer.md](service-layer.md) — read-content switches from stem
-  fallback to manifestations lookup when phase A lands.
+- [service-layer.md](service-layer.md) — read-content, verify-quote, and the
+  indexer all resolve content through the phase-A2 locator.
 - [zotero-integration.md](zotero-integration.md) — needs phase B (identifiers);
   attachment linking writes manifestations.
 - [storage-adapters.md](storage-adapters.md) — drives phase C (URIs,

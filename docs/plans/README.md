@@ -27,26 +27,31 @@ gateways — never per-surface APIs**.
 ## Core scope
 
 The scheduled surface is one workflow: **grounded answers from your own
-library** — import → download/extract (works today) → index → find
-(`search-citations`) → read (`read-content`) → check (`verify-quote`), all over
-MCP. Two slices, tracked in [BACKLOG.md](../../BACKLOG.md) § Core. Everything
-else is **Exploratory**: designed, parked in these docs, unscheduled until the
-core loop proves valuable in daily use. Interim discovery: compose a community
-Semantic Scholar/OpenAlex MCP server alongside citation-needed.
+library** — import → download/extract → index → find (`search-citations`) →
+read (`read-content`) → check (`verify-quote`), all over MCP. Three slices,
+tracked in [BACKLOG.md](../../BACKLOG.md) § Core: slices 1–2 are shipped; slice
+3 consolidates what they left split — one import pipeline,
+manifestation-first content resolution, an honest retrieval cascade, and
+test-harness guardrails. Everything else is **Exploratory**: designed, parked
+in these docs, unscheduled until the core loop proves valuable in daily use.
+Interim discovery: compose a community Semantic Scholar/OpenAlex MCP server
+alongside citation-needed.
 
 ## Plan status
 
-| Plan                                                 | Status                   | Work-stream | Depends on                  |
-| ---------------------------------------------------- | ------------------------ | ----------- | --------------------------- |
-| [service-layer.md](service-layer.md)                 | Core — slice 1           | A           | —                           |
-| [domain-model.md](domain-model.md)                   | Core — slice 2 (phase A) | E           | —                           |
-| [fts5-full-text-search.md](fts5-full-text-search.md) | Core — slice 2           | A           | service-layer, domain-model |
-| [indexing-jobs.md](indexing-jobs.md)                 | Exploratory              | E           | domain-model, fts5          |
-| [http-api.md](http-api.md)                           | Exploratory              | D           | service-layer               |
-| [zotero-integration.md](zotero-integration.md)       | Exploratory              | D           | domain-model                |
-| [storage-adapters.md](storage-adapters.md)           | Exploratory              | E           | domain-model                |
-| [vector-hybrid-search.md](vector-hybrid-search.md)   | Deferred                 | A           | fts5, indexing-jobs         |
-| [citation-graph.md](citation-graph.md)               | Exploratory              | C           | domain-model, indexing-jobs |
+| Plan                                                         | Status                           | Work-stream | Depends on                                                |
+| ------------------------------------------------------------ | -------------------------------- | ----------- | --------------------------------------------------------- |
+| [service-layer.md](service-layer.md)                         | Core — slice 1 shipped · slice 3 | A           | —                                                         |
+| [domain-model.md](domain-model.md)                           | Core — slice 2 shipped · slice 3 | E           | —                                                         |
+| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core — slices 1–2 shipped        | A           | service-layer, domain-model                               |
+| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core — slice 3 (trims)           | C           | —                                                         |
+| [indexing-jobs.md](indexing-jobs.md)                         | Exploratory                      | E           | domain-model, fts5                                        |
+| [http-api.md](http-api.md)                                   | Exploratory                      | D           | service-layer                                             |
+| [zotero-integration.md](zotero-integration.md)               | Exploratory                      | D           | domain-model                                              |
+| [storage-adapters.md](storage-adapters.md)                   | Exploratory                      | E           | domain-model                                              |
+| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                         | A           | fts5, indexing-jobs                                       |
+| [citation-graph.md](citation-graph.md)                       | Exploratory                      | C           | domain-model, indexing-jobs                               |
+| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                      | C           | domain-model, fts5-full-text-search, later citation-graph |
 
 ## Work-streams
 
@@ -71,13 +76,13 @@ import`, digest files out; the SQLite DB is **not** a public API for siblings
 
 ## Landing order
 
-1. **Core slice 1 — kernel** (service-layer): SearchService + `search-citations`,
-   `read-content`, `verify-quote` v1, tests. No schema changes, no new
-   dependencies — one PR.
-2. **Core slice 2 — grounded full-text search** (domain-model phase A + fts5):
-   migration runner → manifestations → hashes → chunker → chunks → FTS5 →
-   `index` command → verify-quote v2.
-3. **Re-triage Exploratory** against real usage of the core loop
+Slices 1–2 are shipped ([BACKLOG.md](../../BACKLOG.md) § Completed). Next:
+
+1. **Core slice 3 — one pipeline, one locator**: manifestation-first locator
+   with self-healing fallback (domain-model phase A2) → ImportService
+   consolidation with full-pipeline MCP default (service-layer) →
+   test-harness guardrails → cascade trims (retrieval-pipeline).
+2. **Re-triage Exploratory** against real usage of the core loop
    ([BACKLOG.md](../../BACKLOG.md) § Exploratory).
 
 ## Review protocol

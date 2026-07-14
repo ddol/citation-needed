@@ -150,7 +150,7 @@ None currently.
 - [indexing-jobs.md](indexing-jobs.md) — local-API incremental import enqueues
   jobs.
 - [service-layer.md](service-layer.md) — the importer should reuse
-  ImportService once its phase 2 lands.
+  ImportService once core slice 3 lands.
 - [citation-graph.md](citation-graph.md) — complementary: the graph is the
   discovery/acquisition channel; Zotero remains the curated-library workflow
   sync.
