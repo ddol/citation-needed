@@ -173,8 +173,10 @@ export async function processBibtexFile(
       continue;
     }
 
+    const existing =
+      typeof db.getCitation === 'function' ? db.getCitation(normalizedDoi) : undefined;
     const stored = db.addCitation(normalizedEntry);
-    importedCount += 1;
+    if (!existing) importedCount += 1;
     emitProgress({
       doi: normalizedDoi,
       label,

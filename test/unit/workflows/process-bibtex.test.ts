@@ -264,4 +264,39 @@ describe('processBibtexFile', () => {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  test('does not count duplicate DOIs as newly imported', async () => {
+    const tempRoot = makeTempRoot();
+    const bibtexDir = path.join(tempRoot, 'refs');
+    const bibtexPath = path.join(bibtexDir, 'library.bib');
+    const existingCitation = { id: 7, doi: '10.1234/test.paper' };
+    const getCitation = jest.fn().mockReturnValue(existingCitation);
+    const addCitation = jest.fn().mockReturnValue(existingCitation);
+
+    fs.mkdirSync(bibtexDir, { recursive: true });
+    fs.writeFileSync(
+      bibtexPath,
+      `@article{paper, title={Test Paper}, doi={10.1234/test.paper}, author={Test Author}}`,
+      'utf-8'
+    );
+
+    try {
+      const result = await processBibtexFile(bibtexPath, {
+        db: { getCitation, addCitation } as never,
+        retrievePdf: async () => ({
+          success: false,
+          source: 'cache',
+          message: 'already handled elsewhere',
+        }),
+        extractMarkdown: async () => '# Test Paper\n',
+      });
+
+      expect(result.importedCount).toBe(0);
+      expect(addCitation).toHaveBeenCalledWith(
+        expect.objectContaining({ doi: '10.1234/test.paper' })
+      );
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
 });
