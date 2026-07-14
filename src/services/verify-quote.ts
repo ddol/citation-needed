@@ -122,12 +122,18 @@ export class VerifyQuoteService {
     const query = candidateQuery(needle);
     if (!query) return [];
 
-    const needleTokens = new Set(needle.split(' '));
+    const tokenize = (text: string): string[] =>
+      text
+        .split(/\s+/)
+        .map((token) => token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+        .filter((token) => token.length > 0);
+
+    const needleTokens = new Set(tokenize(needle));
     return this.db
       .searchChunkCandidates(query, { doi, limit: MAX_MATCHES * 2 })
       .map((candidate) => {
         const normalized = normalizeForMatch(candidate.text);
-        const candidateTokens = new Set(normalized.split(' '));
+        const candidateTokens = new Set(tokenize(normalized));
         let present = 0;
         for (const token of needleTokens) {
           if (candidateTokens.has(token)) present += 1;
