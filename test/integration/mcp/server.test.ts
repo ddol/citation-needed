@@ -13,6 +13,7 @@ jest.mock('../../../src/db/index', () => {
     updateVerificationStatus: jest.fn(),
     updateAccessType: jest.fn(),
     searchCitations: jest.fn().mockReturnValue([]),
+    getChunksForCitation: jest.fn().mockReturnValue([]),
     close: jest.fn(),
   };
   return {
@@ -333,6 +334,7 @@ describe('MCP Server', () => {
 
     const db = getDatabase();
     (db.getCitation as jest.Mock).mockReturnValue({
+      id: 1,
       doi: '10/verify',
       title: 'Paper',
       bibtexKey: 'key2024',

@@ -46,9 +46,17 @@ export interface CitationSummary {
   verificationStatus?: VerificationStatus;
 }
 
+export interface SearchMatch {
+  chunkOrdinal: number;
+  sectionPath?: string[];
+  snippet: string;
+}
+
 export interface SearchResultEntry {
   citation: CitationSummary;
   matchedFields: string[];
+  /** Body-text hits with section provenance; present once the FTS index exists. */
+  matches?: SearchMatch[];
 }
 
 export interface SearchResponse {
@@ -71,6 +79,8 @@ export interface VerifyQuoteMatch {
   doi: string;
   similarity: number;
   snippet: string;
+  sectionPath?: string[];
+  chunkOrdinal?: number;
 }
 
 export interface VerifyQuoteResponse {

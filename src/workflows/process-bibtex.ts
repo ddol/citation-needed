@@ -10,7 +10,55 @@ import type { ParsedEntry } from '../parsers/bibtex';
 import { isValidDoi, normalizeDoi } from '../parsers/doi';
 import { RetrievalOrchestrator } from '../retrieval/index';
 import { ensureDir, getCitationDisplayName, getCitationFileStem } from '../utils/file';
+import { sha256File, sha256String } from '../utils/hash';
 import { extractPdfMarkdown } from '../verification/markdown';
+
+const EXTRACTOR_NAME = '@opendocsg/pdf2md';
+
+function resolveExtractorVersion(): string {
+  try {
+    const pkg = require('@opendocsg/pdf2md/package.json') as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+const EXTRACTOR_VERSION = resolveExtractorVersion();
+
+/**
+ * Record file manifestations with content hashes at write time (the source
+ * of truth for file locations and incremental re-indexing). Provenance must
+ * never break an import, and legacy mock DBs in tests may not implement
+ * upsertManifestation.
+ */
+async function recordManifestations(
+  db: Database,
+  citationId: number,
+  pdfPath: string,
+  markdownPath: string,
+  markdown: string
+): Promise<void> {
+  if (typeof db.upsertManifestation !== 'function') return;
+  try {
+    db.upsertManifestation({
+      citationId,
+      kind: 'markdown-extracted',
+      path: markdownPath,
+      contentHash: sha256String(markdown),
+      extractorName: EXTRACTOR_NAME,
+      extractorVersion: EXTRACTOR_VERSION,
+    });
+    db.upsertManifestation({
+      citationId,
+      kind: 'pdf',
+      path: pdfPath,
+      contentHash: await sha256File(pdfPath),
+    });
+  } catch {
+    // Never let provenance recording fail the import loop.
+  }
+}
 
 export interface ProcessBibtexProgress {
   doi?: string;
@@ -186,6 +234,9 @@ export async function processBibtexFile(
       const markdown = await extractMarkdown(retrieval.localPath);
       const markdownFile = path.join(markdownPath, `${fileStem}.md`);
       fs.writeFileSync(markdownFile, markdown, 'utf-8');
+      if (stored?.id != null) {
+        await recordManifestations(db, stored.id, retrieval.localPath, markdownFile, markdown);
+      }
       markdownCount += 1;
       emitProgress({
         doi: normalizedDoi,
