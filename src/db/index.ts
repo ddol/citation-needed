@@ -799,8 +799,11 @@ function decodeCursor(cursor: string): CursorState {
 let _instance: Database | undefined;
 
 export function getDatabase(dbPath?: string): Database {
+  if (dbPath) {
+    return new Database(dbPath);
+  }
   if (!_instance) {
-    _instance = new Database(dbPath);
+    _instance = new Database();
   }
   return _instance;
 }
