@@ -37,7 +37,7 @@ workflows/process-bibtex.ts
     │
     ├──► retrieval/index.ts
     │         │
-    │         ├──► resolvers/ (Unpaywall, then arXiv by stored title)
+    │         ├──► PDF download cascade (Unpaywall, then arXiv by stored title)
     │         └──► downloaders/ (OpenAccess, Auth)
     │
     └──► verification/markdown.ts
@@ -50,6 +50,9 @@ papers/markdown/*.md output
 locates extracted Markdown, records/refreshes manifestations, chunks Markdown by
 heading, and populates the FTS5 index used by `search-citations` and
 `verify-quote`.
+
+The Crossref/DOI resolver still exists as a metadata helper, but it is not part
+of the active PDF download cascade today.
 
 ## Database Schema
 
