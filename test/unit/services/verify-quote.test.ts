@@ -3,6 +3,7 @@ import os from 'os';
 import fs from 'fs';
 import { Database } from '../../../src/db/index';
 import { normalizeForMatch, VerifyQuoteService } from '../../../src/services/verify-quote';
+import { IndexService } from '../../../src/services/indexer';
 
 // Each suite gets its own temp dir so parallel jest workers never race on a
 // shared cleanup path.
@@ -96,6 +97,51 @@ describe('VerifyQuoteService', () => {
 
   test('guards against too-short quotes', () => {
     expect(new VerifyQuoteService(db).verify({ quote: 'short' }).status).toBe('quote-too-short');
+  });
+
+  test('exact matches carry section provenance once the corpus is indexed', async () => {
+    await new IndexService(db).indexCorpus();
+
+    const result = new VerifyQuoteService(db).verify({
+      quote: 'classification of "trajectory anomalies" uses lidar',
+      doi: '10.1/v.1',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.response.verdict).toBe('exact');
+    expect(result.response.matches[0].sectionPath).toEqual(['Anomaly Detection']);
+    expect(result.response.matches[0].chunkOrdinal).toBe(0);
+  });
+
+  test('close-match catches a single misquoted word with provenance', async () => {
+    await new IndexService(db).indexCorpus();
+
+    const result = new VerifyQuoteService(db).verify({
+      quote: 'classification of "trajectory anomalies" uses radar point clouds',
+      doi: '10.1/v.1',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.response.verdict).toBe('close-match');
+    expect(result.response.matches[0].doi).toBe('10.1/v.1');
+    expect(result.response.matches[0].similarity).toBeGreaterThanOrEqual(0.8);
+    expect(result.response.matches[0].similarity).toBeLessThan(1);
+    expect(result.response.matches[0].sectionPath).toEqual(['Anomaly Detection']);
+  });
+
+  test('close-match fallback searches the whole corpus when doi is omitted', async () => {
+    await new IndexService(db).indexCorpus();
+
+    const result = new VerifyQuoteService(db).verify({
+      quote: 'classification of "trajectory anomalies" uses radar point clouds',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.response.verdict).toBe('close-match');
+    expect(result.response.matches.map((m) => m.doi)).toEqual(['10.1/v.1']);
   });
 
   test('reports unknown DOI and missing markdown distinctly', () => {

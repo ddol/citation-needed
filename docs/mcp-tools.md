@@ -103,12 +103,23 @@ trimmed summaries; use `get-citation` for full details.
         "journal": "J Traffic",
         "verificationStatus": "downloaded"
       },
-      "matchedFields": ["title"]
+      "matchedFields": ["title"],
+      "matches": [
+        {
+          "chunkOrdinal": 1,
+          "sectionPath": ["Methods", "Classification"],
+          "snippet": "…uses <b>lidar</b> point clouds…"
+        }
+      ]
     }
   ],
   "nextCursor": "…"
 }
 ```
+
+Search runs on the FTS5 index (bm25 ranking, stemming, phrase support via a
+fully quoted query) once `citation-needed index` has run; `matches` carries
+body-text hits with section provenance. Substring queries fall back to LIKE.
 
 ---
 
@@ -150,8 +161,20 @@ hyphenation, unicode quotes/ligatures, and case are folded.
 ```json
 {
   "verdict": "exact",
-  "matches": [{ "doi": "10.1234/example", "similarity": 1, "snippet": "…" }]
+  "matches": [
+    {
+      "doi": "10.1234/example",
+      "similarity": 1,
+      "snippet": "…",
+      "sectionPath": ["Methods", "Classification"],
+      "chunkOrdinal": 1
+    }
+  ]
 }
 ```
 
-`verdict` is `exact` or `not-found` (omit `doi` to search the whole corpus).
+`verdict` is `exact`, `close-match`, or `not-found` (omit `doi` to search the
+whole corpus). `close-match` is the FTS-backed fuzzy fallback for minor
+misquotes: similarity is the fraction of quote tokens found in the best
+candidate chunk (threshold 0.8). Section provenance appears once the corpus is
+indexed via `citation-needed index`.

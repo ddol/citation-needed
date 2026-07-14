@@ -63,6 +63,30 @@ describe('SearchService', () => {
     expect(results[0].matchedFields).toEqual(['title', 'authors', 'bibtexKey', 'doi']);
   });
 
+  test('includes body-match snippets with provenance once chunks exist', () => {
+    const citation = db.addCitation({ doi: '10.1/s.3', title: 'Chunky', bibtexKey: 'chunky2024' });
+    const manifestationId = db.upsertManifestation({
+      citationId: citation.id!,
+      kind: 'markdown-extracted',
+      path: '/virtual/chunky.md',
+      contentHash: 'hash-chunky',
+    });
+    db.replaceChunks({
+      manifestationId,
+      citationId: citation.id!,
+      contentHash: 'hash-chunky',
+      chunkerVersion: 1,
+      chunks: [{ ordinal: 0, sectionPath: ['Intro'], text: 'grounded retrieval with snippets' }],
+    });
+
+    const { results } = new SearchService(db).search({ query: 'snippets' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].citation.doi).toBe('10.1/s.3');
+    expect(results[0].matches?.[0].snippet).toContain('<b>');
+    expect(results[0].matches?.[0].sectionPath).toEqual(['Intro']);
+  });
+
   test('paginates via cursor without duplicates', () => {
     for (let i = 0; i < 3; i += 1) {
       db.addCitation({ doi: `10.1/c.${i}`, title: `Common Term ${i}` });
