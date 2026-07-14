@@ -73,7 +73,11 @@ function isOffsetCursor(cursor: string): boolean {
 }
 
 function matchedFields(citation: Citation, needle: string): string[] {
-  return MATCH_FIELDS.filter((field) => citation[field]?.toLowerCase().includes(needle));
+  const tokens = needle.trim().split(/\s+/).filter(Boolean);
+  return MATCH_FIELDS.filter((field) => {
+    const value = citation[field]?.toLowerCase();
+    return value ? tokens.every((token) => value.includes(token)) : false;
+  });
 }
 
 function toSummary(citation: Citation): CitationSummary {
