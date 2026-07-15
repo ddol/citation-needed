@@ -6,6 +6,7 @@ import { registerServerCommand } from './commands/server';
 import { registerAuthCommand } from './commands/auth';
 import { registerIndexCommand } from './commands/index-corpus';
 import { registerResetCommand } from './commands/reset';
+import { registerCheckLocalPapersCommand } from './commands/check-local-papers';
 import { VERSION } from '../utils/version';
 
 export function runCli(argv: string[]): void {
@@ -22,6 +23,7 @@ export function runCli(argv: string[]): void {
   registerAuthCommand(program);
   registerIndexCommand(program);
   registerResetCommand(program);
+  registerCheckLocalPapersCommand(program);
 
   program.parse(argv);
 }
