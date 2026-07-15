@@ -52,6 +52,9 @@ citation-needed import-bibtex references.bib
 # Override the PDF output directory for the run
 citation-needed import-bibtex references.bib --paper-path ./downloaded-papers
 
+# Check an existing local PDF folder against BibTeX without web requests
+citation-needed check-local-papers references.bib --paper-path ./downloaded-papers
+
 # List stored citations
 citation-needed list
 
@@ -73,6 +76,8 @@ citation-needed server
 ```
 
 By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. File naming prefers the BibTeX key, then DOI. Use `--paper-path` and `--markdown-path` to change output directories for that run.
+
+`check-local-papers` is local-only: it scans PDF files in `--paper-path`, extracts text locally, and reports `matched`, `missing`, `mismatch`, `ambiguous`, or `skipped` entries without hitting Unpaywall, arXiv, Crossref, or publisher sites.
 
 The standalone `download` command only downloads a PDF and updates an existing citation when that DOI is already in the database. It requires either `--url` or `--email` for an Unpaywall lookup; the fuller retrieval cascade, Markdown extraction, and proxy-authenticated fallback live in `import-bibtex`.
 
