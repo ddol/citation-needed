@@ -31,9 +31,16 @@ export class RetrievalOrchestrator {
 
   constructor(db: Database, authConfig: AuthConfig = {}, storageDir?: string) {
     this.db = db;
-    this.authConfig = authConfig;
+    // CITATION_NEEDED_EMAIL already configures the downloader's User-Agent and
+    // the DOI resolver, so honour it for Unpaywall too. Without this, setting
+    // only the env var silently skipped Unpaywall — the widest open-access
+    // source we have — and dumped every lookup on the arXiv fallback.
+    this.authConfig = {
+      ...authConfig,
+      email: authConfig.email || process.env.CITATION_NEEDED_EMAIL,
+    };
     this.storageDir = storageDir;
-    this.downloader = new OpenAccessDownloader({ storageDir, email: authConfig.email });
+    this.downloader = new OpenAccessDownloader({ storageDir, email: this.authConfig.email });
   }
 
   async retrievePdf(doi: string, identity?: CitationFileIdentity): Promise<RetrievalResult> {

@@ -14,8 +14,19 @@ export const ARXIV_TIMEOUT_MS = 30_000;
 /** Rate limit between PDF downloads (Unpaywall / arXiv mirrors). */
 export const OPEN_ACCESS_RATE_LIMIT_MS = 1_000;
 
-/** Rate limit between arXiv search calls — arXiv asks for ~1 request/second. */
-export const ARXIV_RATE_LIMIT_MS = 2_000;
+/**
+ * Rate limit between arXiv search calls. arXiv's terms ask for **one request
+ * every three seconds**, not one per second. Running at 2s got a 56-entry
+ * import 429-ed on 36 of 54 lookups, which surfaced as "no PDF found" rather
+ * than as the throttling it actually was.
+ */
+export const ARXIV_RATE_LIMIT_MS = 3_000;
+
+/** Total arXiv attempts per query, including the first, before giving up. */
+export const ARXIV_MAX_ATTEMPTS = 4;
+
+/** First backoff pause after a throttled/failed arXiv query; doubles per retry. */
+export const ARXIV_RETRY_BASE_MS = 5_000;
 
 /** PDF download HTTP timeout (open-access downloader). */
 export const OPEN_ACCESS_DOWNLOAD_TIMEOUT_MS = 60_000;

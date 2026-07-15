@@ -1,4 +1,14 @@
+// Collapse the real 3s rate limit and 5/10/20s backoff to zero: these tests
+// assert retry *behaviour*, and the real delays would add ~45s of sleeping.
+jest.mock('../../../src/retrieval/config', () => ({
+  ...jest.requireActual('../../../src/retrieval/config'),
+  ARXIV_RATE_LIMIT_MS: 0,
+  ARXIV_RETRY_BASE_MS: 0,
+}));
+
+// eslint-disable-next-line import/first, import/order
 import { ArxivResolver } from '../../../src/retrieval/resolvers/arxiv';
+// eslint-disable-next-line import/first, import/order
 import { UnpaywallResolver } from '../../../src/retrieval/resolvers/unpaywall';
 
 // Mock axios to avoid real HTTP calls

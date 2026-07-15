@@ -2,7 +2,12 @@ import axios from 'axios';
 import { createLogger } from '../../utils/logger';
 import { RateLimiter } from '../../utils/rate-limiter';
 import type { ResolverResult } from '../../models/retrieval';
-import { ARXIV_RATE_LIMIT_MS, ARXIV_TIMEOUT_MS } from '../config';
+import {
+  ARXIV_MAX_ATTEMPTS,
+  ARXIV_RATE_LIMIT_MS,
+  ARXIV_RETRY_BASE_MS,
+  ARXIV_TIMEOUT_MS,
+} from '../config';
 
 const logger = createLogger('arxiv-resolver');
 const requestLimiter = new RateLimiter(ARXIV_RATE_LIMIT_MS);
@@ -47,28 +52,36 @@ export class ArxivResolver {
     }
   }
 
+  /**
+   * arXiv throttles hard, and a throttled query is not an absent paper: a 429
+   * that escapes here becomes "no PDF found" for a paper that arXiv hosts. So
+   * back off and retry rather than surfacing the failure as a miss.
+   */
   private async queryArxiv(searchQuery: string): Promise<ArxivResult[]> {
     const url = `https://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=5`;
-    await requestLimiter.wait();
+    let lastError: unknown;
 
-    try {
-      const response = await axios.get<string>(url, {
-        timeout: ARXIV_TIMEOUT_MS,
-        responseType: 'text',
-      });
-      return this.parseAtomResponse(response.data);
-    } catch (error) {
-      if (shouldRetry(error)) {
-        await requestLimiter.wait();
-        const retryResponse = await axios.get<string>(url, {
+    for (let attempt = 0; attempt < ARXIV_MAX_ATTEMPTS; attempt += 1) {
+      await requestLimiter.wait();
+
+      try {
+        const response = await axios.get<string>(url, {
           timeout: ARXIV_TIMEOUT_MS,
           responseType: 'text',
         });
-        return this.parseAtomResponse(retryResponse.data);
+        return this.parseAtomResponse(response.data);
+      } catch (error) {
+        lastError = error;
+        if (!shouldRetry(error) || attempt === ARXIV_MAX_ATTEMPTS - 1) {
+          break;
+        }
+        const pause = backoffMs(error, attempt);
+        logger.warn('arXiv query throttled; backing off', { attempt: attempt + 1, pause });
+        await sleep(pause);
       }
-
-      throw error;
     }
+
+    throw lastError;
   }
 
   private parseAtomResponse(xml: string): ArxivResult[] {
@@ -181,11 +194,35 @@ function stripQueryPunctuation(title: string): string {
     .trim();
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+interface RetryableError {
+  code?: string;
+  response?: { status?: number; headers?: Record<string, unknown> };
+}
+
 function shouldRetry(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
   }
 
-  const maybeAxiosError = error as { code?: string; response?: { status?: number } };
-  return maybeAxiosError.code === 'ECONNABORTED' || maybeAxiosError.response?.status === 429;
+  const { code, response } = error as RetryableError;
+  const status = response?.status;
+  // 429 = throttled; 5xx = arXiv having a moment. Both are worth another try.
+  return code === 'ECONNABORTED' || status === 429 || (status != null && status >= 500);
+}
+
+/** Honour Retry-After when arXiv sends it, else exponential backoff. */
+function backoffMs(error: unknown, attempt: number): number {
+  const header = (error as RetryableError)?.response?.headers?.['retry-after'];
+  const retryAfterSeconds = Number(header);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return retryAfterSeconds * 1000;
+  }
+
+  return ARXIV_RETRY_BASE_MS * 2 ** attempt;
 }

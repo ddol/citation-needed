@@ -4,18 +4,17 @@ import fs from 'fs';
 import { Database } from '../../../src/db/index';
 import { resetDatabase } from '../../../src/cli/commands/reset';
 
-function makeTestDb(): { db: Database; dbPath: string } {
-  const dbPath = path.join(
-    os.tmpdir(),
-    'citation-needed-test',
-    `reset-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-  );
-  return { db: new Database(dbPath), dbPath };
+// Per-suite mkdtemp dir: a shared fixture directory races across parallel Jest
+// workers, where another suite's afterAll cleanup deletes this suite's DB
+// mid-test.
+function makeTestDb(): { db: Database; dbDir: string } {
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-reset-db-'));
+  return { db: new Database(path.join(dbDir, 'citations.db')), dbDir };
 }
 
 describe('resetDatabase', () => {
   let db: Database;
-  let dbPath: string;
+  let dbDir: string;
   let tempDir: string;
 
   function seedCitation(doi: string, pdfPath?: string): number {
@@ -29,13 +28,13 @@ describe('resetDatabase', () => {
   }
 
   beforeEach(() => {
-    ({ db, dbPath } = makeTestDb());
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-reset-'));
+    ({ db, dbDir } = makeTestDb());
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-reset-files-'));
   });
 
   afterEach(() => {
     db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    fs.rmSync(dbDir, { recursive: true, force: true });
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 

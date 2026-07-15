@@ -1,9 +1,21 @@
 import axios from 'axios';
+
+// Collapse the real 3s rate limit and 5/10/20s backoff to zero: these tests
+// assert retry *behaviour*, and the real delays would add ~45s of sleeping.
+jest.mock('../../../../src/retrieval/config', () => ({
+  ...jest.requireActual('../../../../src/retrieval/config'),
+  ARXIV_RATE_LIMIT_MS: 0,
+  ARXIV_RETRY_BASE_MS: 0,
+}));
+
+// eslint-disable-next-line import/first, import/order
 import {
   ArxivResolver,
   selectArxivMatch,
   titleSimilarity,
 } from '../../../../src/retrieval/resolvers/arxiv';
+// eslint-disable-next-line import/first, import/order
+import { ARXIV_MAX_ATTEMPTS } from '../../../../src/retrieval/config';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -61,6 +73,64 @@ describe('ArxivResolver.searchByTitle', () => {
         },
       ],
     });
+  });
+});
+
+describe('ArxivResolver throttling', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  function throttled(retryAfter?: string): unknown {
+    return {
+      response: { status: 429, headers: retryAfter ? { 'retry-after': retryAfter } : {} },
+    };
+  }
+
+  // Regression: a 429 surfaced as `arxiv(no matching paper)`, so a throttled
+  // lookup was indistinguishable from a paper arXiv does not host. 36 of 54
+  // failures in a real 56-entry import were this.
+  test('retries a 429 and succeeds, rather than reporting the paper as missing', async () => {
+    mockedAxios.get
+      .mockRejectedValueOnce(throttled())
+      .mockResolvedValueOnce({ data: atomFeed([{ id: '1703.07402', title: 'DeepSORT' }]) });
+
+    const result = await new ArxivResolver().searchByTitle('DeepSORT');
+
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        { arxivId: '1703.07402', pdfUrl: 'https://arxiv.org/pdf/1703.07402', title: 'DeepSORT' },
+      ],
+    });
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+  });
+
+  test('gives up after the attempt budget and reports the error, not an empty result', async () => {
+    mockedAxios.get.mockRejectedValue(throttled());
+
+    const result = await new ArxivResolver().searchByTitle('Anything');
+
+    expect(result.ok).toBe(false);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(ARXIV_MAX_ATTEMPTS);
+  });
+
+  test('retries 5xx as well as 429', async () => {
+    mockedAxios.get
+      .mockRejectedValueOnce({ response: { status: 503, headers: {} } })
+      .mockResolvedValueOnce({ data: atomFeed([{ id: '1/x', title: 'X' }]) });
+
+    const result = await new ArxivResolver().searchByTitle('X');
+
+    expect(result.ok).toBe(true);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not retry a non-transient error', async () => {
+    mockedAxios.get.mockRejectedValue({ response: { status: 400, headers: {} } });
+
+    const result = await new ArxivResolver().searchByTitle('X');
+
+    expect(result.ok).toBe(false);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 });
 
