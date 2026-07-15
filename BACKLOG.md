@@ -155,6 +155,8 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [fetch] S - Honour each host's published rate limit and back off on 429/5xx via shared http-retry; a throttled lookup no longer reports as a missing paper (see DESIGN.md § Retrieval and access)
 - [fetch] S - Shared title-match with two thresholds: strict for title search, loose for DOI lookups where the DOI already proves identity (see DESIGN.md § Retrieval and access)
 - [fetch] S - Contact email enables Unpaywall/Semantic Scholar: honour CITATION_NEEDED_EMAIL, treat placeholder domains as unset, and name the fix in attempts (see docs/auth-setup.md)
+- [tui] S - Import progress: finished rows move to Ink's <Static> so the live tree stays short; a live tree taller than the terminal made Ink clear and repaint the whole screen every frame (see DESIGN.md § Terminal output)
+- [fetch] M - Recover throttled DOIs: RetrievalResult.throttled marks a DOI refused before lookup; the import queues those, waits THROTTLE_COOLDOWN_MS, clears the breaker and retries once (see docs/plans/retrieval-pipeline.md)
 - [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
 - [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
 - [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems

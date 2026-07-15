@@ -54,6 +54,16 @@ paper the source does not have. Retry with backoff (`src/retrieval/http-retry.ts
 `Retry-After` when offered, else exponential; 429 and 5xx), and surface an
 exhausted budget as an error, never as an empty result.
 
+**Carry "throttled" out as a flag, not a phrase.** `RetrievalResult.throttled`
+says this DOI was refused before it was looked up, so waiting changes the answer
+— unlike a paper no source has. Callers decide what to retry from that flag;
+nothing downstream should be parsing a message string to find out.
+
+**Back off from a refusal; do not retry into it.** When a source rate-limits in
+streaks, per-DOI retries add load to a throttle we are already inside. Trip a
+breaker, stop calling that source, and retry the queue **once** after a cooldown
+(`THROTTLE_COOLDOWN_MS`) with the breaker cleared. One extra pass, never a loop.
+
 **Quote every phrase sent to a search API.** An unquoted multi-word value is
 split and OR-ed across all fields by arXiv, which matches most of the corpus and
 ranks an unrelated paper first. Quoting is not cosmetic; it is the difference

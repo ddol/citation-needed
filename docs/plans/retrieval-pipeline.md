@@ -49,6 +49,10 @@ acquisition work until each piece earns its slot back.
   trips a breaker after `SEMANTIC_SCHOLAR_THROTTLE_TRIP` consecutive 429s and
   skips the stage for the rest of the run; `SEMANTIC_SCHOLAR_API_KEY` restores
   the full retry budget.
+- Throttled DOIs are recovered rather than written off: `RetrievalResult.throttled`
+  marks a DOI that was refused before it was looked up, and `processBibtexFile`
+  queues those, waits `THROTTLE_COOLDOWN_MS`, clears the breaker via
+  `retriever.resetTransientState()`, and retries the queue exactly once.
 
 ## Design
 
@@ -126,7 +130,7 @@ Exploratory (Flow C, parked here):
 - [fetch] M - Wire publisher adapters into RetrievalOrchestrator fallback chain
 - [fetch] M - Extend the shared http-retry backoff to the PDF GET itself; today it covers lookups only
 - [fetch] M - Publisher-hosted PDFs 403 on our User-Agent (MDPI confirmed): decide whether to send a browser-like UA, fall through to the next source, or record the URL for manual fetch
-- [fetch] M - Recover throttled DOIs: when the Semantic Scholar breaker trips mid-import, those citations never get a lookup at all. A second pass after a cooldown, or a resumable retry queue, would reclaim them
+- [fetch] M - Resumable retry queue: the cooldown pass is in-process, so a run killed mid-import loses its throttled queue. Persisting it would let a later run pick the DOIs up
 - [fetch] M - Metadata enrichment from Crossref: abstract, keywords, licence, ISSN
 - [fetch] S - DoiResolver: populate isOpenAccess field
 - [auth] M - API key management for publisher APIs (Elsevier, Springer)
