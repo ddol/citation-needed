@@ -20,6 +20,24 @@ export { publishers, getAdapter } from './publishers/index';
 
 const logger = createLogger('retrieval-orchestrator');
 
+export const UNPAYWALL_EMAIL_HINT =
+  'no contact email; run `citation-needed auth set-email <you@example.org>` ' +
+  'or set CITATION_NEEDED_EMAIL to enable Unpaywall';
+
+/**
+ * Unpaywall rejects placeholder addresses with HTTP 422 ("Please use your own
+ * email address in API calls"), so DEFAULT_CONTACT_EMAIL — fine as a download
+ * User-Agent — must not be passed here. Treat it as absent and say so, rather
+ * than burning a lookup on a guaranteed 422.
+ */
+function usableContactEmail(email?: string): string | undefined {
+  const trimmed = email?.trim();
+  if (!trimmed || /@(example|test|invalid|localhost)\.(com|org|net)$/i.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 export class RetrievalOrchestrator {
   private db: Database;
 
@@ -93,8 +111,9 @@ export class RetrievalOrchestrator {
     fileStem: string,
     attempts: string[]
   ): Promise<RetrievalResult> {
-    if (this.authConfig.email) {
-      const unpaywall = new UnpaywallResolver(this.authConfig.email);
+    const email = usableContactEmail(this.authConfig.email);
+    if (email) {
+      const unpaywall = new UnpaywallResolver(email);
       const lookup = await unpaywall.getOpenAccessPdf(doi);
       if (!lookup.ok) {
         attempts.push(`unpaywall(${lookup.error})`);
@@ -123,7 +142,7 @@ export class RetrievalOrchestrator {
         attempts.push('unpaywall(no open-access URL)');
       }
     } else {
-      attempts.push('unpaywall(skipped: no email configured)');
+      attempts.push(`unpaywall(skipped: ${UNPAYWALL_EMAIL_HINT})`);
     }
 
     const citation = this.db.getCitation(doi);

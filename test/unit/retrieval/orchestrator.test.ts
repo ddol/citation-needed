@@ -168,7 +168,7 @@ describe('RetrievalOrchestrator', () => {
     expect(result.message).toContain('publisher(no adapter for DOI prefix)');
   });
 
-  test('skips Unpaywall entirely when no email is configured', async () => {
+  test('skips Unpaywall entirely when no email is configured, and says how to fix it', async () => {
     mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
     const db = makeFakeDb({ doi: '10/test', title: 'X' });
 
@@ -176,6 +176,42 @@ describe('RetrievalOrchestrator', () => {
     const result = await orch.retrievePdf('10/test');
 
     expect(mockGetOpenAccessPdf).not.toHaveBeenCalled();
-    expect(result.message).toContain('unpaywall(skipped: no email configured)');
+    expect(result.message).toContain('auth set-email');
+  });
+
+  // Unpaywall answers placeholder addresses with HTTP 422, so spending a
+  // lookup on one is guaranteed waste and reports a misleading error.
+  test('treats a placeholder contact email as no email at all', async () => {
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({ doi: '10/test', title: 'X' });
+
+    const orch = new RetrievalOrchestrator(
+      db,
+      { email: 'citation-needed@example.com' },
+      tempStorage
+    );
+    const result = await orch.retrievePdf('10/test');
+
+    expect(mockGetOpenAccessPdf).not.toHaveBeenCalled();
+    expect(result.message).toContain('auth set-email');
+  });
+
+  test('falls back to CITATION_NEEDED_EMAIL so the env var enables Unpaywall', async () => {
+    const previous = process.env.CITATION_NEEDED_EMAIL;
+    process.env.CITATION_NEEDED_EMAIL = 'reader@lab.edu';
+    try {
+      mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: 'https://oa.example/p.pdf' });
+      mockDownload.mockResolvedValueOnce(path.join(tempStorage, 'p.pdf'));
+      const db = makeFakeDb({ doi: '10/test', title: 'X' });
+
+      const orch = new RetrievalOrchestrator(db, {}, tempStorage);
+      const result = await orch.retrievePdf('10/test');
+
+      expect(mockGetOpenAccessPdf).toHaveBeenCalledWith('10/test');
+      expect(result.source).toBe('unpaywall');
+    } finally {
+      if (previous === undefined) delete process.env.CITATION_NEEDED_EMAIL;
+      else process.env.CITATION_NEEDED_EMAIL = previous;
+    }
   });
 });
