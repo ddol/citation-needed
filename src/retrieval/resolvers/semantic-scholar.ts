@@ -62,8 +62,11 @@ export class SemanticScholarResolver {
 
   async getOpenAccessPdf(doi: string): Promise<ResolverResult<SemanticScholarResult | null>> {
     if (isSemanticScholarBreakerOpen()) {
+      // Throttled, not absent: this DOI was never looked up, so it is worth
+      // retrying once the pool has cooled off.
       return {
         ok: false,
+        throttled: true,
         error: `skipped: rate limited after ${SEMANTIC_SCHOLAR_THROTTLE_TRIP} consecutive throttled lookups; ${SEMANTIC_SCHOLAR_KEY_HINT}`,
       };
     }
@@ -107,7 +110,11 @@ export class SemanticScholarResolver {
       const message = err instanceof Error ? err.message : String(err);
       const hint = isThrottled(err) && !this.apiKey ? `; ${SEMANTIC_SCHOLAR_KEY_HINT}` : '';
       logger.warn('Semantic Scholar lookup failed', { doi, err: message });
-      return { ok: false, error: `Semantic Scholar lookup failed: ${message}${hint}` };
+      return {
+        ok: false,
+        throttled: isThrottled(err),
+        error: `Semantic Scholar lookup failed: ${message}${hint}`,
+      };
     }
   }
 }

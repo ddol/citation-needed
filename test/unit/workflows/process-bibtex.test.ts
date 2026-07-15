@@ -303,4 +303,165 @@ describe('processBibtexFile', () => {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  describe('throttled second pass', () => {
+    function writeTwoEntryBib(): { tempRoot: string; bibtexPath: string } {
+      const tempRoot = makeTempRoot();
+      const bibtexPath = path.join(tempRoot, 'library.bib');
+      fs.writeFileSync(
+        bibtexPath,
+        `@article{alpha, title={Alpha}, doi={10.1234/alpha}}\n` +
+          `@article{beta, title={Beta}, doi={10.1234/beta}}`,
+        'utf-8'
+      );
+      return { tempRoot, bibtexPath };
+    }
+
+    // A throttled DOI was refused before it was looked up, so waiting changes
+    // the answer — unlike "no source has this paper".
+    test('retries throttled entries after the cooldown and counts the recovery', async () => {
+      const { tempRoot, bibtexPath } = writeTwoEntryBib();
+      const calls: string[] = [];
+
+      try {
+        const result = await processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn(() => ({ id: 1 })) } as never,
+          retryCooldownMs: 0,
+          retrievePdf: async (doi) => {
+            calls.push(doi);
+            const isFirstAttempt = calls.filter((d) => d === doi).length === 1;
+            if (doi === '10.1234/alpha' && isFirstAttempt) {
+              return {
+                success: false,
+                throttled: true,
+                source: 'open-access',
+                message: 'rate limited',
+              };
+            }
+            return {
+              success: true,
+              localPath: path.join(tempRoot, 'papers', 'pdf', 'x.pdf'),
+              source: 'unpaywall',
+              message: 'ok',
+            };
+          },
+          extractMarkdown: async () => '# Paper\n',
+        });
+
+        // alpha twice (throttled, then retried), beta once.
+        expect(calls).toEqual(['10.1234/alpha', '10.1234/beta', '10.1234/alpha']);
+        expect(result.downloadedCount).toBe(2);
+        expect(result.failures).toEqual([]);
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    test('records a failure when the retry is throttled again, without looping', async () => {
+      const { tempRoot, bibtexPath } = writeTwoEntryBib();
+      const calls: string[] = [];
+
+      try {
+        const result = await processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn(() => ({ id: 1 })) } as never,
+          retryCooldownMs: 0,
+          retrievePdf: async (doi) => {
+            calls.push(doi);
+            return {
+              success: false,
+              throttled: true,
+              source: 'open-access',
+              message: 'rate limited',
+            };
+          },
+          extractMarkdown: async () => '# Paper\n',
+        });
+
+        // Exactly one extra attempt each — a second pass, not a retry loop.
+        expect(calls).toHaveLength(4);
+        expect(result.downloadedCount).toBe(0);
+        expect(result.failures).toHaveLength(2);
+        expect(result.failures[0].message).toContain('Still rate limited after cooldown');
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    // A paper no source has is not worth a second lookup.
+    test('does not retry an ordinary failure', async () => {
+      const { tempRoot, bibtexPath } = writeTwoEntryBib();
+      const calls: string[] = [];
+
+      try {
+        const result = await processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn(() => ({ id: 1 })) } as never,
+          retryCooldownMs: 0,
+          retrievePdf: async (doi) => {
+            calls.push(doi);
+            return { success: false, source: 'open-access', message: 'No PDF found' };
+          },
+          extractMarkdown: async () => '# Paper\n',
+        });
+
+        expect(calls).toHaveLength(2);
+        expect(result.failures).toHaveLength(2);
+        expect(result.failures[0].message).toBe('No PDF found');
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    test('clears the throttle breaker before retrying, or the retry is skipped by it', async () => {
+      const { tempRoot, bibtexPath } = writeTwoEntryBib();
+      const resetTransientState = jest.fn();
+      mockRetrievalOrchestrator.mockImplementation(() => ({
+        retrievePdf: mockRetrievePdf,
+        resetTransientState,
+      }));
+      mockRetrievePdf
+        .mockResolvedValueOnce({
+          success: false,
+          throttled: true,
+          source: 'oa',
+          message: 'rate limited',
+        })
+        .mockResolvedValue({ success: false, source: 'oa', message: 'No PDF found' });
+
+      try {
+        await processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn(() => ({ id: 1 })) } as never,
+          retryCooldownMs: 0,
+          extractMarkdown: async () => '# Paper\n',
+        });
+
+        expect(resetTransientState).toHaveBeenCalledTimes(1);
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    test('marks the retry pass on progress so the two attempts are distinguishable', async () => {
+      const { tempRoot, bibtexPath } = writeTwoEntryBib();
+      const passes: Array<string | undefined> = [];
+
+      try {
+        await processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn(() => ({ id: 1 })) } as never,
+          retryCooldownMs: 0,
+          retrievePdf: async (doi) =>
+            doi === '10.1234/alpha'
+              ? { success: false, throttled: true, source: 'oa', message: 'rate limited' }
+              : { success: false, source: 'oa', message: 'No PDF found' },
+          extractMarkdown: async () => '# Paper\n',
+          onProgress: (p) => {
+            if (p.doi === '10.1234/alpha' && p.stage === 'failed') passes.push(p.pass);
+          },
+        });
+
+        expect(passes).toEqual([undefined, 'retry']);
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+  });
 });

@@ -4,7 +4,7 @@ import type { AuthConfig } from '../models/auth';
 import type { RetrievalResult } from '../models/retrieval';
 import { ArxivResolver, selectArxivMatch } from './resolvers/arxiv';
 import { UnpaywallResolver } from './resolvers/unpaywall';
-import { SemanticScholarResolver } from './resolvers/semantic-scholar';
+import { SemanticScholarResolver, resetSemanticScholarBreaker } from './resolvers/semantic-scholar';
 import { DOI_LOOKUP_THRESHOLD, isTitleMatch } from './title-match';
 import { OpenAccessDownloader } from './downloaders/open-access';
 import { AuthenticatedDownloader } from './downloaders/authenticated';
@@ -22,6 +22,19 @@ export { AuthenticatedDownloader } from './downloaders/authenticated';
 export { publishers, getAdapter } from './publishers/index';
 
 const logger = createLogger('retrieval-orchestrator');
+
+/**
+ * Accumulated across one DOI's trip through the cascade.
+ *
+ * `attempts` is a one-line summary of every stage tried, so the final
+ * `RetrievalResult.message` can explain why nothing worked. `throttled` records
+ * that a stage refused because it was rate-limiting us, which means this DOI was
+ * never really tried and is worth retrying later — unlike "no source has it".
+ */
+interface CascadeContext {
+  attempts: string[];
+  throttled: boolean;
+}
 
 export const UNPAYWALL_EMAIL_HINT =
   'no contact email; run `citation-needed auth set-email <you@example.org>` ' +
@@ -81,32 +94,42 @@ export class RetrievalOrchestrator {
       return { success: true, localPath: existing, source: 'cache', message: 'Already downloaded' };
     }
 
-    // attempts accumulates a one-line summary of every cascade step we tried,
-    // so the final RetrievalResult.message can explain why nothing worked.
-    const attempts: string[] = [];
+    const ctx: CascadeContext = { attempts: [], throttled: false };
 
-    const oaResult = await this.tryOpenAccess(doi, fileStem, attempts);
+    const oaResult = await this.tryOpenAccess(doi, fileStem, ctx);
     if (oaResult.success) return oaResult;
 
-    const publisherResult = await this.tryPublisher(doi, fileStem, attempts);
+    const publisherResult = await this.tryPublisher(doi, fileStem, ctx);
     if (publisherResult.success) return publisherResult;
 
     if (this.authConfig.proxies?.length) {
-      const authResult = await this.tryAuthenticated(doi, fileStem, attempts);
+      const authResult = await this.tryAuthenticated(doi, fileStem, ctx);
       if (authResult.success) return authResult;
       return {
         success: false,
         source: 'authenticated',
-        message: `${authResult.message}. attempts: ${attempts.join('; ')}`,
+        throttled: ctx.throttled,
+        message: `${authResult.message}. attempts: ${ctx.attempts.join('; ')}`,
       };
     }
 
-    attempts.push('authenticated(no proxy configured)');
+    ctx.attempts.push('authenticated(no proxy configured)');
     return {
       success: false,
       source: 'open-access',
-      message: `No PDF found. attempts: ${attempts.join('; ')}`,
+      throttled: ctx.throttled,
+      message: `No PDF found. attempts: ${ctx.attempts.join('; ')}`,
     };
+  }
+
+  /**
+   * Clear per-run transient state (the Semantic Scholar throttle breaker) so a
+   * caller can make a second attempt at DOIs a rate limit refused. Optional on
+   * the retriever interface — a test double need not implement it.
+   */
+  // eslint-disable-next-line class-methods-use-this
+  resetTransientState(): void {
+    resetSemanticScholarBreaker();
   }
 
   /**
@@ -117,17 +140,17 @@ export class RetrievalOrchestrator {
   private async tryOpenAccess(
     doi: string,
     fileStem: string,
-    attempts: string[]
+    ctx: CascadeContext
   ): Promise<RetrievalResult> {
     const title = this.db.getCitation(doi)?.title;
 
-    const unpaywall = await this.tryUnpaywall(doi, fileStem, attempts);
+    const unpaywall = await this.tryUnpaywall(doi, fileStem, ctx);
     if (unpaywall) return unpaywall;
 
-    const semanticScholar = await this.trySemanticScholar(doi, fileStem, attempts, title);
+    const semanticScholar = await this.trySemanticScholar(doi, fileStem, ctx, title);
     if (semanticScholar) return semanticScholar;
 
-    const arxiv = await this.tryArxiv(doi, fileStem, attempts, title);
+    const arxiv = await this.tryArxiv(doi, fileStem, ctx, title);
     if (arxiv) return arxiv;
 
     return { success: false, source: 'open-access', message: 'No open-access PDF found' };
@@ -153,21 +176,21 @@ export class RetrievalOrchestrator {
   private async tryUnpaywall(
     doi: string,
     fileStem: string,
-    attempts: string[]
+    ctx: CascadeContext
   ): Promise<RetrievalResult | undefined> {
     const email = usableContactEmail(this.authConfig.email);
     if (!email) {
-      attempts.push(`unpaywall(skipped: ${UNPAYWALL_EMAIL_HINT})`);
+      ctx.attempts.push(`unpaywall(skipped: ${UNPAYWALL_EMAIL_HINT})`);
       return undefined;
     }
 
     const lookup = await new UnpaywallResolver(email).getOpenAccessPdf(doi);
     if (!lookup.ok) {
-      attempts.push(`unpaywall(${lookup.error})`);
+      ctx.attempts.push(`unpaywall(${lookup.error})`);
       return undefined;
     }
     if (!lookup.value) {
-      attempts.push('unpaywall(no open-access URL)');
+      ctx.attempts.push('unpaywall(no open-access URL)');
       return undefined;
     }
 
@@ -182,7 +205,7 @@ export class RetrievalOrchestrator {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('Unpaywall download failed', { doi, err: message });
-      attempts.push(`unpaywall(download failed: ${message})`);
+      ctx.attempts.push(`unpaywall(download failed: ${message})`);
       return undefined;
     }
   }
@@ -190,16 +213,17 @@ export class RetrievalOrchestrator {
   private async trySemanticScholar(
     doi: string,
     fileStem: string,
-    attempts: string[],
+    ctx: CascadeContext,
     title?: string
   ): Promise<RetrievalResult | undefined> {
     const lookup = await new SemanticScholarResolver().getOpenAccessPdf(doi);
     if (!lookup.ok) {
-      attempts.push(`semantic-scholar(${lookup.error})`);
+      ctx.attempts.push(`semantic-scholar(${lookup.error})`);
+      if (lookup.throttled) ctx.throttled = true;
       return undefined;
     }
     if (!lookup.value) {
-      attempts.push('semantic-scholar(no open-access PDF)');
+      ctx.attempts.push('semantic-scholar(no open-access PDF)');
       return undefined;
     }
 
@@ -208,7 +232,7 @@ export class RetrievalOrchestrator {
     // Semantic Scholar offered koval2013precontact.pdf for Held 2016.
     const { pdfUrl, title: upstreamTitle } = lookup.value;
     if (title && upstreamTitle && !isTitleMatch(title, upstreamTitle, DOI_LOOKUP_THRESHOLD)) {
-      attempts.push(`semantic-scholar(title mismatch for DOI: "${upstreamTitle}")`);
+      ctx.attempts.push(`semantic-scholar(title mismatch for DOI: "${upstreamTitle}")`);
       return undefined;
     }
 
@@ -223,7 +247,7 @@ export class RetrievalOrchestrator {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('Semantic Scholar download failed', { doi, err: message });
-      attempts.push(`semantic-scholar(download failed: ${message})`);
+      ctx.attempts.push(`semantic-scholar(download failed: ${message})`);
       return undefined;
     }
   }
@@ -231,27 +255,29 @@ export class RetrievalOrchestrator {
   private async tryArxiv(
     doi: string,
     fileStem: string,
-    attempts: string[],
+    ctx: CascadeContext,
     title?: string
   ): Promise<RetrievalResult | undefined> {
     if (!title) {
-      attempts.push('arxiv(skipped: no title for search)');
+      ctx.attempts.push('arxiv(skipped: no title for search)');
       return undefined;
     }
 
     const search = await new ArxivResolver().searchByTitle(title);
     if (!search.ok) {
-      attempts.push(`arxiv(${search.error})`);
+      ctx.attempts.push(`arxiv(${search.error})`);
       return undefined;
     }
     if (search.value.length === 0) {
-      attempts.push('arxiv(no matching paper)');
+      ctx.attempts.push('arxiv(no matching paper)');
       return undefined;
     }
 
     const matched = selectArxivMatch(title, search.value);
     if (!matched) {
-      attempts.push(`arxiv(no confident title match; best candidate: "${search.value[0].title}")`);
+      ctx.attempts.push(
+        `arxiv(no confident title match; best candidate: "${search.value[0].title}")`
+      );
       return undefined;
     }
 
@@ -266,7 +292,7 @@ export class RetrievalOrchestrator {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('arXiv download failed', { doi, err: message });
-      attempts.push(`arxiv(download failed: ${message})`);
+      ctx.attempts.push(`arxiv(download failed: ${message})`);
       return undefined;
     }
   }
@@ -274,11 +300,11 @@ export class RetrievalOrchestrator {
   private async tryPublisher(
     doi: string,
     fileStem: string,
-    attempts: string[]
+    ctx: CascadeContext
   ): Promise<RetrievalResult> {
     const adapter = getAdapter(doi);
     if (!adapter) {
-      attempts.push('publisher(no adapter for DOI prefix)');
+      ctx.attempts.push('publisher(no adapter for DOI prefix)');
       return { success: false, source: 'publisher', message: 'No publisher adapter' };
     }
 
@@ -286,7 +312,7 @@ export class RetrievalOrchestrator {
     if (!pdfUrl) {
       // Adapters exist for the prefix but can't yet resolve a direct PDF URL.
       // Stubbed in M1, real resolution lands in M2 (Restricted Paywall Access).
-      attempts.push(`publisher(${adapter.name}: no direct PDF URL)`);
+      ctx.attempts.push(`publisher(${adapter.name}: no direct PDF URL)`);
       return {
         success: false,
         source: 'publisher',
@@ -311,7 +337,7 @@ export class RetrievalOrchestrator {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('Publisher download failed', { doi, adapter: adapter.name, err: message });
-      attempts.push(`publisher(${adapter.name}: ${message})`);
+      ctx.attempts.push(`publisher(${adapter.name}: ${message})`);
       return {
         success: false,
         source: `publisher:${adapter.name}`,
@@ -323,11 +349,11 @@ export class RetrievalOrchestrator {
   private async tryAuthenticated(
     doi: string,
     fileStem: string,
-    attempts: string[]
+    ctx: CascadeContext
   ): Promise<RetrievalResult> {
     const proxy = this.authConfig.proxies?.[0];
     if (!proxy) {
-      attempts.push('authenticated(no proxy)');
+      ctx.attempts.push('authenticated(no proxy)');
       return { success: false, source: 'authenticated', message: 'No proxy configured' };
     }
 
@@ -355,7 +381,7 @@ export class RetrievalOrchestrator {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      attempts.push(`authenticated(${message})`);
+      ctx.attempts.push(`authenticated(${message})`);
       return { success: false, source: 'authenticated', message };
     }
   }

@@ -47,6 +47,13 @@ export const SEMANTIC_SCHOLAR_RETRY_BASE_MS = 3_000;
  */
 export const SEMANTIC_SCHOLAR_THROTTLE_TRIP = 3;
 
+/**
+ * Pause before an import retries the DOIs a rate limit refused. Long enough for
+ * a throttle window to lapse; the alternative is losing those citations for the
+ * whole run, since a throttled DOI was never actually looked up.
+ */
+export const THROTTLE_COOLDOWN_MS = 60_000;
+
 /** PDF download HTTP timeout (open-access downloader). */
 export const OPEN_ACCESS_DOWNLOAD_TIMEOUT_MS = 60_000;
 

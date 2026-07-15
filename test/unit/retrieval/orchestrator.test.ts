@@ -275,6 +275,33 @@ describe('RetrievalOrchestrator', () => {
     expect(result.source).toBe('semantic-scholar');
   });
 
+  // The workflow retries only throttled DOIs, so the flag has to survive the
+  // whole cascade — a lost flag means the entry is written off as unavailable.
+  test('marks the result throttled when Semantic Scholar was rate limited', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockSemanticScholar.mockResolvedValue({ ok: false, throttled: true, error: 'rate limited' });
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({ doi: '10/test', title: 'X' });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@lab.edu' }, tempStorage);
+    const result = await orch.retrievePdf('10/test');
+
+    expect(result.success).toBe(false);
+    expect(result.throttled).toBe(true);
+  });
+
+  test('does not mark an ordinary miss as throttled', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({ doi: '10/test', title: 'X' });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@lab.edu' }, tempStorage);
+    const result = await orch.retrievePdf('10/test');
+
+    expect(result.success).toBe(false);
+    expect(result.throttled).toBe(false);
+  });
+
   test('accumulates per-step attempts into RetrievalResult.message on terminal failure', async () => {
     mockGetOpenAccessPdf.mockResolvedValueOnce({
       ok: false,

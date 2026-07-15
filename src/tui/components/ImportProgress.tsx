@@ -63,7 +63,12 @@ export function ImportProgress({
         return;
       }
 
-      const rowKey = progress.doi || progress.fileStem || progress.label;
+      // The retry pass revisits a DOI that already printed a ✗ line. Give it a
+      // distinct key so it prints as its own row: <Static> replays by index, so
+      // a reused key would be dropped as a duplicate and the retry's outcome
+      // would never appear.
+      const base = progress.doi || progress.fileStem || progress.label;
+      const rowKey = progress.pass ? `${base}#${progress.pass}` : base;
       const row: ImportRow = { ...progress, key: rowKey };
 
       if (isFinished(progress.stage)) {
