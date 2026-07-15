@@ -22,6 +22,8 @@ const mockLoadAuthConfig = jest.fn();
 
 const mockStartMcpServer = jest.fn();
 
+// Only `import-bibtex` still renders through Ink (it needs live redraw); every
+// other command writes plain lines, so those are asserted against real stdout.
 jest.mock('ink', () => ({
   render: (...args: unknown[]) => mockRender(...args),
   Text: 'Text',
@@ -58,28 +60,27 @@ jest.mock('../../../src/mcp/server', () => ({
   startMcpServer: (...args: unknown[]) => mockStartMcpServer(...args),
 }));
 
-function extractText(node: unknown): string {
-  if (node === null || node === undefined) return '';
-  if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
-    return String(node);
-  }
-  if (Array.isArray(node)) {
-    return node.map((item) => extractText(item)).join('');
-  }
-  if (typeof node === 'object' && 'props' in node) {
-    const element = node as { props?: { children?: unknown } };
-    return extractText(element.props?.children);
-  }
-  return '';
-}
-
 describe('CLI command registrations', () => {
+  let stdout: jest.SpyInstance;
+  let stderr: jest.SpyInstance;
+
+  /** Everything the command wrote, stdout and stderr combined. */
+  const output = (): string =>
+    [...stdout.mock.calls, ...stderr.mock.calls].map((args) => args.join(' ')).join('\n');
+
   beforeEach(() => {
     jest.clearAllMocks();
     process.exitCode = 0;
+    stdout = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    stderr = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     mockRender.mockReturnValue({ waitUntilExit: jest.fn().mockResolvedValue(undefined) });
     mockGetCitation.mockReturnValue(undefined);
     mockLoadAuthConfig.mockReturnValue({ email: 'reader@example.com', proxies: [] });
+  });
+
+  afterEach(() => {
+    stdout.mockRestore();
+    stderr.mockRestore();
   });
 
   test('import-bibtex renders ImportProgress and waits until exit', async () => {
@@ -116,7 +117,7 @@ describe('CLI command registrations', () => {
     );
   });
 
-  test('list renders CitationsTable rows from DB records', async () => {
+  test('list prints a table of DB records without going through Ink', async () => {
     mockGetAllCitations.mockReturnValue([
       {
         doi: '10.1/alpha',
@@ -130,16 +131,20 @@ describe('CLI command registrations', () => {
 
     await program.parseAsync(['node', 'citation-needed', 'list']);
 
-    expect(mockRender).toHaveBeenCalledTimes(1);
-    const [renderedElement] = mockRender.mock.calls[0];
-    expect((renderedElement as { props: { rows: Array<{ doi: string }> } }).props.rows).toEqual([
-      {
-        doi: '10.1/alpha',
-        title: 'Alpha',
-        year: 2024,
-        verificationStatus: 'verified',
-      },
-    ]);
+    expect(output()).toContain('10.1/alpha');
+    expect(output()).toContain('Alpha');
+    expect(output()).toContain('verified');
+    expect(mockRender).not.toHaveBeenCalled();
+  });
+
+  test('list prints the empty-state hint when the DB has no citations', async () => {
+    mockGetAllCitations.mockReturnValue([]);
+    const program = new Command();
+    registerListCommand(program);
+
+    await program.parseAsync(['node', 'citation-needed', 'list']);
+
+    expect(output()).toContain('No citations found');
   });
 
   test('download with --url stores pdf path and marks citation as downloaded', async () => {
@@ -192,14 +197,17 @@ describe('CLI command registrations', () => {
     );
   });
 
-  test('download without URL source prints a guidance error', async () => {
+  test('download without URL source prints a guidance error to stderr', async () => {
     const program = new Command();
     registerDownloadCommand(program);
 
     await program.parseAsync(['node', 'citation-needed', 'download', '10.1/missing']);
 
-    const messages = mockRender.mock.calls.map(([node]) => extractText(node));
-    expect(messages.join('\n')).toContain('No PDF URL. Use --url or --email for Unpaywall lookup.');
+    expect(stderr.mock.calls.join('\n')).toContain(
+      'No PDF URL. Use --url or --email for Unpaywall lookup.'
+    );
+    expect(stdout).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
   });
 
   test('auth set-email delegates to config API', async () => {
@@ -226,8 +234,7 @@ describe('CLI command registrations', () => {
 
     await program.parseAsync(['node', 'citation-needed', 'auth', 'set-email', 'not-an-email']);
 
-    const messages = mockRender.mock.calls.map(([node]) => extractText(node));
-    expect(messages.join('\n')).toContain('Invalid email format');
+    expect(stderr.mock.calls.join('\n')).toContain('Invalid email format');
     expect(process.exitCode).toBe(1);
   });
 
@@ -269,9 +276,8 @@ describe('CLI command registrations', () => {
 
     await program.parseAsync(['node', 'citation-needed', 'auth', 'show']);
 
-    const messages = mockRender.mock.calls.map(([node]) => extractText(node)).join('\n');
-    expect(messages).toContain('reader@example.com');
-    expect(messages).toContain('"passwordEnvVar": "***"');
+    expect(output()).toContain('reader@example.com');
+    expect(output()).toContain('"passwordEnvVar": "***"');
   });
 
   test('server command starts MCP server', async () => {

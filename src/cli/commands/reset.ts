@@ -1,10 +1,9 @@
 import fs from 'fs';
-import React from 'react';
-import { render, Box, Text } from 'ink';
 import { Command } from 'commander';
 import type { Database } from '../../db/index';
 import { getDatabase } from '../../db/index';
 import { getDbPath } from '../../utils/file';
+import { bold, cyan, dim, green, print, printError, red, yellow } from '../output';
 
 export interface ResetOptions {
   files?: boolean;
@@ -70,62 +69,39 @@ export function resetDatabase(db: Database, options: ResetOptions = {}): ResetSu
   };
 }
 
-function ResetReport({ summary, files }: { summary: ResetSummary; files: boolean }): JSX.Element {
-  const { counts, applied } = summary;
-  const empty = counts.citations === 0 && counts.retrievalLog === 0;
+export function formatResetSummary(summary: ResetSummary, files: boolean): string[] {
+  const { counts } = summary;
 
-  if (!applied) {
-    return (
-      <Box flexDirection="column">
-        <Text bold>Dry run — nothing has been deleted.</Text>
-        <Text />
-        <Text>
-          Database: <Text color="cyan">{summary.dbPath}</Text>
-        </Text>
-        <Text>
-          {'  '}citations: {counts.citations}, retrieval_log: {counts.retrievalLog}, manifestations:{' '}
-          {counts.manifestations}, chunks: {counts.chunks}
-        </Text>
-        <Text />
-        {files ? (
-          <Text>
-            Would also delete <Text color="yellow">{summary.trackedFiles.length}</Text> tracked
-            file(s) from disk.
-          </Text>
-        ) : (
-          <Text dimColor>
-            Tracked files on disk ({summary.trackedFiles.length}) will be kept. Pass --files to
-            delete them too.
-          </Text>
-        )}
-        <Text />
-        {empty && !summary.trackedFiles.length ? (
-          <Text dimColor>Nothing to reset.</Text>
-        ) : (
-          <Text color="yellow">Re-run with --yes to apply. This cannot be undone.</Text>
-        )}
-      </Box>
-    );
+  if (summary.applied) {
+    return [
+      green(bold('Reset complete.')),
+      '',
+      `Removed ${counts.citations} citation(s), ${counts.retrievalLog} retrieval-log row(s), ` +
+        `${counts.manifestations} manifestation(s), ${counts.chunks} chunk(s).`,
+      ...(files ? [`Deleted ${summary.deletedFiles.length} file(s) from disk.`] : []),
+    ];
   }
 
-  return (
-    <Box flexDirection="column">
-      <Text color="green" bold>
-        Reset complete.
-      </Text>
-      <Text />
-      <Text>
-        Removed {counts.citations} citation(s), {counts.retrievalLog} retrieval-log row(s),{' '}
-        {counts.manifestations} manifestation(s), {counts.chunks} chunk(s).
-      </Text>
-      {files && <Text>Deleted {summary.deletedFiles.length} file(s) from disk.</Text>}
-      {summary.failedFiles.map((f) => (
-        <Text key={f.path} color="red">
-          Could not delete {f.path}: {f.message}
-        </Text>
-      ))}
-    </Box>
-  );
+  const nothingToDo = counts.citations === 0 && !summary.trackedFiles.length;
+
+  return [
+    bold('Dry run — nothing has been deleted.'),
+    '',
+    `Database: ${cyan(summary.dbPath)}`,
+    `  citations: ${counts.citations}, retrieval_log: ${counts.retrievalLog}, ` +
+      `manifestations: ${counts.manifestations}, chunks: ${counts.chunks}`,
+    '',
+    files
+      ? `Would also delete ${yellow(String(summary.trackedFiles.length))} tracked file(s) from disk.`
+      : dim(
+          `Tracked files on disk (${summary.trackedFiles.length}) will be kept. ` +
+            `Pass --files to delete them too.`
+        ),
+    '',
+    nothingToDo
+      ? dim('Nothing to reset.')
+      : yellow('Re-run with --yes to apply. This cannot be undone.'),
+  ];
 }
 
 export function registerResetCommand(program: Command): void {
@@ -139,10 +115,13 @@ export function registerResetCommand(program: Command): void {
       const db = options.db ? getDatabase(options.db) : getDatabase();
       try {
         const summary = resetDatabase(db, options);
-        render(<ResetReport summary={summary} files={Boolean(options.files)} />);
+        print(...formatResetSummary(summary, Boolean(options.files)));
+        for (const failure of summary.failedFiles) {
+          printError(red(`Could not delete ${failure.path}: ${failure.message}`));
+        }
         if (summary.failedFiles.length) process.exitCode = 1;
       } catch (err) {
-        render(<Text color="red">{err instanceof Error ? err.message : String(err)}</Text>);
+        printError(red(err instanceof Error ? err.message : String(err)));
         process.exitCode = 1;
       }
     });
