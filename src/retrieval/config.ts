@@ -28,6 +28,17 @@ export const ARXIV_MAX_ATTEMPTS = 4;
 /** First backoff pause after a throttled/failed arXiv query; doubles per retry. */
 export const ARXIV_RETRY_BASE_MS = 5_000;
 
+/**
+ * Semantic Scholar's unauthenticated pool is shared across all callers, so it
+ * throttles hard: a 56-DOI survey at 3s intervals saw zero 429s, while 1s
+ * intervals got throttled off the API within a handful of requests. An API key
+ * would buy a guaranteed quota; until then, pace conservatively.
+ */
+export const SEMANTIC_SCHOLAR_RATE_LIMIT_MS = 3_000;
+export const SEMANTIC_SCHOLAR_TIMEOUT_MS = 20_000;
+export const SEMANTIC_SCHOLAR_MAX_ATTEMPTS = 4;
+export const SEMANTIC_SCHOLAR_RETRY_BASE_MS = 3_000;
+
 /** PDF download HTTP timeout (open-access downloader). */
 export const OPEN_ACCESS_DOWNLOAD_TIMEOUT_MS = 60_000;
 

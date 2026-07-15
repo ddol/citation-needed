@@ -4,6 +4,8 @@ import type { AuthConfig } from '../models/auth';
 import type { RetrievalResult } from '../models/retrieval';
 import { ArxivResolver, selectArxivMatch } from './resolvers/arxiv';
 import { UnpaywallResolver } from './resolvers/unpaywall';
+import { SemanticScholarResolver } from './resolvers/semantic-scholar';
+import { DOI_LOOKUP_THRESHOLD, isTitleMatch } from './title-match';
 import { OpenAccessDownloader } from './downloaders/open-access';
 import { AuthenticatedDownloader } from './downloaders/authenticated';
 import { createLogger } from '../utils/logger';
@@ -13,6 +15,7 @@ import { getAdapter } from './publishers/index';
 
 export { ArxivResolver } from './resolvers/arxiv';
 export { UnpaywallResolver } from './resolvers/unpaywall';
+export { SemanticScholarResolver } from './resolvers/semantic-scholar';
 export { DoiResolver } from './resolvers/doi';
 export { OpenAccessDownloader } from './downloaders/open-access';
 export { AuthenticatedDownloader } from './downloaders/authenticated';
@@ -106,87 +109,166 @@ export class RetrievalOrchestrator {
     };
   }
 
+  /**
+   * DOI-keyed sources run before the arXiv title search: a DOI names exactly
+   * one paper, whereas a title search is a guess that has to be validated. It
+   * also spares arXiv a request whenever a precise source already answered.
+   */
   private async tryOpenAccess(
     doi: string,
     fileStem: string,
     attempts: string[]
   ): Promise<RetrievalResult> {
-    const email = usableContactEmail(this.authConfig.email);
-    if (email) {
-      const unpaywall = new UnpaywallResolver(email);
-      const lookup = await unpaywall.getOpenAccessPdf(doi);
-      if (!lookup.ok) {
-        attempts.push(`unpaywall(${lookup.error})`);
-      } else if (lookup.value) {
-        const { value: pdfUrl } = lookup;
-        try {
-          const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
-          this.db.transaction(() => {
-            this.db.updatePdfPath(doi, localPath);
-            this.db.updateVerificationStatus(doi, 'downloaded');
-            this.db.updateAccessType(doi, 'open-access');
-          });
-          return {
-            success: true,
-            pdfUrl,
-            localPath,
-            source: 'unpaywall',
-            message: 'Downloaded via Unpaywall',
-          };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.warn('Unpaywall download failed', { doi, err: message });
-          attempts.push(`unpaywall(download failed: ${message})`);
-        }
-      } else {
-        attempts.push('unpaywall(no open-access URL)');
-      }
-    } else {
-      attempts.push(`unpaywall(skipped: ${UNPAYWALL_EMAIL_HINT})`);
-    }
+    const title = this.db.getCitation(doi)?.title;
 
-    const citation = this.db.getCitation(doi);
-    if (citation?.title) {
-      const arxiv = new ArxivResolver();
-      const search = await arxiv.searchByTitle(citation.title);
-      if (!search.ok) {
-        attempts.push(`arxiv(${search.error})`);
-      } else if (search.value.length > 0) {
-        const matched = selectArxivMatch(citation.title, search.value);
-        if (!matched) {
-          attempts.push(
-            `arxiv(no confident title match; best candidate: "${search.value[0].title}")`
-          );
-          return { success: false, source: 'open-access', message: 'No open-access PDF found' };
-        }
-        try {
-          const { pdfUrl } = matched;
-          const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
-          this.db.transaction(() => {
-            this.db.updatePdfPath(doi, localPath);
-            this.db.updateVerificationStatus(doi, 'downloaded');
-            this.db.updateAccessType(doi, 'open-access');
-          });
-          return {
-            success: true,
-            pdfUrl,
-            localPath,
-            source: 'arxiv',
-            message: 'Downloaded via arXiv',
-          };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.warn('arXiv download failed', { doi, err: message });
-          attempts.push(`arxiv(download failed: ${message})`);
-        }
-      } else {
-        attempts.push('arxiv(no matching paper)');
-      }
-    } else {
-      attempts.push('arxiv(skipped: no title for search)');
-    }
+    const unpaywall = await this.tryUnpaywall(doi, fileStem, attempts);
+    if (unpaywall) return unpaywall;
+
+    const semanticScholar = await this.trySemanticScholar(doi, fileStem, attempts, title);
+    if (semanticScholar) return semanticScholar;
+
+    const arxiv = await this.tryArxiv(doi, fileStem, attempts, title);
+    if (arxiv) return arxiv;
 
     return { success: false, source: 'open-access', message: 'No open-access PDF found' };
+  }
+
+  /** Download, record, and report — shared by every open-access source. */
+  private async downloadAndRecord(
+    doi: string,
+    pdfUrl: string,
+    fileStem: string,
+    source: string,
+    message: string
+  ): Promise<RetrievalResult> {
+    const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
+    this.db.transaction(() => {
+      this.db.updatePdfPath(doi, localPath);
+      this.db.updateVerificationStatus(doi, 'downloaded');
+      this.db.updateAccessType(doi, 'open-access');
+    });
+    return { success: true, pdfUrl, localPath, source, message };
+  }
+
+  private async tryUnpaywall(
+    doi: string,
+    fileStem: string,
+    attempts: string[]
+  ): Promise<RetrievalResult | undefined> {
+    const email = usableContactEmail(this.authConfig.email);
+    if (!email) {
+      attempts.push(`unpaywall(skipped: ${UNPAYWALL_EMAIL_HINT})`);
+      return undefined;
+    }
+
+    const lookup = await new UnpaywallResolver(email).getOpenAccessPdf(doi);
+    if (!lookup.ok) {
+      attempts.push(`unpaywall(${lookup.error})`);
+      return undefined;
+    }
+    if (!lookup.value) {
+      attempts.push('unpaywall(no open-access URL)');
+      return undefined;
+    }
+
+    try {
+      return await this.downloadAndRecord(
+        doi,
+        lookup.value,
+        fileStem,
+        'unpaywall',
+        'Downloaded via Unpaywall'
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('Unpaywall download failed', { doi, err: message });
+      attempts.push(`unpaywall(download failed: ${message})`);
+      return undefined;
+    }
+  }
+
+  private async trySemanticScholar(
+    doi: string,
+    fileStem: string,
+    attempts: string[],
+    title?: string
+  ): Promise<RetrievalResult | undefined> {
+    const lookup = await new SemanticScholarResolver().getOpenAccessPdf(doi);
+    if (!lookup.ok) {
+      attempts.push(`semantic-scholar(${lookup.error})`);
+      return undefined;
+    }
+    if (!lookup.value) {
+      attempts.push('semantic-scholar(no open-access PDF)');
+      return undefined;
+    }
+
+    // Looked up by DOI, so the title is only a guard against bad upstream
+    // metadata — hence the loose threshold. It still catches real errors:
+    // Semantic Scholar offered koval2013precontact.pdf for Held 2016.
+    const { pdfUrl, title: upstreamTitle } = lookup.value;
+    if (title && upstreamTitle && !isTitleMatch(title, upstreamTitle, DOI_LOOKUP_THRESHOLD)) {
+      attempts.push(`semantic-scholar(title mismatch for DOI: "${upstreamTitle}")`);
+      return undefined;
+    }
+
+    try {
+      return await this.downloadAndRecord(
+        doi,
+        pdfUrl,
+        fileStem,
+        'semantic-scholar',
+        'Downloaded via Semantic Scholar'
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('Semantic Scholar download failed', { doi, err: message });
+      attempts.push(`semantic-scholar(download failed: ${message})`);
+      return undefined;
+    }
+  }
+
+  private async tryArxiv(
+    doi: string,
+    fileStem: string,
+    attempts: string[],
+    title?: string
+  ): Promise<RetrievalResult | undefined> {
+    if (!title) {
+      attempts.push('arxiv(skipped: no title for search)');
+      return undefined;
+    }
+
+    const search = await new ArxivResolver().searchByTitle(title);
+    if (!search.ok) {
+      attempts.push(`arxiv(${search.error})`);
+      return undefined;
+    }
+    if (search.value.length === 0) {
+      attempts.push('arxiv(no matching paper)');
+      return undefined;
+    }
+
+    const matched = selectArxivMatch(title, search.value);
+    if (!matched) {
+      attempts.push(`arxiv(no confident title match; best candidate: "${search.value[0].title}")`);
+      return undefined;
+    }
+
+    try {
+      return await this.downloadAndRecord(
+        doi,
+        matched.pdfUrl,
+        fileStem,
+        'arxiv',
+        'Downloaded via arXiv'
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('arXiv download failed', { doi, err: message });
+      attempts.push(`arxiv(download failed: ${message})`);
+      return undefined;
+    }
   }
 
   private async tryPublisher(

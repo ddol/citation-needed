@@ -5,12 +5,18 @@ import path from 'path';
 // Mock the resolvers + open-access downloader so the orchestrator runs in isolation.
 const mockGetOpenAccessPdf = jest.fn();
 const mockArxivSearch = jest.fn();
+const mockSemanticScholar = jest.fn();
 const mockDownload = jest.fn();
 const mockGetLocalPath = jest.fn();
 
 jest.mock('../../../src/retrieval/resolvers/unpaywall', () => ({
   UnpaywallResolver: jest.fn().mockImplementation(() => ({
     getOpenAccessPdf: mockGetOpenAccessPdf,
+  })),
+}));
+jest.mock('../../../src/retrieval/resolvers/semantic-scholar', () => ({
+  SemanticScholarResolver: jest.fn().mockImplementation(() => ({
+    getOpenAccessPdf: mockSemanticScholar,
   })),
 }));
 jest.mock('../../../src/retrieval/resolvers/arxiv', () => ({
@@ -49,6 +55,9 @@ describe('RetrievalOrchestrator', () => {
     jest.clearAllMocks();
     tempStorage = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-orch-'));
     mockGetLocalPath.mockReturnValue(null);
+    // Default: Semantic Scholar has nothing, so tests that predate it still
+    // exercise the arXiv fallback. Real calls here would hit the network.
+    mockSemanticScholar.mockResolvedValue({ ok: true, value: null });
   });
 
   afterEach(() => {
@@ -126,6 +135,77 @@ describe('RetrievalOrchestrator', () => {
     expect(db.updatePdfPath).not.toHaveBeenCalled();
     expect(result.success).toBe(false);
     expect(result.message).toContain('arxiv(no confident title match');
+  });
+
+  test('downloads via Semantic Scholar when Unpaywall has nothing', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockSemanticScholar.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        pdfUrl: 'https://pointclouds.org/pcl.pdf',
+        title: '3D is Here: Point Cloud Library',
+      },
+    });
+    mockDownload.mockResolvedValueOnce(path.join(tempStorage, 'pcl.pdf'));
+    const db = makeFakeDb({ doi: '10/pcl', title: '3D is Here: Point Cloud Library (PCL)' });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@lab.edu' }, tempStorage);
+    const result = await orch.retrievePdf('10/pcl');
+
+    expect(result.success).toBe(true);
+    expect(result.source).toBe('semantic-scholar');
+    // A precise DOI source answered, so the fuzzy title search never ran.
+    expect(mockArxivSearch).not.toHaveBeenCalled();
+  });
+
+  // Semantic Scholar returned koval2013precontact.pdf for Held 2016: a DOI
+  // match does not make the upstream PDF correct.
+  test('rejects a Semantic Scholar PDF whose title is grossly wrong for the DOI', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockSemanticScholar.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        pdfUrl: 'https://ri.cmu.edu/koval2013precontact.pdf',
+        title: 'Pre- and post-contact policy decomposition for planar contact manipulation',
+      },
+    });
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({
+      doi: '10/held',
+      title: 'Robust Real-Time Tracking Combining 3D Shape, Colour, and Motion',
+    });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@lab.edu' }, tempStorage);
+    const result = await orch.retrievePdf('10/held');
+
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('semantic-scholar(title mismatch');
+  });
+
+  // The DOI already proves identity, so an abbreviated BibTeX subtitle (which
+  // scores 0.65 and would fail arXiv's 0.9 bar) must still be accepted here.
+  test('accepts a Semantic Scholar PDF whose title is merely abbreviated', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockSemanticScholar.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        pdfUrl: 'https://x/patchwork.pdf',
+        title:
+          'Patchwork: Concentric Zone-based Region-wise Ground Segmentation with Ground Likelihood Estimation Using a 3D LiDAR Sensor',
+      },
+    });
+    mockDownload.mockResolvedValueOnce(path.join(tempStorage, 'patchwork.pdf'));
+    const db = makeFakeDb({
+      doi: '10/patchwork',
+      title: 'Patchwork: Concentric Zone-Based Region-Wise Ground Segmentation with Tilted LiDAR',
+    });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@lab.edu' }, tempStorage);
+    const result = await orch.retrievePdf('10/patchwork');
+
+    expect(result.success).toBe(true);
+    expect(result.source).toBe('semantic-scholar');
   });
 
   test('accumulates per-step attempts into RetrievalResult.message on terminal failure', async () => {

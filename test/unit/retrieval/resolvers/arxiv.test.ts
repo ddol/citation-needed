@@ -9,11 +9,7 @@ jest.mock('../../../../src/retrieval/config', () => ({
 }));
 
 // eslint-disable-next-line import/first, import/order
-import {
-  ArxivResolver,
-  selectArxivMatch,
-  titleSimilarity,
-} from '../../../../src/retrieval/resolvers/arxiv';
+import { ArxivResolver, selectArxivMatch } from '../../../../src/retrieval/resolvers/arxiv';
 // eslint-disable-next-line import/first, import/order
 import { ARXIV_MAX_ATTEMPTS } from '../../../../src/retrieval/config';
 
@@ -131,23 +127,6 @@ describe('ArxivResolver throttling', () => {
 
     expect(result.ok).toBe(false);
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('titleSimilarity', () => {
-  test('ignores case, punctuation and LaTeX braces', () => {
-    expect(
-      titleSimilarity('{RangeNet++}: Fast and Accurate', 'RangeNet++: Fast and Accurate')
-    ).toBe(1);
-  });
-
-  test('scores unrelated titles low', () => {
-    expect(
-      titleSimilarity(
-        'A New Approach to Linear Filtering and Prediction Problems',
-        'Fluid Antenna System: New Insights on Outage Probability and Diversity Gain'
-      )
-    ).toBeLessThan(0.5);
   });
 });
 
