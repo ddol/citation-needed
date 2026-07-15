@@ -63,6 +63,61 @@ Used to organize the Exploratory section of the backlog for future re-triage:
 - **D — Researcher Workflow**: fits existing human workflows and frontends
 - **E — Platform & Scale**: the foundations the other streams stand on
 
+## Backlog coverage review
+
+Reviewed 2026-07-14 against [BACKLOG.md](../../BACKLOG.md). The current plan
+set covers the major product areas:
+
+- **Core slice 3**: [domain-model.md](domain-model.md),
+  [service-layer.md](service-layer.md), and
+  [retrieval-pipeline.md](retrieval-pipeline.md).
+- **Flow A**: [service-layer.md](service-layer.md),
+  [fts5-full-text-search.md](fts5-full-text-search.md),
+  [zotero-integration.md](zotero-integration.md),
+  [retrieval-pipeline.md](retrieval-pipeline.md), and the deferred
+  [vector-hybrid-search.md](vector-hybrid-search.md).
+- **Flow B**: [storage-adapters.md](storage-adapters.md),
+  [local-bibliography-spider.md](local-bibliography-spider.md), and
+  [citation-graph.md](citation-graph.md).
+- **Flow C**: [local-bibliography-spider.md](local-bibliography-spider.md),
+  [citation-graph.md](citation-graph.md),
+  [retrieval-pipeline.md](retrieval-pipeline.md), and
+  [domain-model.md](domain-model.md).
+- **Infrastructure**: [indexing-jobs.md](indexing-jobs.md),
+  [http-api.md](http-api.md), [storage-adapters.md](storage-adapters.md), and
+  [service-layer.md](service-layer.md).
+
+Known conflicts / ownership decisions:
+
+- **Extracted references**: local bibliography parsing and raw reference
+  evidence belong to
+  [local-bibliography-spider.md](local-bibliography-spider.md). The citation
+  graph consumes accepted edges and cross-checks graph-source edges against
+  extracted evidence; it does not own a second parser.
+- **Crossref / DOI resolver**: [retrieval-pipeline.md](retrieval-pipeline.md)
+  parks `DoiResolver` and future Crossref metadata enrichment, while
+  [local-bibliography-spider.md](local-bibliography-spider.md) needs Crossref
+  enrichment for parsed references. Implementation should create one shared
+  Crossref client/enrichment service rather than parallel fetchers.
+- **Open-access URLs**: graph-source OA URLs enter the retrieval cascade only
+  through the re-entry gate in [retrieval-pipeline.md](retrieval-pipeline.md);
+  [citation-graph.md](citation-graph.md) owns discovery, not downloader
+  ordering.
+- **Backlog vs plan docs**: Core items are scheduled, Exploratory items are
+  deliberately parked in the backlog under the Flow A/B/C/Infrastructure
+  rubric, and Deferred items stay in their plan doc until adopted.
+
+Areas needing more detail before scheduling:
+
+- Small CLI/MCP maintenance commands (`stats`, `update`, `get-retrieval-log`,
+  `update-citation`, `delete-citation`) need a CitationService/RetrievalService
+  detail pass when the second surface is scheduled.
+- Import/export formats (`RIS`, `CSV`, `export`) need a format-interop plan
+  before implementation; today they are only backlog placeholders.
+- TUI expansion, npm/Docker/systemd packaging, SAML/Shibboleth, database
+  backup/restore, and webhook notifications are intentionally backlog-only and
+  should get focused plans before being promoted to Core.
+
 ## Architecture principles
 
 The research assistant is **core + satellites**: the agent is the shell,
@@ -88,7 +143,7 @@ Slices 1–2 are shipped ([BACKLOG.md](../../BACKLOG.md) § Completed). Next:
 ## Review protocol
 
 Doc statuses: `Proposed → Core | Exploratory | Deferred | Dropped`. Docs are
-never deleted; Dropped keeps a one-line rationale. Backlog items are scheduled
-in [BACKLOG.md](../../BACKLOG.md) only for Core plans; Exploratory and Deferred
-plans keep their items parked. Keep the status table above in sync with the doc
-headers.
+never deleted; Dropped keeps a one-line rationale. [BACKLOG.md](../../BACKLOG.md)
+contains the scheduled Core slice plus parked Exploratory work ordered by the
+Flow A/B/C/Infrastructure rubric. Deferred work stays in its plan doc until
+adopted. Keep the status table above in sync with the doc headers.

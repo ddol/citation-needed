@@ -107,7 +107,7 @@ Lexical mode uses FTS5 when the virtual tables exist, `LIKE` otherwise
 field reserved in [service-layer.md](service-layer.md). Public contract
 unchanged.
 
-### verify-quote (stream B — Trust & Verification)
+### verify-quote (Flow B — Trust & Verification)
 
 Check that a quoted passage actually appears in a source. Normalization:
 collapse whitespace runs, undo line-break hyphenation, fold unicode

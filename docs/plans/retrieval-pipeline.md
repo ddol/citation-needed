@@ -112,12 +112,22 @@ Exploratory (Flow C, parked here):
 
 ## Open questions
 
-None currently.
+1. Crossref enrichment is needed both for general citation metadata and for
+   parsed bibliography references
+   ([local-bibliography-spider.md](local-bibliography-spider.md)). Implement it
+   once, with recorded fixtures and provenance, rather than adding separate
+   fetchers.
+2. SAML/Shibboleth remains backlog-only. Before scheduling, decide whether it
+   belongs in the authenticated downloader, an external browser-profile setup
+   guide, or a separate institutional-access plan.
 
 ## Relationship to other plans
 
 - [citation-graph.md](citation-graph.md) — graph-source open-access PDF URLs
   join the cascade behind the same re-entry gate.
+- [local-bibliography-spider.md](local-bibliography-spider.md) — uses the
+  shared Crossref enrichment path for parsed references but remains
+  metadata-only and never downloads PDFs.
 - [service-layer.md](service-layer.md) — its RetrievalService phase wraps the
   orchestrator; this doc owns the cascade shape it wraps.
 - [storage-adapters.md](storage-adapters.md) — its HTTPS re-fetch open

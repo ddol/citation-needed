@@ -126,3 +126,24 @@ local candidate."
 - Completed backlog items stay untouched.
 - Local bibliography spidering runs before external graph-source expansion in
   Flow C because it uses evidence already present in the corpus.
+
+## Open questions
+
+1. Crossref enrichment should share the same client/provenance model as the
+   broader metadata enrichment item in
+   [retrieval-pipeline.md](retrieval-pipeline.md); implementation should avoid
+   a second ad hoc Crossref fetcher.
+2. Accepted local reference matches should become citation-graph edges once
+   [citation-graph.md](citation-graph.md) lands. Until then, they remain local
+   reference evidence plus review decisions.
+
+## Relationship to other plans
+
+- [fts5-full-text-search.md](fts5-full-text-search.md) — provides extracted
+  Markdown and quality/post-processing work that improves bibliography parsing.
+- [domain-model.md](domain-model.md) — identifiers and DOI-less admission
+  determine how weakly identified frontier references are represented.
+- [citation-graph.md](citation-graph.md) — consumes exact DOI links and accepted
+  review matches as extracted citation edges; does not duplicate the parser.
+- [retrieval-pipeline.md](retrieval-pipeline.md) — owns the shared Crossref
+  enrichment and retrieval-cascade boundary.

@@ -82,7 +82,7 @@ retrieval + extraction pipeline. Stubs require a DOI until DOI-less admission
 lands. The identifiers table gains `semantic-scholar-id` / `openalex-id`
 schemes for cross-source dedupe.
 
-### Agent-facing MCP tools (stream A)
+### Agent-facing MCP tools (Flow A)
 
 - `get-references {doi}` — what this paper cites (backward).
 - `get-citing-papers {doi, sort: influence | recency}` — follow-on work; the
@@ -95,7 +95,7 @@ schemes for cross-source dedupe.
 - `expand-corpus {seeds?, direction, depth, budget, filters}` — enqueues
   bounded snowball jobs.
 
-### Expansion & trends (stream C)
+### Expansion & trends (Flow C)
 
 - **Snowball job kind** in the jobs pipeline: explicit invocations only (MCP
   tool or CLI), depth ≤ 2 default, per-run API-call and new-stub budgets,
@@ -140,7 +140,7 @@ documented in the composition docs item).
 2. **Expansion**: `expand-corpus` snowball job kind + frontier promotion +
    OA-URL cascade source + OpenAlex client.
 3. **Trends & cross-check**: `trends` digest command + cron recipe in the
-   composition docs; extracted-reference cross-check (stream B).
+   composition docs; extracted-reference cross-check (Flow B).
 
 ## Backlog items (all exploratory)
 
@@ -182,11 +182,24 @@ Phases 2–3:
 3. Citation contexts (S2 provides quote snippets around citations): store them
    as edge metadata for the assistant, or fetch on demand?
 
+## Ownership notes
+
+- Extracted reference parsing and raw bibliography evidence are owned by
+  [local-bibliography-spider.md](local-bibliography-spider.md). This plan owns
+  external graph-source edges, frontier/member status, graph MCP tools, and
+  cross-checking graph-source edges against accepted local reference evidence.
+- Graph-source open-access URLs do not bypass the retrieval cascade; they enter
+  through the stage re-entry gate in
+  [retrieval-pipeline.md](retrieval-pipeline.md).
+
 ## Relationship to other plans
 
 - [domain-model.md](domain-model.md) — migration runner hosts the edges/status
   migration; identifiers gains graph-source schemes; DOI-less admission lifts
   the stub-requires-DOI constraint.
+- [local-bibliography-spider.md](local-bibliography-spider.md) — provides
+  local extracted-reference evidence and accepted local citation edges for
+  cross-checking.
 - [indexing-jobs.md](indexing-jobs.md) — snowball/trends run as job kinds;
   scheduling stays external.
 - [service-layer.md](service-layer.md) — graph tools follow the shared
