@@ -20,15 +20,16 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/index.ts'],
-  // Floor sits just below current coverage so any regression fails CI.
-  // Push these higher as more code gets tested (ImportProgress, MCP retrieval
-  // tool, full orchestrator cascade) — tracked as a follow-up to Milestone 1.
+  // Coverage is a ratchet: this floor sits just below actual coverage so any
+  // regression fails CI, and it rises as real coverage rises. It never goes
+  // down — see DESIGN.md § Testing. Least-covered areas today: ImportProgress,
+  // the MCP retrieval tool, and the authenticated download path.
   coverageThreshold: {
     global: {
-      lines: 60,
-      branches: 45,
-      functions: 48,
-      statements: 60,
+      lines: 77,
+      branches: 60,
+      functions: 68,
+      statements: 75,
     },
   },
 };
