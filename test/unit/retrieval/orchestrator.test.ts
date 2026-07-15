@@ -14,6 +14,9 @@ jest.mock('../../../src/retrieval/resolvers/unpaywall', () => ({
   })),
 }));
 jest.mock('../../../src/retrieval/resolvers/arxiv', () => ({
+  // Keep the real selectArxivMatch: the orchestrator's job is to reject
+  // unrelated arXiv hits, so that guard must run for real here.
+  ...jest.requireActual('../../../src/retrieval/resolvers/arxiv'),
   ArxivResolver: jest.fn().mockImplementation(() => ({
     searchByTitle: mockArxivSearch,
     getPdfUrl: (id: string) => `https://arxiv.org/pdf/${id}`,
@@ -94,6 +97,35 @@ describe('RetrievalOrchestrator', () => {
 
     expect(result.source).toBe('arxiv');
     expect(result.success).toBe(true);
+  });
+
+  // Regression: the real run downloaded arXiv 1411.4413 (a CERN B_s->mumu
+  // paper) for 10 unrelated citations, including papers published decades
+  // before arXiv existed, because the first search hit was taken unchecked.
+  test('does not download an arXiv hit whose title does not match the citation', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockArxivSearch.mockResolvedValueOnce({
+      ok: true,
+      value: [
+        {
+          arxivId: '1411.4413',
+          pdfUrl: 'https://arxiv.org/pdf/1411.4413',
+          title: 'Observation of the rare $B^0_s\\to\\mu^+\\mu^-$ decay from CMS and LHCb data',
+        },
+      ],
+    });
+    const db = makeFakeDb({
+      doi: '10/kalman',
+      title: 'A New Approach to Linear Filtering and Prediction Problems',
+    });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@me.com' }, tempStorage);
+    const result = await orch.retrievePdf('10/kalman');
+
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(db.updatePdfPath).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('arxiv(no confident title match');
   });
 
   test('accumulates per-step attempts into RetrievalResult.message on terminal failure', async () => {

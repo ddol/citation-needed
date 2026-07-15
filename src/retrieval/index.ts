@@ -2,7 +2,7 @@ import fs from 'fs';
 import type { Database } from '../db/index';
 import type { AuthConfig } from '../models/auth';
 import type { RetrievalResult } from '../models/retrieval';
-import { ArxivResolver } from './resolvers/arxiv';
+import { ArxivResolver, selectArxivMatch } from './resolvers/arxiv';
 import { UnpaywallResolver } from './resolvers/unpaywall';
 import { OpenAccessDownloader } from './downloaders/open-access';
 import { AuthenticatedDownloader } from './downloaders/authenticated';
@@ -126,8 +126,15 @@ export class RetrievalOrchestrator {
       if (!search.ok) {
         attempts.push(`arxiv(${search.error})`);
       } else if (search.value.length > 0) {
+        const matched = selectArxivMatch(citation.title, search.value);
+        if (!matched) {
+          attempts.push(
+            `arxiv(no confident title match; best candidate: "${search.value[0].title}")`
+          );
+          return { success: false, source: 'open-access', message: 'No open-access PDF found' };
+        }
         try {
-          const { pdfUrl } = search.value[0];
+          const { pdfUrl } = matched;
           const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
           this.db.transaction(() => {
             this.db.updatePdfPath(doi, localPath);

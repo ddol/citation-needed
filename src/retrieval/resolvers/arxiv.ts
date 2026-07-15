@@ -21,8 +21,12 @@ export class ArxivResolver {
 
   async searchByTitle(title: string): Promise<ResolverResult<ArxivResult[]>> {
     const normalizedTitle = normalizeTitle(title);
-    const strictQuery = `ti:${encodeURIComponent(normalizedTitle)}`;
-    const broadQuery = `all:${encodeURIComponent(stripQueryPunctuation(normalizedTitle))}`;
+    // The phrase MUST stay quoted. arXiv splits an unquoted field value on
+    // whitespace and ORs the terms across all fields, so `ti:Foo Bar Baz`
+    // becomes `ti:Foo OR all:Bar OR all:Baz` — a query that matches most of
+    // the corpus and ranks an unrelated paper first.
+    const strictQuery = `ti:${encodeURIComponent(quotePhrase(normalizedTitle))}`;
+    const broadQuery = `all:${encodeURIComponent(quotePhrase(stripQueryPunctuation(normalizedTitle)))}`;
 
     try {
       const strictResults = await this.queryArxiv(strictQuery);
@@ -97,6 +101,77 @@ export class ArxivResolver {
 
 function normalizeTitle(title: string): string {
   return title.replace(/\s+/g, ' ').trim();
+}
+
+/** Wrap in double quotes so arXiv treats the value as a single phrase. */
+function quotePhrase(value: string): string {
+  return `"${value.replace(/"/g, ' ').replace(/\s+/g, ' ').trim()}"`;
+}
+
+/**
+ * Collapse a title to comparable form: LaTeX braces, punctuation, case and
+ * whitespace all vary between BibTeX and arXiv for the same paper.
+ */
+function normalizeForCompare(title: string): string {
+  return title
+    .replace(/[{}\\]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+/** 1 = identical after normalization, 0 = nothing in common. */
+export function titleSimilarity(a: string, b: string): number {
+  const left = normalizeForCompare(a);
+  const right = normalizeForCompare(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const longest = Math.max(left.length, right.length);
+  return (longest - levenshtein(left, right)) / longest;
+}
+
+/**
+ * arXiv ranks by relevance and always answers with *something*, so a returned
+ * result is a candidate, not a match. Papers that predate arXiv (Kalman 1960,
+ * Kuhn 1955) have no correct answer at all. Require a near-exact title before
+ * trusting a hit — a missing PDF is recoverable, a wrong one is silent
+ * corruption.
+ */
+export const ARXIV_TITLE_MATCH_THRESHOLD = 0.9;
+
+export function selectArxivMatch(
+  expectedTitle: string,
+  candidates: ArxivResult[]
+): ArxivResult | undefined {
+  let best: ArxivResult | undefined;
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = titleSimilarity(expectedTitle, candidate.title);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return bestScore >= ARXIV_TITLE_MATCH_THRESHOLD ? best : undefined;
 }
 
 function stripQueryPunctuation(title: string): string {

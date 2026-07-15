@@ -53,8 +53,9 @@ describe('Retrieval Resolvers', () => {
       const resolver = new ArxivResolver();
       await resolver.searchByTitle('Test   Paper\n   Title');
 
+      // The phrase stays quoted (%22) — unquoted, arXiv ORs the words apart.
       expect(axios.get).toHaveBeenCalledWith(
-        expect.stringContaining('search_query=ti:Test%20Paper%20Title'),
+        expect.stringContaining('search_query=ti:%22Test%20Paper%20Title%22'),
         expect.objectContaining({ timeout: 30000, responseType: 'text' })
       );
     });
