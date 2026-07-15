@@ -5,6 +5,7 @@ import { registerDownloadCommand } from './commands/download';
 import { registerServerCommand } from './commands/server';
 import { registerAuthCommand } from './commands/auth';
 import { registerIndexCommand } from './commands/index-corpus';
+import { registerResetCommand } from './commands/reset';
 import { VERSION } from '../utils/version';
 
 export function runCli(argv: string[]): void {
@@ -20,6 +21,7 @@ export function runCli(argv: string[]): void {
   registerServerCommand(program);
   registerAuthCommand(program);
   registerIndexCommand(program);
+  registerResetCommand(program);
 
   program.parse(argv);
 }

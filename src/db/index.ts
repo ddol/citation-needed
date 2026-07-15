@@ -66,6 +66,13 @@ export interface ChunkMatch {
   snippet: string;
 }
 
+export interface DatabaseRowCounts {
+  citations: number;
+  retrievalLog: number;
+  manifestations: number;
+  chunks: number;
+}
+
 export interface AddCitationResult {
   citation: Citation;
   inserted: boolean;
@@ -722,6 +729,54 @@ export class Database {
       durationMs: r.duration_ms as number | undefined,
       createdAt: r.created_at as string | undefined,
     }));
+  }
+
+  /** Row counts per table, for reporting before/after a reset. */
+  getRowCounts(): DatabaseRowCounts {
+    const count = (table: string): number =>
+      (this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+
+    return {
+      citations: count('citations'),
+      retrievalLog: count('retrieval_log'),
+      manifestations: count('manifestations'),
+      chunks: count('chunks'),
+    };
+  }
+
+  /**
+   * Every on-disk file the DB knows about: citations.pdf_path plus any
+   * manifestation path (PDF and extracted Markdown). Deduplicated, because a
+   * PDF is normally recorded in both places.
+   */
+  getStoredFilePaths(): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT pdf_path AS path FROM citations WHERE pdf_path IS NOT NULL AND pdf_path != ''
+         UNION
+         SELECT path FROM manifestations WHERE path IS NOT NULL AND path != ''`
+      )
+      .all() as { path: string }[];
+
+    return rows.map((r) => r.path);
+  }
+
+  /**
+   * Delete every citation and its dependents. Manifestations and chunks go via
+   * ON DELETE CASCADE (which also fires the FTS sync triggers); retrieval_log
+   * is cleared explicitly first because rows predating the foreign-key
+   * migration can be orphaned and would otherwise survive the cascade.
+   */
+  deleteAllCitations(): void {
+    this.transaction(() => {
+      this.db.exec('DELETE FROM retrieval_log');
+      this.db.exec('DELETE FROM citations');
+    });
+  }
+
+  /** Reclaim page space freed by a bulk delete. Cannot run in a transaction. */
+  vacuum(): void {
+    this.db.exec('VACUUM');
   }
 
   close(): void {
