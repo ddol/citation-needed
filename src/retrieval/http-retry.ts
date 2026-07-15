@@ -46,7 +46,13 @@ export interface RetryOptions {
   baseMs: number;
   timeoutMs: number;
   responseType?: 'text' | 'json';
+  headers?: Record<string, string>;
   onRetry?: (attempt: number, pauseMs: number) => void;
+}
+
+export function isThrottled(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return (error as TransientError).response?.status === 429;
 }
 
 /** GET `url`, retrying transient failures. Throws the last error if all fail. */
@@ -60,6 +66,7 @@ export async function getWithRetry<T>(url: string, options: RetryOptions): Promi
       const response = await axios.get<T>(url, {
         timeout: options.timeoutMs,
         responseType: options.responseType ?? 'json',
+        ...(options.headers ? { headers: options.headers } : {}),
       });
       return response.data;
     } catch (error) {

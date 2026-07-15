@@ -39,6 +39,14 @@ export const SEMANTIC_SCHOLAR_TIMEOUT_MS = 20_000;
 export const SEMANTIC_SCHOLAR_MAX_ATTEMPTS = 4;
 export const SEMANTIC_SCHOLAR_RETRY_BASE_MS = 3_000;
 
+/**
+ * Consecutive throttled lookups before the resolver stops calling Semantic
+ * Scholar for the rest of the run. The shared pool refuses in streaks, not one
+ * DOI at a time, so past this point every further attempt is load we add to a
+ * throttle we are already inside.
+ */
+export const SEMANTIC_SCHOLAR_THROTTLE_TRIP = 3;
+
 /** PDF download HTTP timeout (open-access downloader). */
 export const OPEN_ACCESS_DOWNLOAD_TIMEOUT_MS = 60_000;
 

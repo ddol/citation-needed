@@ -101,13 +101,14 @@ Retrieval tries each source in turn — `cache → Unpaywall → Semantic Schola
 
 ## Environment Variables
 
-| Variable                  | Default                           | Description                                                                                                                                                                           |
-| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CITATION_NEEDED_DIR`     | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)                                                                                                                                   |
-| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                                                                                                                                                               |
-| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                                                                                                                                       |
-| `CITATION_NEEDED_EMAIL`   | _(unset)_                         | Contact email. Enables the Unpaywall and Semantic Scholar stages and is sent as the download `User-Agent` contact. `auth set-email` takes precedence; placeholder domains are ignored |
-| `LOG_LEVEL`               | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                                      |
+| Variable                   | Default                           | Description                                                                                                                                                                           |
+| -------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CITATION_NEEDED_DIR`      | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)                                                                                                                                   |
+| `CITATION_NEEDED_DB`       | `~/.citation-needed/citations.db` | Path to SQLite database                                                                                                                                                               |
+| `CITATION_NEEDED_PDF_DIR`  | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                                                                                                                                       |
+| `CITATION_NEEDED_EMAIL`    | _(unset)_                         | Contact email. Enables the Unpaywall and Semantic Scholar stages and is sent as the download `User-Agent` contact. `auth set-email` takes precedence; placeholder domains are ignored |
+| `SEMANTIC_SCHOLAR_API_KEY` | _(unset)_                         | Optional, free from semanticscholar.org. Without it the Semantic Scholar stage shares an unauthenticated pool that throttles in streaks; a key buys a guaranteed quota                |
+| `LOG_LEVEL`                | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                                      |
 
 See `.env.example` for a copy-paste starter.
 

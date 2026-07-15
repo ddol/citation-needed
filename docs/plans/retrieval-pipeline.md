@@ -39,8 +39,16 @@ acquisition work until each piece earns its slot back.
   awaiting the Crossref metadata-enrichment item.
 - Retry/backoff covers _lookups_, not the PDF `GET` itself; only `proxies[0]` of
   the configured institutional proxies is used.
-- Some publishers reject the downloader's `User-Agent` (MDPI answers 403), so a
-  resolved URL is not always a fetchable one.
+- A resolved URL is not always a fetchable one. Publisher-hosted PDFs answer 403
+  (MDPI, ACM) and some repository hosts serve incomplete certificate chains
+  (`unable to verify the first certificate`). The 403 is **not** a User-Agent
+  block — a browser UA and no UA are refused identically — so there is nothing to
+  fix here without misrepresenting who we are, which
+  [TENETS.md](../../TENETS.md) § Legitimate access only forbids.
+- Semantic Scholar's unauthenticated pool throttles in streaks. `SemanticScholarResolver`
+  trips a breaker after `SEMANTIC_SCHOLAR_THROTTLE_TRIP` consecutive 429s and
+  skips the stage for the rest of the run; `SEMANTIC_SCHOLAR_API_KEY` restores
+  the full retry budget.
 
 ## Design
 
@@ -118,7 +126,7 @@ Exploratory (Flow C, parked here):
 - [fetch] M - Wire publisher adapters into RetrievalOrchestrator fallback chain
 - [fetch] M - Extend the shared http-retry backoff to the PDF GET itself; today it covers lookups only
 - [fetch] M - Publisher-hosted PDFs 403 on our User-Agent (MDPI confirmed): decide whether to send a browser-like UA, fall through to the next source, or record the URL for manual fetch
-- [fetch] S - Semantic Scholar API key support: the unauthenticated pool is shared and throttles unpredictably; a key buys a guaranteed quota
+- [fetch] M - Recover throttled DOIs: when the Semantic Scholar breaker trips mid-import, those citations never get a lookup at all. A second pass after a cooldown, or a resumable retry queue, would reclaim them
 - [fetch] M - Metadata enrichment from Crossref: abstract, keywords, licence, ISSN
 - [fetch] S - DoiResolver: populate isOpenAccess field
 - [auth] M - API key management for publisher APIs (Elsevier, Springer)
