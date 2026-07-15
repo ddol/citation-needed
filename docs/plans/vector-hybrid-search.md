@@ -3,7 +3,7 @@
 | Field         | Value                                                                                                                                                                                             |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | **Deferred** — revisit after FTS5 lands and real search quality is observed                                                                                                                       |
-| Work-stream   | A — Grounded Answers (future enhancement)                                                                                                                                                         |
+| Flow          | A (future enhancement)                                                                                                                                                                            |
 | Depends on    | [fts5-full-text-search.md](fts5-full-text-search.md) (chunks), [service-layer.md](service-layer.md) (mode union), [indexing-jobs.md](indexing-jobs.md) (embed stage), persistent config file item |
 | Last reviewed | 2026-07-12                                                                                                                                                                                        |
 

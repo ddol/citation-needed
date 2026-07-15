@@ -3,7 +3,7 @@
 | Field         | Value                                                                                                                            |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | **Exploratory** — revisit when core-loop usage demands concurrency/resume                                                        |
-| Work-stream   | E — Platform & Scale                                                                                                             |
+| Flow          | Infrastructure                                                                                                                   |
 | Depends on    | [domain-model.md](domain-model.md) phase A (hashes); [fts5-full-text-search.md](fts5-full-text-search.md) for chunk/index stages |
 | Last reviewed | 2026-07-12                                                                                                                       |
 

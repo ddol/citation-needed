@@ -22,31 +22,53 @@ case.
 > Serves: _relevance is not identity_, _legitimate access only_, _every stage is
 > honest_, _a wrong answer is worse than no answer_.
 
-**The active cascade is `cache → Unpaywall → arXiv → authenticated`.** A stage
-joins only when it resolves real, test-backed PDF URLs. Parked stages are
-unexported and unwired — see
-[docs/plans/retrieval-pipeline.md](docs/plans/retrieval-pipeline.md).
+**The cascade is `cache → Unpaywall → Semantic Scholar → arXiv → publisher →
+authenticated`** (`src/retrieval/index.ts`). A stage joins only when it resolves
+real, test-backed PDF URLs; parked stages are unexported and unwired — see
+[docs/plans/retrieval-pipeline.md](docs/plans/retrieval-pipeline.md), which also
+tracks the one stage still violating that rule (`publisher`, whose adapters
+resolve no URLs).
+
+**DOI-keyed sources run before title search.** A DOI names exactly one paper; a
+title search is a guess that has to be validated. Precise sources first also
+spares the fuzzy one a request.
 
 **Verify identity before accepting any candidate.** Upstream search ranks by
-relevance, always returns something, and has no idea what we asked for. arXiv
-candidates must clear `ARXIV_TITLE_MATCH_THRESHOLD` (normalized Levenshtein
-similarity, `src/retrieval/resolvers/arxiv.ts`) against the citation title, and
-the _best_ candidate is chosen — never the first. The threshold is deliberately
-conservative: it will refuse real matches whose preprint title drifted, and
-that is the correct trade.
+relevance, always returns something, and has no idea what we asked for — and a
+DOI lookup can still carry wrong metadata. Every source checks the title through
+`src/retrieval/title-match.ts`, and the _best_ candidate is chosen, never the
+first. Two thresholds, because the evidence differs:
+
+| Lookup                               | Threshold                      | Why                                                                                |
+| ------------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------- |
+| By title (arXiv)                     | `TITLE_SEARCH_THRESHOLD` (0.9) | The title is the _only_ evidence of identity, so near-misses must be refused       |
+| By DOI (Unpaywall, Semantic Scholar) | `DOI_LOOKUP_THRESHOLD` (0.5)   | The DOI already proves identity; the title only guards against wrong upstream data |
+
+The strict bar will refuse real matches whose preprint title drifted, and that is
+the correct trade. Applying it to a DOI lookup is not: it rejects papers whose
+BibTeX subtitle is merely abbreviated.
+
+**A throttled lookup is not a missing paper.** Every upstream rate-limits, and a
+429 that escapes a resolver reads as "no PDF found" — indistinguishable from a
+paper the source does not have. Retry with backoff (`src/retrieval/http-retry.ts`:
+`Retry-After` when offered, else exponential; 429 and 5xx), and surface an
+exhausted budget as an error, never as an empty result.
 
 **Quote every phrase sent to a search API.** An unquoted multi-word value is
 split and OR-ed across all fields by arXiv, which matches most of the corpus and
 ranks an unrelated paper first. Quoting is not cosmetic; it is the difference
 between a query and a wish.
 
-**Never fake a stage that is not configured.** Unpaywall needs a contact email.
-Without one the stage is skipped and says so in `attempts` — it does not silently
-degrade into something else.
+**Never fake a stage that is not configured.** Unpaywall needs a contact email
+and rejects placeholder domains outright, so an `@example.com` address is treated
+as no address at all. The stage is skipped, and `attempts` says which command
+fixes it — it does not silently degrade into something else, and it does not
+spend a request on a guaranteed rejection.
 
-**Be a good citizen on every request**: rate-limit per host, send a `User-Agent`
-carrying a contact address, and use the user's own credentials (from an env var,
-never stored) for institutional proxies.
+**Be a good citizen on every request**: honour each host's published rate limit
+rather than a guess (arXiv asks one request per 3s, not one per second), send a
+`User-Agent` carrying a contact address, and use the user's own credentials (from
+an env var, never stored) for institutional proxies.
 
 **Log every attempt** to `retrieval_log` with its source and URL, success or
 failure. The log is how a bad run gets diagnosed after the fact.

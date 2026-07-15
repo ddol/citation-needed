@@ -1,10 +1,62 @@
-# Institutional Proxy & Auth Setup
+# Contact Email & Institutional Proxy Setup
 
-`citation-needed` never stores passwords. It only stores the **name of an environment variable** that holds the password at runtime.
+Two independent things live in `~/.citation-needed/auth.json`: a **contact
+email**, which unlocks most open-access retrieval and is the one setting nearly
+everyone needs, and optional **institutional proxies** for paywalled content.
 
-## Configuration File
+`citation-needed` never stores passwords. It only stores the **name of an
+environment variable** that holds the password at runtime.
 
-Auth config is stored in `~/.citation-needed/auth.json`. Example:
+## Contact email (start here)
+
+Unpaywall and Semantic Scholar both ask for an address so they can contact you
+about API usage. Without one, **both stages are skipped** and retrieval falls
+back to searching arXiv by title — which finds only the subset of a library that
+has an arXiv preprint.
+
+```bash
+citation-needed auth set-email you@university.edu
+```
+
+Or set `CITATION_NEEDED_EMAIL`; `auth set-email` takes precedence. The address is
+also sent as the contact in the downloader's `User-Agent`.
+
+Use a real one. Unpaywall rejects placeholder domains with HTTP 422 (_"Please use
+your own email address in API calls"_), so `@example.com` and friends are treated
+as no address at all — the stage is skipped with a hint rather than spending a
+request on a guaranteed rejection.
+
+The standalone `download` command can take an address per-invocation instead:
+
+```bash
+citation-needed download 10.1016/j.example --email your@email.com
+```
+
+## Institutional proxies
+
+Optional, and only relevant for content no open-access source carries. Proxy
+credentials are used by the `import-bibtex` retrieval cascade when open-access
+resolution fails. The standalone `download` command does not use them.
+
+### Configure
+
+```bash
+citation-needed auth add-proxy my-university https://proxy.university.edu \
+  --login-url https://proxy.university.edu/login \
+  --username jdoe \
+  --password-env PROXY_PASSWORD
+
+citation-needed auth show   # passwordEnvVar is redacted
+```
+
+### Supply the password at runtime
+
+```bash
+export PROXY_PASSWORD="your_secret_password"
+citation-needed import-bibtex references.bib
+```
+
+### Resulting `auth.json`
 
 ```json
 {
@@ -21,44 +73,5 @@ Auth config is stored in `~/.citation-needed/auth.json`. Example:
 }
 ```
 
-## CLI Configuration
-
-```bash
-# Set email for Unpaywall API
-citation-needed auth set-email you@university.edu
-
-# Add an institutional proxy
-citation-needed auth add-proxy my-university https://proxy.university.edu \
-  --username jdoe \
-  --password-env PROXY_PASSWORD
-
-# Show current config
-citation-needed auth show
-```
-
-## Runtime Password
-
-Set the password via environment variable at runtime:
-
-```bash
-export PROXY_PASSWORD="your_secret_password"
-citation-needed import-bibtex references.bib
-```
-
-Proxy credentials are used by the import/retrieval cascade when open-access
-resolution fails. The standalone `download` CLI command does not use configured
-institutional proxies; it requires `--url` or `--email` for an Unpaywall lookup.
-
-## Unpaywall
-
-Set your email (required by Unpaywall's terms of service):
-
-```bash
-citation-needed auth set-email your@email.com
-```
-
-Or pass it directly:
-
-```bash
-citation-needed download 10.1016/j.example --email your@email.com
-```
+Only the first configured proxy is used today; rotation across several is a
+parked item in [plans/retrieval-pipeline.md](plans/retrieval-pipeline.md).

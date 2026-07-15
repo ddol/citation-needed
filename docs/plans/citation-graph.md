@@ -3,7 +3,7 @@
 | Field         | Value                                                                                                                                                                                              |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | **Exploratory** — interim: compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed                                                                                      |
-| Work-stream   | C — Coverage & Acquisition (discovery MCP tools: A; reference cross-check: B)                                                                                                                      |
+| Flow          | C (discovery MCP tools: A; reference cross-check: B)                                                                                                                                               |
 | Depends on    | [domain-model.md](domain-model.md) (migration runner; identifiers for dedupe), [indexing-jobs.md](indexing-jobs.md) (expansion job kinds), [service-layer.md](service-layer.md) (contract pattern) |
 | Last reviewed | 2026-07-12                                                                                                                                                                                         |
 

@@ -94,7 +94,9 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
 - [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler (see docs/plans/citation-graph.md)
 - [fetch] S - DoiResolver: populate isOpenAccess field — currently always undefined (see docs/plans/retrieval-pipeline.md)
-- [fetch] M - Exponential backoff retry for failed HTTP download attempts (see docs/plans/retrieval-pipeline.md)
+- [fetch] M - Extend the shared http-retry backoff to the PDF GET itself; today it covers lookups only (see docs/plans/retrieval-pipeline.md)
+- [fetch] M - Publisher-hosted PDFs 403 on our User-Agent (MDPI confirmed): send a browser-like UA, fall through to the next source, or record the URL for manual fetch (see docs/plans/retrieval-pipeline.md)
+- [fetch] S - Semantic Scholar API key support: the unauthenticated pool is shared and throttles unpredictably; a key buys a guaranteed quota (see docs/plans/retrieval-pipeline.md)
 - [auth] M - Proxy rotation across multiple configured institutional proxies — currently only proxies[0] used (see docs/plans/retrieval-pipeline.md)
 - [fetch] L - Implement Springer Link PDF resolution via publisher adapter (see docs/plans/retrieval-pipeline.md)
 - [fetch] L - Implement Elsevier ScienceDirect PDF resolution via publisher adapter (see docs/plans/retrieval-pipeline.md)
@@ -149,6 +151,10 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [tui] S - Plain output for static commands; Ink isolated to ImportProgress; list/download/auth/index/reset print plain stdout/stderr via src/cli/output.ts (see DESIGN.md § Terminal output)
 - [cli] S - `reset` maintenance command: wipe citations + dependents, optional --files to delete tracked PDFs/Markdown, dry run unless --yes
 - [fetch] S - arXiv identity check: quoted phrase queries + title-similarity threshold on candidates, best match not first (see TENETS.md § Relevance is not identity)
+- [fetch] M - Semantic Scholar resolver in the cascade after Unpaywall; reaches repository-hosted PDFs no other source has (see docs/plans/retrieval-pipeline.md)
+- [fetch] S - Honour each host's published rate limit and back off on 429/5xx via shared http-retry; a throttled lookup no longer reports as a missing paper (see DESIGN.md § Retrieval and access)
+- [fetch] S - Shared title-match with two thresholds: strict for title search, loose for DOI lookups where the DOI already proves identity (see DESIGN.md § Retrieval and access)
+- [fetch] S - Contact email enables Unpaywall/Semantic Scholar: honour CITATION_NEEDED_EMAIL, treat placeholder domains as unset, and name the fix in attempts (see docs/auth-setup.md)
 - [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
 - [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
 - [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems

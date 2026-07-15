@@ -12,14 +12,16 @@ src/
   models/       – Shared TypeScript interfaces (Citation, AuthConfig, …)
   utils/        – Logger, RateLimiter, file helpers
   parsers/      – BibTeX parser, DOI normalizer, URL classifier
-  db/           – SQLite database layer (better-sqlite3)
-  retrieval/    – PDF retrieval: resolvers, downloaders, publisher adapters
-  auth/         – Authentication config (Unpaywall email, institutional proxies)
+  db/           – SQLite database layer (better-sqlite3) + versioned migrations
+  retrieval/    – PDF retrieval: cascade, resolvers, downloaders, publisher adapters,
+                  shared title matching and throttle-aware HTTP
+  services/     – SearchService, ContentService, indexer, zod contracts
+  auth/         – Authentication config (contact email, institutional proxies)
   verification/ – PDF-to-Markdown extraction helpers
   workflows/    – BibTeX batch processing orchestration
   mcp/          – MCP server with tool modules
-  tui/          – Ink (React) terminal UI components
-  cli/          – Commander-based CLI commands
+  tui/          – Ink (React) — output that redraws while work runs (ImportProgress)
+  cli/          – Commander CLI; static output via cli/output.ts
 ```
 
 ## Data Flow
@@ -35,9 +37,9 @@ workflows/process-bibtex.ts
     │         ▼
     │     db/index.ts (store Citation)
     │
-    ├──► retrieval/index.ts
+    ├──► retrieval/index.ts (RetrievalOrchestrator)
     │         │
-    │         ├──► PDF download cascade (Unpaywall, then arXiv by stored title)
+    │         ├──► the cascade (below)
     │         └──► downloaders/ (OpenAccess, Auth)
     │
     └──► verification/markdown.ts
@@ -45,6 +47,27 @@ workflows/process-bibtex.ts
               ▼
 papers/markdown/*.md output
 ```
+
+### Retrieval cascade
+
+`RetrievalOrchestrator.retrievePdf` tries each stage in order and stops at the
+first PDF:
+
+| Stage            | Keyed by | Notes                                                          |
+| ---------------- | -------- | -------------------------------------------------------------- |
+| cache            | DOI      | Existing `pdf_path` on disk, or a matching file stem           |
+| Unpaywall        | DOI      | Needs a contact email; skipped (and said so) without one       |
+| Semantic Scholar | DOI      | Aggregates arXiv, publisher OA, and repositories               |
+| arXiv            | title    | Quoted phrase search; strictest identity check                 |
+| publisher        | DOI      | Wired but resolves no URLs — removal tracked in the plan below |
+| authenticated    | DOI      | Institutional proxy; only when one is configured               |
+
+DOI-keyed sources run before the title search because a DOI names exactly one
+paper while a search is a guess. Every candidate's title is checked before
+download (`retrieval/title-match.ts`) — strictly for title search, loosely for
+DOI lookups, where the DOI already proves identity. Each stage appends a line to
+`attempts`, which becomes the failure message, and every attempt is written to
+`retrieval_log`.
 
 `citation-needed index` is the follow-on indexing step. It walks stored citations,
 locates extracted Markdown, records/refreshes manifestations, chunks Markdown by
@@ -69,7 +92,18 @@ migrations (`PRAGMA user_version`, `src/db/migrations.ts`):
 - **chunks_fts / citations_fts** – external-content FTS5 indexes (porter
   unicode61), kept in sync by triggers; populated by `citation-needed index`
 
-## CLI Output Defaults
+## CLI Commands
+
+| Command              | Purpose                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| `import-bibtex`      | Full pipeline: parse → retrieve → extract Markdown          |
+| `check-local-papers` | Offline audit of a PDF folder against a `.bib` — no network |
+| `index`              | Chunk extracted Markdown into the FTS5 tables               |
+| `list`               | List stored citations                                       |
+| `download`           | Fetch one PDF for a DOI already in the database             |
+| `reset`              | Maintenance: wipe the database (dry run unless `--yes`)     |
+| `auth`               | Configure contact email and institutional proxies           |
+| `server`             | Start the MCP server (stdio)                                |
 
 When `citation-needed import-bibtex path/to/references.bib` runs:
 

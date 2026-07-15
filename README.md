@@ -14,7 +14,7 @@ It exists to answer one question about a citation: **is this a real quote, and i
 
 - 📚 **BibTeX-first workflow** — process a `.bib` file in one run
 - 🗄️ **SQLite database** — track citation metadata, PDF paths, and processing status
-- 🔓 **Open-access retrieval** — arXiv API and Unpaywall API
+- 🔓 **Open-access retrieval** — Unpaywall, Semantic Scholar, and arXiv, with the identity of every candidate verified before download
 - 🔒 **Authenticated PDF download** — via Playwright for proxy-gated content (optional)
 - 📝 **PDF to Markdown extraction** — convert downloaded PDFs into Markdown in JavaScript
 - 📁 **Automatic output folders** — write PDFs to `papers/pdf/` and Markdown to `papers/markdown/` by default
@@ -64,6 +64,10 @@ citation-needed index
 # Download a single PDF manually if needed
 citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12345
 
+# Wipe the local database (dry run unless --yes; --files also deletes tracked PDFs/Markdown)
+citation-needed reset
+citation-needed reset --files --yes
+
 # Configure auth data used by import/retrieval flows
 citation-needed auth set-email you@university.edu
 citation-needed auth add-proxy campus https://proxy.university.edu \
@@ -81,17 +85,29 @@ By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the Bi
 
 The standalone `download` command only downloads a PDF and updates an existing citation when that DOI is already in the database. It requires either `--url` or `--email` for an Unpaywall lookup; the fuller retrieval cascade, Markdown extraction, and proxy-authenticated fallback live in `import-bibtex`.
 
+`reset` is a maintenance command and is a **dry run unless you pass `--yes`** — a bare `reset` reports what it would remove and changes nothing. `--files` additionally deletes the PDFs and Markdown recorded in the database; without it, only the rows go.
+
+### Set a contact email first
+
+**Without a contact email, `import-bibtex` skips Unpaywall and Semantic Scholar entirely** and falls back to searching arXiv by title — which resolves only the subset of your library that has an arXiv preprint. Both APIs ask for an address so they can contact you about usage, and Unpaywall rejects placeholder domains (`@example.com`) outright.
+
+```bash
+citation-needed auth set-email you@university.edu   # or export CITATION_NEEDED_EMAIL
+```
+
+Retrieval tries each source in turn — `cache → Unpaywall → Semantic Scholar → arXiv → publisher → authenticated` — and stops at the first that yields a PDF. Every candidate's title is checked against the citation before download, so a source that returns the wrong paper is refused rather than saved under the right name. When nothing works, the failure message lists each stage and why it declined.
+
 ---
 
 ## Environment Variables
 
-| Variable                  | Default                           | Description                                                      |
-| ------------------------- | --------------------------------- | ---------------------------------------------------------------- |
-| `CITATION_NEEDED_DIR`     | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)              |
-| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                                          |
-| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                  |
-| `CITATION_NEEDED_EMAIL`   | _(unset)_                         | Contact email sent to Unpaywall and the Crossref User-Agent      |
-| `LOG_LEVEL`               | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent` |
+| Variable                  | Default                           | Description                                                                                                                                                                           |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CITATION_NEEDED_DIR`     | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)                                                                                                                                   |
+| `CITATION_NEEDED_DB`      | `~/.citation-needed/citations.db` | Path to SQLite database                                                                                                                                                               |
+| `CITATION_NEEDED_PDF_DIR` | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                                                                                                                                       |
+| `CITATION_NEEDED_EMAIL`   | _(unset)_                         | Contact email. Enables the Unpaywall and Semantic Scholar stages and is sent as the download `User-Agent` contact. `auth set-email` takes precedence; placeholder domains are ignored |
+| `LOG_LEVEL`               | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                                      |
 
 See `.env.example` for a copy-paste starter.
 
@@ -145,18 +161,26 @@ src/
 ├── models/               # Shared TypeScript interfaces
 ├── utils/                # Logger, RateLimiter, file helpers
 ├── parsers/              # BibTeX, DOI, URL parsers
-├── db/                   # SQLite database (schema + Database class)
+├── db/                   # SQLite database (schema + migrations + Database class)
 ├── retrieval/
-│   ├── resolvers/        # arXiv, Unpaywall, and Crossref/DOI helper resolvers
+│   ├── resolvers/        # Unpaywall, Semantic Scholar, arXiv, Crossref/DOI helper
 │   ├── downloaders/      # Open-access + authenticated PDF downloaders
 │   ├── publishers/       # Publisher URL adapters (Springer, Elsevier, ACM)
-│   └── index.ts          # RetrievalOrchestrator
+│   ├── title-match.ts    # Shared identity check + the two match thresholds
+│   ├── http-retry.ts     # Shared throttle-aware GET (Retry-After, backoff)
+│   ├── config.ts         # Per-host rate limits, timeouts, retry budgets
+│   └── index.ts          # RetrievalOrchestrator (the cascade)
+├── services/             # SearchService, ContentService, indexer, contracts
 ├── verification/         # PDF Markdown extraction helpers
 ├── workflows/            # BibTeX batch processing workflow
 ├── mcp/                  # MCP server with per-tool modules
-├── tui/                  # Ink React components
-└── cli/                  # Commander CLI with per-command files
+├── tui/                  # Ink/React — live redraw only (ImportProgress)
+└── cli/                  # Commander CLI; static output via cli/output.ts
 ```
+
+`src/tui/` and `src/cli/` split on one rule: **`.tsx` means React, and React means
+live redraw.** Static command output uses plain writes through `src/cli/output.ts`.
+See [DESIGN.md](DESIGN.md) § Terminal output.
 
 ---
 

@@ -69,8 +69,13 @@ Search arXiv for a paper by title.
 ### `download-pdf`
 
 Download a PDF for a citation from a direct `pdfUrl`, or from Unpaywall when
-`useUnpaywall` is true and an email is available. This tool does not use the
-institutional-proxy authenticated downloader.
+`useUnpaywall` is true and an email is available.
+
+This is a narrow tool, not the retrieval cascade: it does not try Semantic
+Scholar or arXiv, and it does not use the institutional-proxy authenticated
+downloader. The full cascade — and the identity check that refuses a wrong
+paper — runs in the CLI `import-bibtex` workflow
+([architecture.md](architecture.md) § Retrieval cascade).
 
 **Input:**
 

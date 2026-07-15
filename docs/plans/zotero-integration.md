@@ -3,7 +3,7 @@
 | Field         | Value                                                                                                                                                                   |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | **Exploratory** — Better BibTeX auto-export already covers Zotero → corpus with zero code                                                                               |
-| Work-stream   | D — Researcher Workflow                                                                                                                                                 |
+| Flow          | A                                                                                                                                                                       |
 | Depends on    | [domain-model.md](domain-model.md) phase B (identifiers) for phase 2; [storage-adapters.md](storage-adapters.md) soft (attachment linking works with plain paths first) |
 | Last reviewed | 2026-07-12                                                                                                                                                              |
 

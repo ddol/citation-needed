@@ -3,7 +3,7 @@
 | Field         | Value                                                         |
 | ------------- | ------------------------------------------------------------- |
 | Status        | **Core — slice 2 shipped · slice 3** (phases B/C exploratory) |
-| Work-stream   | E — Platform & Scale (serves A, B, D)                         |
+| Flow          | Infrastructure (serves A, B, C)                               |
 | Depends on    | — (schema foundation for fts5, zotero, storage-adapters)      |
 | Last reviewed | 2026-07-14                                                    |
 

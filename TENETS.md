@@ -62,7 +62,7 @@ then trust.
 We take the open route first, then the user's own front door. We never pick a
 lock.
 
-- Open access first: Unpaywall, arXiv.
+- Open access first: Unpaywall, Semantic Scholar, arXiv.
 - Then the user's own entitlements: their institutional proxy, their
   credentials, at their instruction.
 - We identify ourselves on every request (`User-Agent` with a contact address)

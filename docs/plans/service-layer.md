@@ -3,7 +3,7 @@
 | Field         | Value                                                         |
 | ------------- | ------------------------------------------------------------- |
 | Status        | **Core — slice 1 shipped · slice 3** (phases 3–5 exploratory) |
-| Work-stream   | A — Grounded Answers                                          |
+| Flow          | A (also serves B)                                             |
 | Depends on    | — (foundation; no schema change, no new dependencies)         |
 | Last reviewed | 2026-07-14                                                    |
 
