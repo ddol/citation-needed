@@ -6,6 +6,8 @@
 
 `citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, converts those PDFs into Markdown using JavaScript, and indexes extracted Markdown for grounded MCP search, reading, and quote checking.
 
+It exists to answer one question about a citation: **is this a real quote, and is it a fair interpretation of the work?** [TENETS.md](TENETS.md) states the commitments that follow from that; [DESIGN.md](DESIGN.md) turns them into rules for the code.
+
 ---
 
 ## Features

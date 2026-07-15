@@ -131,14 +131,13 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [docs] S - docs/http-api.md usage reference (see docs/plans/http-api.md)
 - [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends (see docs/plans/citation-graph.md)
 - [flow] L - `watch` mode as filesystem-watcher job producer: monitor a directory for new .bib files and auto-import (see docs/plans/indexing-jobs.md)
-- [tui] S - Evaluate plain output + standard tools (fzf/less) instead of Ink/React before investing in the TUI items below — recommended shape: Ink isolated to ImportProgress; list/download/auth/index print plain stdout/stderr (needs CLI/TUI surface plan before scheduling)
 - [mcp] S - MCP tool: delete-citation (needs CitationService detail pass before scheduling — see docs/plans/service-layer.md)
 - [flow] L - Zotero 7 local HTTP API import (localhost:23119) with incremental pull (see docs/plans/zotero-integration.md)
 - [flow] M - Webhook notification on batch import completion (configurable URL; needs notification plan before scheduling — see docs/plans/indexing-jobs.md)
 - [tui] S - ImportProgress reads the jobs table for progress — survives restarts, shows watch-mode work (see docs/plans/indexing-jobs.md)
-- [tui] L - Interactive TUI: multi-select bulk operations (delete, re-download; needs CLI/TUI surface plan before scheduling)
-- [tui] M - Interactive TUI: paginated, sortable, filterable citations table (needs CLI/TUI surface plan before scheduling)
-- [tui] M - Interactive TUI: live per-citation download progress bars (needs CLI/TUI surface plan before scheduling)
+- [tui] L - Interactive TUI: multi-select bulk operations (delete, re-download; Ink-eligible as live redraw — see DESIGN.md § Terminal output)
+- [tui] M - Interactive TUI: paginated, sortable, filterable citations table (Ink-eligible as live redraw; the static table stays plain — see DESIGN.md § Terminal output)
+- [tui] M - Interactive TUI: live per-citation download progress bars (Ink-eligible as live redraw — see DESIGN.md § Terminal output)
 - [deploy] M - npm publish pipeline and versioned GitHub Releases (needs release plan before scheduling)
 - [deploy] L - Docker container image and Compose file for server mode (also serves the HTTP API — see docs/plans/http-api.md)
 - [deploy] S - Systemd service unit file for persistent MCP server daemon (and the `serve` HTTP daemon — see docs/plans/http-api.md)
@@ -147,6 +146,9 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 
 ## Completed
 
+- [tui] S - Plain output for static commands; Ink isolated to ImportProgress; list/download/auth/index/reset print plain stdout/stderr via src/cli/output.ts (see DESIGN.md § Terminal output)
+- [cli] S - `reset` maintenance command: wipe citations + dependents, optional --files to delete tracked PDFs/Markdown, dry run unless --yes
+- [fetch] S - arXiv identity check: quoted phrase queries + title-similarity threshold on candidates, best match not first (see TENETS.md § Relevance is not identity)
 - [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
 - [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
 - [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
