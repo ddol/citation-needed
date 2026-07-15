@@ -8,6 +8,7 @@ const mockArxivSearch = jest.fn();
 const mockSemanticScholar = jest.fn();
 const mockDownload = jest.fn();
 const mockGetLocalPath = jest.fn();
+const mockAuthenticatedDownload = jest.fn();
 
 jest.mock('../../../src/retrieval/resolvers/unpaywall', () => ({
   UnpaywallResolver: jest.fn().mockImplementation(() => ({
@@ -34,6 +35,11 @@ jest.mock('../../../src/retrieval/downloaders/open-access', () => ({
     getLocalPath: mockGetLocalPath,
   })),
 }));
+jest.mock('../../../src/retrieval/downloaders/authenticated', () => ({
+  AuthenticatedDownloader: jest.fn().mockImplementation(() => ({
+    download: mockAuthenticatedDownload,
+  })),
+}));
 
 // eslint-disable-next-line import/first, import/order
 import { RetrievalOrchestrator } from '../../../src/retrieval/index';
@@ -55,6 +61,7 @@ describe('RetrievalOrchestrator', () => {
     jest.clearAllMocks();
     tempStorage = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-orch-'));
     mockGetLocalPath.mockReturnValue(null);
+    mockAuthenticatedDownload.mockResolvedValue(path.join(tempStorage, 'auth.pdf'));
     // Default: Semantic Scholar has nothing, so tests that predate it still
     // exercise the arXiv fallback. Real calls here would hit the network.
     mockSemanticScholar.mockResolvedValue({ ok: true, value: null });
@@ -90,6 +97,36 @@ describe('RetrievalOrchestrator', () => {
     expect(db.updatePdfPath).toHaveBeenCalledWith('10/test', path.join(tempStorage, 'paper.pdf'));
     expect(db.updateVerificationStatus).toHaveBeenCalledWith('10/test', 'downloaded');
     expect(db.updateAccessType).toHaveBeenCalledWith('10/test', 'open-access');
+  });
+
+  test('returns a cached PDF found at the downloader local path', async () => {
+    const cached = path.join(tempStorage, 'local-cache.pdf');
+    mockGetLocalPath.mockReturnValueOnce(cached);
+    const db = makeFakeDb({ doi: '10/test', title: 'A Paper' });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@me.com' }, tempStorage);
+    const result = await orch.retrievePdf('10/test', { bibtexKey: 'paper2024' });
+
+    expect(result).toEqual({
+      success: true,
+      localPath: cached,
+      source: 'cache',
+      message: 'Already downloaded',
+    });
+    expect(mockGetOpenAccessPdf).not.toHaveBeenCalled();
+  });
+
+  test('falls through when Unpaywall finds a URL but the download fails', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: 'https://oa.example/paper.pdf' });
+    mockDownload.mockRejectedValueOnce(new Error('disk full'));
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({ doi: '10/test', title: 'A Paper' });
+
+    const orch = new RetrievalOrchestrator(db, { email: 'me@me.com' }, tempStorage);
+    const result = await orch.retrievePdf('10/test');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('unpaywall(download failed: disk full)');
   });
 
   test('falls back to arXiv when Unpaywall has nothing, recording attempts', async () => {
@@ -183,6 +220,36 @@ describe('RetrievalOrchestrator', () => {
     expect(result.message).toContain('semantic-scholar(title mismatch');
   });
 
+  test('records Semantic Scholar lookup and download failures before trying arXiv', async () => {
+    mockGetOpenAccessPdf.mockResolvedValue({ ok: true, value: null });
+    mockSemanticScholar.mockResolvedValueOnce({ ok: false, error: 'service unavailable' });
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({ doi: '10/ss', title: 'Semantic Search Paper' });
+
+    const lookupFailure = await new RetrievalOrchestrator(
+      db,
+      { email: 'me@lab.edu' },
+      tempStorage
+    ).retrievePdf('10/ss');
+
+    expect(lookupFailure.message).toContain('semantic-scholar(service unavailable)');
+
+    mockSemanticScholar.mockResolvedValueOnce({
+      ok: true,
+      value: { pdfUrl: 'https://ss.example/paper.pdf', title: 'Semantic Search Paper' },
+    });
+    mockDownload.mockRejectedValueOnce(new Error('timeout'));
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+
+    const downloadFailure = await new RetrievalOrchestrator(
+      db,
+      { email: 'me@lab.edu' },
+      tempStorage
+    ).retrievePdf('10/ss');
+
+    expect(downloadFailure.message).toContain('semantic-scholar(download failed: timeout)');
+  });
+
   // The DOI already proves identity, so an abbreviated BibTeX subtitle (which
   // scores 0.65 and would fail arXiv's 0.9 bar) must still be accepted here.
   test('accepts a Semantic Scholar PDF whose title is merely abbreviated', async () => {
@@ -225,6 +292,38 @@ describe('RetrievalOrchestrator', () => {
     expect(result.message).toContain('arxiv(no matching paper)');
   });
 
+  test('records arXiv skipped, lookup failure, and download failure branches', async () => {
+    mockGetOpenAccessPdf.mockResolvedValue({ ok: true, value: null });
+    const noTitle = await new RetrievalOrchestrator(
+      makeFakeDb({ doi: '10/notitle' }),
+      { email: 'me@me.com' },
+      tempStorage
+    ).retrievePdf('10/notitle');
+    expect(noTitle.message).toContain('arxiv(skipped: no title for search)');
+
+    mockArxivSearch.mockResolvedValueOnce({ ok: false, error: 'arXiv down' });
+    const lookupFailure = await new RetrievalOrchestrator(
+      makeFakeDb({ doi: '10/arxiv', title: 'Arxiv Paper' }),
+      { email: 'me@me.com' },
+      tempStorage
+    ).retrievePdf('10/arxiv');
+    expect(lookupFailure.message).toContain('arxiv(arXiv down)');
+
+    mockArxivSearch.mockResolvedValueOnce({
+      ok: true,
+      value: [
+        { arxivId: '1234.5678', pdfUrl: 'https://arxiv.org/pdf/1234.5678', title: 'Arxiv Paper' },
+      ],
+    });
+    mockDownload.mockRejectedValueOnce(new Error('network lost'));
+    const downloadFailure = await new RetrievalOrchestrator(
+      makeFakeDb({ doi: '10/arxiv', title: 'Arxiv Paper' }),
+      { email: 'me@me.com' },
+      tempStorage
+    ).retrievePdf('10/arxiv');
+    expect(downloadFailure.message).toContain('arxiv(download failed: network lost)');
+  });
+
   test('routes Springer DOIs through the publisher adapter step (currently no-op)', async () => {
     mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
     mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
@@ -245,6 +344,60 @@ describe('RetrievalOrchestrator', () => {
     const orch = new RetrievalOrchestrator(db, { email: 'me@me.com' }, tempStorage);
     const result = await orch.retrievePdf('10.9999/unknown');
 
+    expect(result.message).toContain('publisher(no adapter for DOI prefix)');
+  });
+
+  test('uses authenticated proxy fallback when open access and publisher steps fail', async () => {
+    process.env.PROXY_PASSWORD = 'secret';
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    const db = makeFakeDb({ doi: '10.9999/auth', title: 'Proxy Paper' });
+
+    const result = await new RetrievalOrchestrator(
+      db,
+      {
+        email: 'me@me.com',
+        proxies: [
+          {
+            name: 'campus',
+            proxyUrl: 'https://proxy.example',
+            username: 'reader',
+            passwordEnvVar: 'PROXY_PASSWORD',
+          },
+        ],
+      },
+      tempStorage
+    ).retrievePdf('10.9999/auth');
+
+    expect(result.success).toBe(true);
+    expect(result.source).toBe('authenticated');
+    expect(mockAuthenticatedDownload).toHaveBeenCalledWith(
+      '10.9999/auth',
+      'https://doi.org/10.9999/auth',
+      expect.objectContaining({
+        username: 'reader',
+        password: 'secret',
+        proxyUrl: 'https://proxy.example',
+      })
+    );
+    expect(db.updateAccessType).toHaveBeenCalledWith('10.9999/auth', 'institutional');
+    delete process.env.PROXY_PASSWORD;
+  });
+
+  test('returns authenticated failure with previous attempts when proxy download fails', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
+    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
+    mockAuthenticatedDownload.mockRejectedValueOnce(new Error('login failed'));
+
+    const result = await new RetrievalOrchestrator(
+      makeFakeDb({ doi: '10.9999/auth', title: 'Proxy Paper' }),
+      { email: 'me@me.com', proxies: [{ name: 'campus', proxyUrl: 'https://proxy.example' }] },
+      tempStorage
+    ).retrievePdf('10.9999/auth');
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe('authenticated');
+    expect(result.message).toContain('login failed');
     expect(result.message).toContain('publisher(no adapter for DOI prefix)');
   });
 

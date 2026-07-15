@@ -80,4 +80,38 @@ describe('formatCitationsTable', () => {
     ]);
     expect(longestLine(lines)).toBeLessThanOrEqual(120);
   });
+
+  test('truncates aggressively for narrow terminals and covers every status group', () => {
+    const lines = formatCitationsTable(
+      [
+        {
+          doi: '10.1234/very-long-doi-that-will-be-cut',
+          title: 'A title that is far too long for a narrow terminal',
+          year: 2024,
+          verificationStatus: 'failed',
+        },
+        {
+          doi: '10.1234/missing-title',
+          verificationStatus: 'not-found',
+        },
+        {
+          doi: '10.1234/unverified',
+          title: 'Unverified title',
+          verificationStatus: 'unverified',
+        },
+        {
+          doi: '10.1234/unknown',
+          title: 'Unknown status title',
+          verificationStatus: 'custom',
+        },
+      ],
+      80
+    );
+
+    expect(lines).toHaveLength(5);
+    expect(lines[1]).toContain('10.1234/very');
+    expect(lines[2]).toContain('(no title)');
+    expect(lines[3]).toContain('unverif');
+    expect(lines[4]).toContain('custom');
+  });
 });

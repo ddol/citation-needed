@@ -81,6 +81,7 @@ describe('CLI command registrations', () => {
   afterEach(() => {
     stdout.mockRestore();
     stderr.mockRestore();
+    process.exitCode = 0;
   });
 
   test('import-bibtex renders ImportProgress and waits until exit', async () => {
@@ -195,6 +196,43 @@ describe('CLI command registrations', () => {
       'https://oa.example/beta.pdf',
       'beta2024'
     );
+  });
+
+  test('download reports Unpaywall lookup failures and untracked citations', async () => {
+    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: false, error: 'rate limited' });
+    const failedProgram = new Command();
+    registerDownloadCommand(failedProgram);
+
+    await failedProgram.parseAsync([
+      'node',
+      'citation-needed',
+      'download',
+      '10.1/rate-limited',
+      '--email',
+      'reader@example.com',
+    ]);
+
+    expect(stderr.mock.calls.join('\n')).toContain('Unpaywall lookup failed: rate limited');
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = 0;
+    mockGetCitation.mockReturnValueOnce(undefined);
+    mockDownload.mockResolvedValueOnce('/tmp/untracked.pdf');
+    const untrackedProgram = new Command();
+    registerDownloadCommand(untrackedProgram);
+
+    await untrackedProgram.parseAsync([
+      'node',
+      'citation-needed',
+      'download',
+      '10.1/untracked',
+      '--url',
+      'https://example.com/untracked.pdf',
+    ]);
+
+    expect(stdout.mock.calls.join('\n')).toContain('not found in database');
+    expect(stdout.mock.calls.join('\n')).toContain('Saved to: /tmp/untracked.pdf');
+    expect(mockUpdatePdfPath).not.toHaveBeenCalledWith('10.1/untracked', '/tmp/untracked.pdf');
   });
 
   test('download without URL source prints a guidance error to stderr', async () => {

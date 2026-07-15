@@ -118,4 +118,61 @@ describe('checkLocalPapers', () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test('reports invalid DOI entries and extraction errors on filename mismatches', async () => {
+    const root = makeTempRoot();
+    const bibtexPath = path.join(root, 'refs.bib');
+    const paperPath = path.join(root, 'papers');
+
+    writeBibtex(bibtexPath, [
+      '@article{invalid2024, title={Invalid DOI}, doi={not-a-doi}, author={Jane Doe}, year={2024}}',
+      '@article{error2024, title={Extraction Error}, doi={10.1234/error}, author={Jane Doe}, year={2024}}',
+    ]);
+    writePdf(path.join(paperPath, 'invalid2024.pdf'));
+    writePdf(path.join(paperPath, 'error2024.pdf'));
+
+    try {
+      const result = await checkLocalPapers(bibtexPath, {
+        paperPath,
+        extractText: async (pdfPath) => {
+          if (path.basename(pdfPath) === 'error2024.pdf') throw new Error('cannot extract');
+          return '';
+        },
+      });
+
+      expect(result.entries[0]).toMatchObject({
+        status: 'skipped',
+        message: 'Invalid DOI in BibTeX entry: not-a-doi',
+      });
+      expect(result.entries[1].status).toBe('mismatch');
+      expect(result.entries[1].candidates[0].evidence.extractionError).toBe('cannot extract');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('requires recursive mode for nested PDFs and throws for missing paper directories', async () => {
+    const root = makeTempRoot();
+    const bibtexPath = path.join(root, 'refs.bib');
+    const paperPath = path.join(root, 'papers');
+
+    writeBibtex(bibtexPath, [
+      '@article{nested2024, title={Nested Paper}, doi={10.1234/nested}, author={Jane Doe}, year={2024}}',
+    ]);
+    writePdf(path.join(paperPath, 'nested', 'nested2024.pdf'));
+
+    try {
+      const nonRecursive = await checkLocalPapers(bibtexPath, {
+        paperPath,
+        extractText: async () => 'Nested Paper DOI 10.1234/nested',
+      });
+
+      expect(nonRecursive.entries[0].status).toBe('missing');
+      await expect(
+        checkLocalPapers(bibtexPath, { paperPath: path.join(root, 'missing') })
+      ).rejects.toThrow('Paper directory not found');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

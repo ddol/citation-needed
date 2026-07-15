@@ -24,6 +24,7 @@ describe('check-local-papers command', () => {
   afterEach(() => {
     stdout.mockRestore();
     stderr.mockRestore();
+    process.exitCode = 0;
   });
 
   test('prints a plain local-only report and fails when any entry is not matched', async () => {
@@ -102,5 +103,60 @@ describe('check-local-papers command', () => {
       summary: { matched: 1 },
     });
     expect(process.exitCode).toBe(0);
+  });
+
+  test('formats every non-matched status and catches service errors', async () => {
+    mockCheckLocalPapers.mockResolvedValueOnce({
+      bibtexPath: '/tmp/refs.bib',
+      paperPath: '/tmp/papers',
+      summary: { total: 3, matched: 0, missing: 0, mismatch: 1, ambiguous: 1, skipped: 1 },
+      entries: [
+        {
+          label: 'gamma',
+          doi: '10/gamma',
+          status: 'mismatch',
+          expectedFilenames: ['gamma.pdf'],
+          candidates: [],
+          message: 'Wrong PDF.',
+        },
+        {
+          label: 'dupe',
+          doi: '10/dupe',
+          status: 'ambiguous',
+          expectedFilenames: ['dupe.pdf'],
+          candidates: [],
+          message: 'Multiple PDFs.',
+        },
+        {
+          label: 'nodoi',
+          status: 'skipped',
+          expectedFilenames: [],
+          candidates: [],
+          message: 'No DOI.',
+        },
+      ],
+    });
+
+    const program = new Command();
+    registerCheckLocalPapersCommand(program);
+    await program.parseAsync(['node', 'citation-needed', 'check-local-papers', '/tmp/refs.bib']);
+
+    expect(output()).toContain('MISMATCH 10/gamma');
+    expect(output()).toContain('AMBIGUOUS 10/dupe');
+    expect(output()).toContain('SKIPPED nodoi');
+    expect(process.exitCode).toBe(1);
+
+    mockCheckLocalPapers.mockRejectedValueOnce(new Error('cannot read refs.bib'));
+    const failingProgram = new Command();
+    registerCheckLocalPapersCommand(failingProgram);
+    await failingProgram.parseAsync([
+      'node',
+      'citation-needed',
+      'check-local-papers',
+      '/tmp/missing.bib',
+    ]);
+
+    expect(stderr.mock.calls.join('\n')).toContain('cannot read refs.bib');
+    expect(process.exitCode).toBe(1);
   });
 });

@@ -2,7 +2,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { Database } from '../../../src/db/index';
-import { resetDatabase } from '../../../src/cli/commands/reset';
+import { formatResetSummary, resetDatabase } from '../../../src/cli/commands/reset';
 
 // Per-suite mkdtemp dir: a shared fixture directory races across parallel Jest
 // workers, where another suite's afterAll cleanup deletes this suite's DB
@@ -93,6 +93,28 @@ describe('resetDatabase', () => {
     expect(db.getAllCitations()).toEqual([]);
   });
 
+  test('with --files it reports delete failures before wiping the database', () => {
+    const pdf = path.join(tempDir, 'locked.pdf');
+    fs.writeFileSync(pdf, '%PDF');
+    seedCitation('10/a', pdf);
+    const actualRmSync = fs.rmSync.bind(fs);
+    const rmSync = jest.spyOn(fs, 'rmSync');
+    rmSync.mockImplementation((target: fs.PathLike, options?: fs.RmOptions) => {
+      if (target === pdf) {
+        throw new Error('permission denied');
+      }
+      return actualRmSync(target, options);
+    });
+
+    const summary = resetDatabase(db, { yes: true, files: true });
+
+    rmSync.mockRestore();
+    expect(summary.deletedFiles).toEqual([]);
+    expect(summary.failedFiles).toEqual([{ path: pdf, message: 'permission denied' }]);
+    expect(fs.existsSync(pdf)).toBe(true);
+    expect(db.getAllCitations()).toEqual([]);
+  });
+
   test('reports files that no longer exist without failing', () => {
     seedCitation('10/a', path.join(tempDir, 'missing.pdf'));
 
@@ -109,5 +131,40 @@ describe('resetDatabase', () => {
     expect(summary.applied).toBe(true);
     expect(summary.counts.citations).toBe(0);
     expect(summary.trackedFiles).toEqual([]);
+  });
+
+  test('formats applied and dry-run summaries', () => {
+    const applied = formatResetSummary(
+      {
+        dbPath: '/tmp/citations.db',
+        counts: { citations: 2, retrievalLog: 3, manifestations: 4, chunks: 5 },
+        trackedFiles: ['/tmp/a.pdf'],
+        deletedFiles: ['/tmp/a.pdf'],
+        failedFiles: [],
+        applied: true,
+      },
+      true
+    ).join('\n');
+
+    expect(applied).toContain('Reset complete.');
+    expect(applied).toContain(
+      'Removed 2 citation(s), 3 retrieval-log row(s), 4 manifestation(s), 5 chunk(s).'
+    );
+    expect(applied).toContain('Deleted 1 file(s) from disk.');
+
+    const dryRun = formatResetSummary(
+      {
+        dbPath: '/tmp/citations.db',
+        counts: { citations: 0, retrievalLog: 0, manifestations: 0, chunks: 0 },
+        trackedFiles: [],
+        deletedFiles: [],
+        failedFiles: [],
+        applied: false,
+      },
+      false
+    ).join('\n');
+
+    expect(dryRun).toContain('Dry run');
+    expect(dryRun).toContain('Nothing to reset.');
   });
 });
