@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 
+import { stripAnsi } from '../../helpers/ansi';
 import { registerImportCommand } from '../../../src/cli/commands/import';
 import { registerListCommand } from '../../../src/cli/commands/list';
 import { registerDownloadCommand } from '../../../src/cli/commands/download';
@@ -64,9 +65,11 @@ describe('CLI command registrations', () => {
   let stdout: jest.SpyInstance;
   let stderr: jest.SpyInstance;
 
-  /** Everything the command wrote, stdout and stderr combined. */
+  /** Everything the command wrote, as a reader would see it — escapes stripped. */
   const output = (): string =>
-    [...stdout.mock.calls, ...stderr.mock.calls].map((args) => args.join(' ')).join('\n');
+    stripAnsi(
+      [...stdout.mock.calls, ...stderr.mock.calls].map((args) => args.join(' ')).join('\n')
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();

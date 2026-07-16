@@ -132,6 +132,13 @@ needs tests instead.
 props of an element it constructed. A test that inspects internal wiring passes
 while the user-visible output is broken.
 
+**Assert on visible text, never on raw bytes.** Rendered output carries ANSI
+escapes only sometimes — `jest --colors` sets `FORCE_COLOR=1` in worker
+processes, so the same assertion passes piped and fails in an editor. Put
+rendered output through `stripAnsi` (`test/helpers/ansi.ts`) and measure width
+with `visibleWidth`; escapes occupy no columns. A test whose result depends on
+where it was run is not a test.
+
 **A test that encodes a bug is worse than no test.** When a fix makes a test
 fail, decide which of the two is wrong before touching either — a green suite
 asserting the wrong format is how a defect becomes a specification.

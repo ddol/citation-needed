@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { stripAnsi } from '../../helpers/ansi';
 import { registerCheckLocalPapersCommand } from '../../../src/cli/commands/check-local-papers';
 
 const mockCheckLocalPapers = jest.fn();
@@ -11,8 +12,11 @@ describe('check-local-papers command', () => {
   let stdout: jest.SpyInstance;
   let stderr: jest.SpyInstance;
 
+  /** Everything written, as a reader would see it — escapes stripped. */
   const output = (): string =>
-    [...stdout.mock.calls, ...stderr.mock.calls].map((args) => args.join(' ')).join('\n');
+    stripAnsi(
+      [...stdout.mock.calls, ...stderr.mock.calls].map((args) => args.join(' ')).join('\n')
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();

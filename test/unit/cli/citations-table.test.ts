@@ -1,18 +1,18 @@
+import { stripAnsi, visibleWidth, withForcedColor, withoutColor } from '../../helpers/ansi';
 import { formatCitationsTable } from '../../../src/cli/citations-table';
 
-// Colour is disabled when stdout is not a TTY (as under Jest), so these
-// assertions see plain text and line lengths are real widths.
-function longestLine(lines: string[]): number {
-  return lines.reduce((max, line) => Math.max(max, line.length), 0);
-}
+// Widths are about what occupies a terminal column, so measure visible text:
+// colour is on whenever FORCE_COLOR is set (jest --colors does this in worker
+// processes) and off when stdout is piped, and escapes occupy no columns.
+const longestLine = visibleWidth;
 
 describe('formatCitationsTable', () => {
   test('returns the empty-state hint when there are no rows', () => {
-    expect(formatCitationsTable([], 120).join('\n')).toContain('No citations found');
+    expect(stripAnsi(formatCitationsTable([], 120).join('\n'))).toContain('No citations found');
   });
 
   test('renders header columns and each row', () => {
-    const output = formatCitationsTable(
+    const rows = formatCitationsTable(
       [
         { doi: '10.1234/alpha', title: 'Alpha Paper', year: 2024, verificationStatus: 'verified' },
         { doi: '10.1234/beta', title: 'Beta Paper', year: 2023, verificationStatus: 'failed' },
@@ -24,7 +24,8 @@ describe('formatCitationsTable', () => {
         },
       ],
       120
-    ).join('\n');
+    );
+    const output = stripAnsi(rows.join('\n'));
 
     expect(output).toContain('DOI');
     expect(output).toContain('Title');
@@ -55,6 +56,29 @@ describe('formatCitationsTable', () => {
       120
     );
     expect(longestLine(lines)).toBeLessThan(longTitle.length);
+  });
+
+  // DESIGN.md § Terminal output: compute layout before colour. If a cell were
+  // painted before being padded, the escapes would count toward its width and
+  // every column after it would shift — invisible to a piped run, which has no
+  // colour at all, so force it on here.
+  test('pads before colouring, so escapes never occupy a column', async () => {
+    const rows = [
+      { doi: '10.1234/alpha', title: 'Alpha Paper', year: 2024, verificationStatus: 'verified' },
+      { doi: '10.1234/beta', title: 'Beta Paper', year: 2023, verificationStatus: 'failed' },
+    ];
+
+    // Both runs pin their own colour setting: inheriting the ambient one would
+    // make this test pass or fail based on how it was invoked.
+    const coloured = await withForcedColor(() => formatCitationsTable(rows, 80));
+    const plain = await withoutColor(() => formatCitationsTable(rows, 80));
+
+    // Colour actually happened, and stripping it reproduces the plain layout
+    // exactly — same columns, same padding.
+    expect(coloured.join('')).toContain('\x1b[');
+    expect(plain.join('')).not.toContain('\x1b[');
+    expect(coloured.map(stripAnsi)).toEqual(plain);
+    expect(visibleWidth(coloured)).toBeLessThanOrEqual(80);
   });
 
   test('keeps rendered lines within narrow terminal widths', () => {
