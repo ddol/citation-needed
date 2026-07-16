@@ -1,18 +1,18 @@
 # Contact Email & Institutional Proxy Setup
 
 Two independent things live in `~/.citation-needed/auth.json`: a **contact
-email**, which unlocks most open-access retrieval and is the one setting nearly
-everyone needs, and optional **institutional proxies** for paywalled content.
+email**, which enables Unpaywall and is the one setting nearly everyone needs,
+and optional **institutional proxies** for paywalled content.
 
 `citation-needed` never stores passwords. It only stores the **name of an
 environment variable** that holds the password at runtime.
 
 ## Contact email (start here)
 
-Unpaywall and Semantic Scholar both ask for an address so they can contact you
-about API usage. Without one, **both stages are skipped** and retrieval falls
-back to searching arXiv by title — which finds only the subset of a library that
-has an arXiv preprint.
+Unpaywall asks for an address so it can contact you about API usage. Without one,
+**the Unpaywall stage is skipped** and retrieval continues with Semantic
+Scholar's unauthenticated API, then arXiv by title. Semantic Scholar does not use
+this email; set `SEMANTIC_SCHOLAR_API_KEY` for a better Semantic Scholar quota.
 
 ```bash
 citation-needed auth set-email you@university.edu

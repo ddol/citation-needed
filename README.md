@@ -85,11 +85,11 @@ By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the Bi
 
 The standalone `download` command only downloads a PDF and updates an existing citation when that DOI is already in the database. It requires either `--url` or `--email` for an Unpaywall lookup; the fuller retrieval cascade, Markdown extraction, and proxy-authenticated fallback live in `import-bibtex`.
 
-`reset` is a maintenance command and is a **dry run unless you pass `--yes`** — a bare `reset` reports what it would remove and changes nothing. `--files` additionally deletes the PDFs and Markdown recorded in the database; without it, only the rows go.
+`reset` is a maintenance command and is a **dry run unless you pass `--yes`** — a bare `reset` reports what it would remove and changes nothing. `--files` additionally deletes the PDFs and Markdown recorded in the database; without it, only the rows go. If any file cannot be deleted, the database wipe is stopped so the recorded paths remain available for a retry.
 
 ### Set a contact email first
 
-**Without a contact email, `import-bibtex` skips Unpaywall and Semantic Scholar entirely** and falls back to searching arXiv by title — which resolves only the subset of your library that has an arXiv preprint. Both APIs ask for an address so they can contact you about usage, and Unpaywall rejects placeholder domains (`@example.com`) outright.
+**Without a contact email, `import-bibtex` skips Unpaywall** and continues with Semantic Scholar's unauthenticated API, then arXiv by title. Unpaywall asks for an address so it can contact you about usage and rejects placeholder domains (`@example.com`) outright. Semantic Scholar can run without an email, but an API key gives it a better quota.
 
 ```bash
 citation-needed auth set-email you@university.edu   # or export CITATION_NEEDED_EMAIL
@@ -101,14 +101,14 @@ Retrieval tries each source in turn — `cache → Unpaywall → Semantic Schola
 
 ## Environment Variables
 
-| Variable                   | Default                           | Description                                                                                                                                                                           |
-| -------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CITATION_NEEDED_DIR`      | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)                                                                                                                                   |
-| `CITATION_NEEDED_DB`       | `~/.citation-needed/citations.db` | Path to SQLite database                                                                                                                                                               |
-| `CITATION_NEEDED_PDF_DIR`  | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                                                                                                                                       |
-| `CITATION_NEEDED_EMAIL`    | _(unset)_                         | Contact email. Enables the Unpaywall and Semantic Scholar stages and is sent as the download `User-Agent` contact. `auth set-email` takes precedence; placeholder domains are ignored |
-| `SEMANTIC_SCHOLAR_API_KEY` | _(unset)_                         | Optional, free from semanticscholar.org. Without it the Semantic Scholar stage shares an unauthenticated pool that throttles in streaks; a key buys a guaranteed quota                |
-| `LOG_LEVEL`                | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                                      |
+| Variable                   | Default                           | Description                                                                                                                                                            |
+| -------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CITATION_NEEDED_DIR`      | `~/.citation-needed`              | Base data directory (auth config, db, pdf defaults)                                                                                                                    |
+| `CITATION_NEEDED_DB`       | `~/.citation-needed/citations.db` | Path to SQLite database                                                                                                                                                |
+| `CITATION_NEEDED_PDF_DIR`  | `~/.citation-needed/pdfs`         | Fallback directory for standalone PDF downloads                                                                                                                        |
+| `CITATION_NEEDED_EMAIL`    | _(unset)_                         | Contact email. Enables the Unpaywall stage and is sent as the download `User-Agent` contact. `auth set-email` takes precedence; placeholder domains are ignored        |
+| `SEMANTIC_SCHOLAR_API_KEY` | _(unset)_                         | Optional, free from semanticscholar.org. Without it the Semantic Scholar stage shares an unauthenticated pool that throttles in streaks; a key buys a guaranteed quota |
+| `LOG_LEVEL`                | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                       |
 
 See `.env.example` for a copy-paste starter.
 
