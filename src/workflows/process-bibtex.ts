@@ -182,6 +182,7 @@ export async function processBibtexFile(
 
   const retryCooldownMs = options.retryCooldownMs ?? THROTTLE_COOLDOWN_MS;
   const retryThrottled = options.retryThrottled ?? true;
+  retriever.resetTransientState?.();
 
   let importedCount = 0;
   let downloadedCount = 0;
@@ -323,7 +324,7 @@ export async function processBibtexFile(
     if (inserted) importedCount += 1;
 
     const prepared: PreparedEntry = {
-      entry,
+      entry: normalizedEntry,
       doi: normalizedDoi,
       fileStem,
       label,

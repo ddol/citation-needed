@@ -128,7 +128,7 @@ describe('processBibtexFile', () => {
       );
       expect(mockRetrievePdf).toHaveBeenCalledWith(
         '10.1234/test.paper',
-        expect.objectContaining({ bibtexKey: 'paper' })
+        expect.objectContaining({ bibtexKey: 'paper', doi: '10.1234/test.paper' })
       );
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -411,7 +411,7 @@ describe('processBibtexFile', () => {
       }
     });
 
-    test('clears the throttle breaker before retrying, or the retry is skipped by it', async () => {
+    test('clears transient retriever state at the start and before retrying', async () => {
       const { tempRoot, bibtexPath } = writeTwoEntryBib();
       const resetTransientState = jest.fn();
       mockRetrievalOrchestrator.mockImplementation(() => ({
@@ -434,7 +434,7 @@ describe('processBibtexFile', () => {
           extractMarkdown: async () => '# Paper\n',
         });
 
-        expect(resetTransientState).toHaveBeenCalledTimes(1);
+        expect(resetTransientState).toHaveBeenCalledTimes(2);
       } finally {
         fs.rmSync(tempRoot, { recursive: true, force: true });
       }

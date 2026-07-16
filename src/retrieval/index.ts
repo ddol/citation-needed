@@ -88,7 +88,7 @@ export class RetrievalOrchestrator {
       };
     }
 
-    const fileStem = getCitationFileStem({ doi, ...identity });
+    const fileStem = getCitationFileStem({ ...identity, doi });
     const existing = this.downloader.getLocalPath(doi, fileStem);
     if (existing) {
       return { success: true, localPath: existing, source: 'cache', message: 'Already downloaded' };

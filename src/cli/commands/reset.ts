@@ -54,6 +54,17 @@ export function resetDatabase(db: Database, options: ResetOptions = {}): ResetSu
         failedFiles.push({ path: file, message: err instanceof Error ? err.message : String(err) });
       }
     }
+
+    if (failedFiles.length > 0) {
+      return {
+        dbPath: options.db ?? getDbPath(),
+        counts,
+        trackedFiles,
+        deletedFiles,
+        failedFiles,
+        applied: false,
+      };
+    }
   }
 
   db.deleteAllCitations();
@@ -79,6 +90,15 @@ export function formatResetSummary(summary: ResetSummary, files: boolean): strin
       `Removed ${counts.citations} citation(s), ${counts.retrievalLog} retrieval-log row(s), ` +
         `${counts.manifestations} manifestation(s), ${counts.chunks} chunk(s).`,
       ...(files ? [`Deleted ${summary.deletedFiles.length} file(s) from disk.`] : []),
+    ];
+  }
+
+  if (summary.failedFiles.length > 0) {
+    return [
+      red(bold('Reset stopped.')),
+      '',
+      `Deleted ${summary.deletedFiles.length} file(s), but ${summary.failedFiles.length} file(s) could not be deleted.`,
+      'The database was left intact so you can fix file permissions and retry.',
     ];
   }
 

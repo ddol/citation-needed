@@ -116,6 +116,20 @@ describe('RetrievalOrchestrator', () => {
     expect(mockGetOpenAccessPdf).not.toHaveBeenCalled();
   });
 
+  test('uses the normalized DOI argument rather than raw identity DOI for cache filenames', async () => {
+    mockGetLocalPath.mockReturnValueOnce(path.join(tempStorage, 'normalized.pdf'));
+    const db = makeFakeDb({ doi: '10.1234/test.paper', title: 'A Paper' });
+
+    const result = await new RetrievalOrchestrator(
+      db,
+      { email: 'me@me.com' },
+      tempStorage
+    ).retrievePdf('10.1234/test.paper', { doi: 'https://doi.org/10.1234/test.paper' });
+
+    expect(result.source).toBe('cache');
+    expect(mockGetLocalPath).toHaveBeenCalledWith('10.1234/test.paper', '10.1234_test.paper');
+  });
+
   test('falls through when Unpaywall finds a URL but the download fails', async () => {
     mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: 'https://oa.example/paper.pdf' });
     mockDownload.mockRejectedValueOnce(new Error('disk full'));

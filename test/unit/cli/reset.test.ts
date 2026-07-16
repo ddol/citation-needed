@@ -93,7 +93,7 @@ describe('resetDatabase', () => {
     expect(db.getAllCitations()).toEqual([]);
   });
 
-  test('with --files it reports delete failures before wiping the database', () => {
+  test('with --files it reports delete failures without wiping the database', () => {
     const pdf = path.join(tempDir, 'locked.pdf');
     fs.writeFileSync(pdf, '%PDF');
     seedCitation('10/a', pdf);
@@ -111,8 +111,10 @@ describe('resetDatabase', () => {
     rmSync.mockRestore();
     expect(summary.deletedFiles).toEqual([]);
     expect(summary.failedFiles).toEqual([{ path: pdf, message: 'permission denied' }]);
+    expect(summary.applied).toBe(false);
     expect(fs.existsSync(pdf)).toBe(true);
-    expect(db.getAllCitations()).toEqual([]);
+    expect(db.getAllCitations()).toHaveLength(1);
+    expect(db.getRowCounts().retrievalLog).toBe(1);
   });
 
   test('reports files that no longer exist without failing', () => {
@@ -166,5 +168,20 @@ describe('resetDatabase', () => {
 
     expect(dryRun).toContain('Dry run');
     expect(dryRun).toContain('Nothing to reset.');
+
+    const stopped = formatResetSummary(
+      {
+        dbPath: '/tmp/citations.db',
+        counts: { citations: 1, retrievalLog: 1, manifestations: 0, chunks: 0 },
+        trackedFiles: ['/tmp/a.pdf'],
+        deletedFiles: [],
+        failedFiles: [{ path: '/tmp/a.pdf', message: 'permission denied' }],
+        applied: false,
+      },
+      true
+    ).join('\n');
+
+    expect(stopped).toContain('Reset stopped.');
+    expect(stopped).toContain('database was left intact');
   });
 });
