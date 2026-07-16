@@ -110,7 +110,14 @@ Retrieval tries each source in turn — `cache → Unpaywall → Semantic Schola
 | `SEMANTIC_SCHOLAR_API_KEY` | _(unset)_                         | Optional, free from semanticscholar.org. Without it the Semantic Scholar stage shares an unauthenticated pool that throttles in streaks; a key buys a guaranteed quota |
 | `LOG_LEVEL`                | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                       |
 
-See `.env.example` for a copy-paste starter.
+For local development, copy `.env.example` to `.env` — every `npm run dev*`
+script loads it (via Node's `--env-file-if-exists`, no dependency), and a real
+environment variable still wins over the file. `.env` is gitignored, so an API
+key stays out of commits.
+
+The installed `citation-needed` bin does **not** read `.env`: configure it with
+real environment variables, or `citation-needed auth set-email` for the contact
+address.
 
 ---
 

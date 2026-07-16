@@ -18,6 +18,7 @@ import {
 import {
   SEMANTIC_SCHOLAR_MAX_ATTEMPTS,
   SEMANTIC_SCHOLAR_THROTTLE_TRIP,
+  SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS,
 } from '../../../../src/retrieval/config';
 
 jest.mock('axios');
@@ -123,6 +124,64 @@ describe('SemanticScholarResolver', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(callsBefore);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain('rate limited');
+  });
+
+  // Regression: an earlier breaker stayed open for the whole run. Throttling is
+  // a passing streak, so that cost a 56-entry import every paper only Semantic
+  // Scholar carries — Semantic Scholar contributed zero.
+  test('reopens for a probe after the cooldown and closes when the pool answers', async () => {
+    // Move the clock, not the timers: the shared RateLimiter chains its waits
+    // through setTimeout, and freezing those leaves every later wait chained off
+    // a promise that never resolves.
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(0);
+    try {
+      mockedAxios.get.mockRejectedValue(throttle());
+      const resolver = new SemanticScholarResolver(undefined);
+      for (let i = 0; i < SEMANTIC_SCHOLAR_THROTTLE_TRIP; i += 1) {
+        await resolver.getOpenAccessPdf(`10.1/x${i}`);
+      }
+      expect(isSemanticScholarBreakerOpen()).toBe(true);
+
+      const callsWhileOpen = mockedAxios.get.mock.calls.length;
+      await resolver.getOpenAccessPdf('10.1/during-cooldown');
+      expect(mockedAxios.get).toHaveBeenCalledTimes(callsWhileOpen);
+
+      // Cooldown elapses: one probe is allowed through, and it lands.
+      clock.mockReturnValue(SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS);
+      expect(isSemanticScholarBreakerOpen()).toBe(false);
+      mockedAxios.get.mockReset();
+      mockedAxios.get.mockResolvedValue({
+        data: { title: 'X', openAccessPdf: { url: 'https://x/y.pdf' } },
+      });
+
+      const result = await resolver.getOpenAccessPdf('10.1/after-cooldown');
+
+      expect(result).toEqual({ ok: true, value: { pdfUrl: 'https://x/y.pdf', title: 'X' } });
+      expect(isSemanticScholarBreakerOpen()).toBe(false);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test('a failed probe restarts the cooldown instead of letting every DOI probe', async () => {
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(0);
+    try {
+      mockedAxios.get.mockRejectedValue(throttle());
+      const resolver = new SemanticScholarResolver(undefined);
+      for (let i = 0; i < SEMANTIC_SCHOLAR_THROTTLE_TRIP; i += 1) {
+        await resolver.getOpenAccessPdf(`10.1/x${i}`);
+      }
+
+      clock.mockReturnValue(SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS);
+      await resolver.getOpenAccessPdf('10.1/probe'); // probe fails
+      expect(isSemanticScholarBreakerOpen()).toBe(true);
+
+      const callsAfterProbe = mockedAxios.get.mock.calls.length;
+      await resolver.getOpenAccessPdf('10.1/next');
+      expect(mockedAxios.get).toHaveBeenCalledTimes(callsAfterProbe);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   test('a successful lookup clears the throttle streak', async () => {

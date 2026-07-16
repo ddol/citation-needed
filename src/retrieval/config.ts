@@ -41,11 +41,20 @@ export const SEMANTIC_SCHOLAR_RETRY_BASE_MS = 3_000;
 
 /**
  * Consecutive throttled lookups before the resolver stops calling Semantic
- * Scholar for the rest of the run. The shared pool refuses in streaks, not one
- * DOI at a time, so past this point every further attempt is load we add to a
- * throttle we are already inside.
+ * Scholar. The shared pool refuses in streaks, not one DOI at a time, so past
+ * this point every further attempt is load we add to a throttle we are already
+ * inside.
  */
 export const SEMANTIC_SCHOLAR_THROTTLE_TRIP = 3;
+
+/**
+ * How long the breaker stays open before letting one probe through.
+ *
+ * Throttling is a passing streak, not a property of the run: treating it as
+ * permanent cost a 56-entry import every paper only Semantic Scholar has. Wait
+ * out the streak, then try again rather than writing the source off.
+ */
+export const SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS = 30_000;
 
 /**
  * Pause before an import retries the DOIs a rate limit refused. Long enough for

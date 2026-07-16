@@ -45,10 +45,12 @@ acquisition work until each piece earns its slot back.
   block — a browser UA and no UA are refused identically — so there is nothing to
   fix here without misrepresenting who we are, which
   [TENETS.md](../../TENETS.md) § Legitimate access only forbids.
-- Semantic Scholar's unauthenticated pool throttles in streaks. `SemanticScholarResolver`
-  trips a breaker after `SEMANTIC_SCHOLAR_THROTTLE_TRIP` consecutive 429s and
-  skips the stage for the rest of the run; `SEMANTIC_SCHOLAR_API_KEY` restores
-  the full retry budget.
+- Semantic Scholar's unauthenticated pool throttles in streaks.
+  `SemanticScholarResolver` trips a breaker after
+  `SEMANTIC_SCHOLAR_THROTTLE_TRIP` consecutive 429s, pauses lookups for
+  `SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS`, then lets one probe through and closes
+  if it lands. `SEMANTIC_SCHOLAR_API_KEY` restores the full retry budget and
+  makes the whole path rare.
 - Throttled DOIs are recovered rather than written off: `RetrievalResult.throttled`
   marks a DOI that was refused before it was looked up, and `processBibtexFile`
   queues those, waits `THROTTLE_COOLDOWN_MS`, clears the breaker via

@@ -3,6 +3,7 @@ import { RateLimiter } from '../../utils/rate-limiter';
 import type { ResolverResult } from '../../models/retrieval';
 import { getWithRetry, isThrottled } from '../http-retry';
 import {
+  SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS,
   SEMANTIC_SCHOLAR_MAX_ATTEMPTS,
   SEMANTIC_SCHOLAR_RATE_LIMIT_MS,
   SEMANTIC_SCHOLAR_RETRY_BASE_MS,
@@ -28,21 +29,35 @@ interface SemanticScholarWork {
 }
 
 /**
- * Consecutive throttled lookups. Without an API key the unauthenticated pool is
- * shared across every caller, so once it starts refusing us it keeps refusing:
- * retrying each of the remaining DOIs four times adds load, digs the throttle
- * deeper, and still fails — a 56-entry import spent ~13 minutes doing exactly
- * that. Trip a breaker instead and say so once.
+ * Breaker state. Without an API key the pool is shared across every caller, so
+ * once it starts refusing us it keeps refusing for a while: retrying each
+ * remaining DOI adds load, digs the throttle deeper, and still fails — a
+ * 56-entry import spent ~13 minutes doing exactly that.
+ *
+ * But the streak passes. An earlier version stayed open for the whole run and
+ * cost that same import every paper only Semantic Scholar carries, which is
+ * worse than the hammering it prevented. So: open, wait, then let one probe
+ * through and close again if it lands.
  */
 let consecutiveThrottles = 0;
+let openedAt: number | undefined;
+
+type BreakerState = 'closed' | 'open' | 'half-open';
+
+function breakerState(): BreakerState {
+  if (openedAt === undefined) return 'closed';
+  return Date.now() - openedAt >= SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS ? 'half-open' : 'open';
+}
 
 /** Exported for tests; a run is a process, so the breaker is process-wide. */
 export function resetSemanticScholarBreaker(): void {
   consecutiveThrottles = 0;
+  openedAt = undefined;
 }
 
+/** True while the breaker is refusing calls outright (not yet probing). */
 export function isSemanticScholarBreakerOpen(): boolean {
-  return consecutiveThrottles >= SEMANTIC_SCHOLAR_THROTTLE_TRIP;
+  return breakerState() === 'open';
 }
 
 /**
@@ -61,13 +76,14 @@ export class SemanticScholarResolver {
   }
 
   async getOpenAccessPdf(doi: string): Promise<ResolverResult<SemanticScholarResult | null>> {
-    if (isSemanticScholarBreakerOpen()) {
+    const stateBefore = breakerState();
+    if (stateBefore === 'open') {
       // Throttled, not absent: this DOI was never looked up, so it is worth
       // retrying once the pool has cooled off.
       return {
         ok: false,
         throttled: true,
-        error: `skipped: rate limited after ${SEMANTIC_SCHOLAR_THROTTLE_TRIP} consecutive throttled lookups; ${SEMANTIC_SCHOLAR_KEY_HINT}`,
+        error: `skipped: rate limited, cooling off for ${Math.round(SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS / 1000)}s; ${SEMANTIC_SCHOLAR_KEY_HINT}`,
       };
     }
 
@@ -88,7 +104,9 @@ export class SemanticScholarResolver {
           logger.warn('Semantic Scholar throttled; backing off', { doi, attempt, pause }),
       });
 
+      // The pool is answering again: close the breaker.
       consecutiveThrottles = 0;
+      openedAt = undefined;
 
       const pdfUrl = data.openAccessPdf?.url;
       if (!pdfUrl) return { ok: true, value: null };
@@ -97,9 +115,12 @@ export class SemanticScholarResolver {
     } catch (err) {
       if (isThrottled(err)) {
         consecutiveThrottles += 1;
-        if (isSemanticScholarBreakerOpen()) {
-          logger.warn('Semantic Scholar breaker open; skipping for the rest of the run', {
-            trip: SEMANTIC_SCHOLAR_THROTTLE_TRIP,
+        // A failed probe means the streak is still running — start the cooldown
+        // again rather than letting every subsequent DOI probe too.
+        if (stateBefore === 'half-open' || consecutiveThrottles >= SEMANTIC_SCHOLAR_THROTTLE_TRIP) {
+          openedAt = Date.now();
+          logger.warn('Semantic Scholar breaker open; pausing lookups', {
+            cooldownMs: SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS,
           });
         }
       } else {

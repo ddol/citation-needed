@@ -64,6 +64,12 @@ streaks, per-DOI retries add load to a throttle we are already inside. Trip a
 breaker, stop calling that source, and retry the queue **once** after a cooldown
 (`THROTTLE_COOLDOWN_MS`) with the breaker cleared. One extra pass, never a loop.
 
+**A breaker pauses a source; it does not write one off.** Throttling is a
+passing streak, not a property of the run, so an open breaker must cool down and
+then let a single probe through — closing again when the pool answers. A breaker
+that stays open for the whole run trades every paper only that source carries for
+the hammering it prevented, which is the worse half of the deal.
+
 **Quote every phrase sent to a search API.** An unquoted multi-word value is
 split and OR-ed across all fields by arXiv, which matches most of the corpus and
 ranks an unrelated paper first. Quoting is not cosmetic; it is the difference
