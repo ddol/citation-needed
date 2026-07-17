@@ -1,8 +1,22 @@
 import fs from 'fs';
 import pdf2md from '@opendocsg/pdf2md';
 import { createLogger } from '../utils/logger';
+import { extractPdfLayoutText, repairMarkdownTablesWithLayout } from './layout-tables';
 
 const logger = createLogger('pdf-markdown');
+
+export const PDF_MARKDOWN_EXTRACTOR_NAME = '@opendocsg/pdf2md';
+
+function resolveExtractorVersion(): string {
+  try {
+    const pkg = require('@opendocsg/pdf2md/package.json') as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+export const PDF_MARKDOWN_EXTRACTOR_VERSION = resolveExtractorVersion();
 
 export interface PdfMarkdownExtractor {
   extract(pdfPath: string): Promise<string>;
@@ -24,14 +38,38 @@ interface CandidateLine {
   method: TableMethod;
 }
 
+interface MarkdownFormatter {
+  format(
+    markdown: string,
+    options: { parser: 'markdown'; proseWrap: 'preserve' }
+  ): string | Promise<string>;
+}
+
 export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
   if (!fs.existsSync(pdfPath)) {
     throw new Error(`PDF file not found: ${pdfPath}`);
   }
 
-  const markdown = repairMarkdownTables((await defaultExtractor.extract(pdfPath)).trim());
+  const markdown = await formatGeneratedMarkdown(
+    repairMarkdownTablesWithLayout(
+      repairMarkdownTables((await defaultExtractor.extract(pdfPath)).trim()),
+      await extractPdfLayoutText(pdfPath)
+    )
+  );
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
+}
+
+export async function formatGeneratedMarkdown(markdown: string): Promise<string> {
+  try {
+    const prettier = require('prettier') as MarkdownFormatter;
+    return (await prettier.format(markdown, { parser: 'markdown', proseWrap: 'preserve' })).trim();
+  } catch (error) {
+    logger.warn('Markdown formatting failed; returning unformatted extraction', {
+      err: error instanceof Error ? error.message : String(error),
+    });
+    return markdown;
+  }
 }
 
 export function repairMarkdownTables(markdown: string): string {

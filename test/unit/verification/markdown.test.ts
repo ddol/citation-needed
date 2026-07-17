@@ -3,9 +3,20 @@ import os from 'os';
 import path from 'path';
 
 import pdf2md from '@opendocsg/pdf2md';
-import { extractPdfMarkdown, repairMarkdownTables } from '../../../src/verification/markdown';
+import {
+  extractPdfMarkdown,
+  formatGeneratedMarkdown,
+  repairMarkdownTables,
+} from '../../../src/verification/markdown';
 
 jest.mock('@opendocsg/pdf2md', () => jest.fn());
+jest.mock('prettier', () => ({
+  format: jest.fn(async (markdown: string) =>
+    markdown === '| Metric | Value |\n| --- | --- |\n| Accuracy | 0.91 |'
+      ? '| Metric   | Value |\n| -------- | ----- |\n| Accuracy | 0.91  |\n'
+      : markdown
+  ),
+}));
 
 function tempPdfPath(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-pdf-md-'));
@@ -49,10 +60,18 @@ describe('extractPdfMarkdown', () => {
 
       const result = await extractPdfMarkdown(pdfPath);
 
-      expect(result).toBe('| Metric | Value |\n| --- | --- |\n| Accuracy | 0.91 |');
+      expect(result).toBe('| Metric   | Value |\n| -------- | ----- |\n| Accuracy | 0.91  |');
     } finally {
       fs.rmSync(path.dirname(pdfPath), { recursive: true, force: true });
     }
+  });
+});
+
+describe('formatGeneratedMarkdown', () => {
+  test('formats markdown tables with Prettier', async () => {
+    await expect(
+      formatGeneratedMarkdown('| Metric | Value |\n| --- | --- |\n| Accuracy | 0.91 |')
+    ).resolves.toBe('| Metric   | Value |\n| -------- | ----- |\n| Accuracy | 0.91  |');
   });
 });
 

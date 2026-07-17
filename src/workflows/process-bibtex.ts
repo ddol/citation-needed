@@ -12,20 +12,11 @@ import { RetrievalOrchestrator } from '../retrieval/index';
 import { THROTTLE_COOLDOWN_MS } from '../retrieval/config';
 import { ensureDir, getCitationDisplayName, getCitationFileStem } from '../utils/file';
 import { sha256File, sha256String } from '../utils/hash';
-import { extractPdfMarkdown } from '../verification/markdown';
-
-const EXTRACTOR_NAME = '@opendocsg/pdf2md';
-
-function resolveExtractorVersion(): string {
-  try {
-    const pkg = require('@opendocsg/pdf2md/package.json') as { version?: string };
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
-
-const EXTRACTOR_VERSION = resolveExtractorVersion();
+import {
+  extractPdfMarkdown,
+  PDF_MARKDOWN_EXTRACTOR_NAME,
+  PDF_MARKDOWN_EXTRACTOR_VERSION,
+} from '../verification/markdown';
 
 /**
  * Record file manifestations with content hashes at write time (the source
@@ -47,8 +38,8 @@ async function recordManifestations(
       kind: 'markdown-extracted',
       path: markdownPath,
       contentHash: sha256String(markdown),
-      extractorName: EXTRACTOR_NAME,
-      extractorVersion: EXTRACTOR_VERSION,
+      extractorName: PDF_MARKDOWN_EXTRACTOR_NAME,
+      extractorVersion: PDF_MARKDOWN_EXTRACTOR_VERSION,
     });
     db.upsertManifestation({
       citationId,
