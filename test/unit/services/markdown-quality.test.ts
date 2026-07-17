@@ -523,6 +523,50 @@ describe('scoreMarkdownQuality', () => {
     expect(report.papers[0].sourceEquationNumbers).toEqual(['1']);
     expect(report.papers[0].markdownEquationNumbers).toEqual(['1']);
     expect(report.papers[0].metrics.equationCoverageScore).toBe(1);
+    expect(report.papers[0].metrics.equationFormatScore).toBe(1);
+    expect(report.papers[0].metrics.equationContentScore).toBe(1);
+    expect(report.papers[0].equationComparisons).toMatchObject([
+      {
+        number: '1',
+        presentInMarkdown: true,
+        githubDisplayMath: true,
+        placeholderOnly: false,
+        status: 'matched',
+      },
+    ]);
+  });
+
+  test('flags numbered Markdown equations that are not GitHub display math', async () => {
+    writePaper('inline-equation-format-issue', ['## Metric', '', 'E = mc^2 (1)'].join('\n'));
+    const layout = 'E = mc^2 (1)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.markdownEquationNumbers).toEqual(['1']);
+    expect(paper.missingMarkdownEquations).toEqual([]);
+    expect(paper.malformedMarkdownEquations).toEqual(['1']);
+    expect(paper.placeholderMarkdownEquations).toEqual([]);
+    expect(paper.lowSimilarityMarkdownEquations).toEqual([]);
+    expect(paper.issues).toContain('malformed-markdown-equations:1');
+    expect(paper.metrics).toMatchObject({
+      equationCoverageScore: 1,
+      equationFormatScore: 0,
+      equationContentScore: 1,
+    });
+    expect(paper.equationComparisons).toMatchObject([
+      {
+        number: '1',
+        presentInMarkdown: true,
+        githubDisplayMath: false,
+        placeholderOnly: false,
+        status: 'format-issue',
+      },
+    ]);
   });
 
   test('counts tagged display math placeholders as Markdown equation labels', async () => {
@@ -547,6 +591,51 @@ describe('scoreMarkdownQuality', () => {
 
     expect(report.papers[0].markdownEquationNumbers).toEqual(['2']);
     expect(report.papers[0].metrics.equationCoverageScore).toBe(1);
+    expect(report.papers[0].metrics.equationFormatScore).toBe(1);
+    expect(report.papers[0].metrics.equationContentScore).toBe(0);
+    expect(report.summary.totalPlaceholderMarkdownEquations).toBe(1);
+    expect(report.papers[0].placeholderMarkdownEquations).toEqual(['2']);
+    expect(report.papers[0].issues).toContain('placeholder-markdown-equations:2');
+    expect(report.papers[0].equationComparisons).toMatchObject([
+      {
+        number: '2',
+        presentInMarkdown: true,
+        githubDisplayMath: true,
+        placeholderOnly: true,
+        status: 'placeholder',
+      },
+    ]);
+  });
+
+  test('flags GitHub display math equations whose body does not match the PDF equation', async () => {
+    writePaper(
+      'wrong-equation-body',
+      ['## Metric', '', '$$', 'alpha \\times beta', '\\tag{3}', '$$'].join('\n')
+    );
+    const layout = 'recall = TP / (TP + FN) (3)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.missingMarkdownEquations).toEqual([]);
+    expect(paper.lowSimilarityMarkdownEquations).toEqual(['3']);
+    expect(paper.issues).toContain('low-similarity-markdown-equations:3');
+    expect(report.summary.totalLowSimilarityMarkdownEquations).toBe(1);
+    expect(paper.metrics.equationCoverageScore).toBe(1);
+    expect(paper.metrics.equationFormatScore).toBe(1);
+    expect(paper.metrics.equationContentScore).toBeLessThan(0.25);
+    expect(paper.equationComparisons).toMatchObject([
+      {
+        number: '3',
+        presentInMarkdown: true,
+        githubDisplayMath: true,
+        status: 'content-mismatch',
+      },
+    ]);
   });
 
   test('counts multiple inline equation labels in one math line', async () => {

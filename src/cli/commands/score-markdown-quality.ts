@@ -45,6 +45,11 @@ function formatSummary(report: MarkdownQualityReport, failBelow?: number): strin
       `${report.summary.totalMissingMarkdownCharts} chart(s); ` +
       `${report.summary.totalMissingMarkdownEquations} equation(s).`,
     dim(
+      `Equation quality: ${report.summary.totalMalformedMarkdownEquations} malformed; ` +
+        `${report.summary.totalPlaceholderMarkdownEquations} placeholder; ` +
+        `${report.summary.totalLowSimilarityMarkdownEquations} low-similarity.`
+    ),
+    dim(
       `References: ${report.summary.totalMarkdownReferences}/${report.summary.totalSourceReferences} detected.`
     ),
     dim(
@@ -71,6 +76,8 @@ function formatPaperLine(paper: MarkdownQualityPaper): string {
   const tableCoverage = Math.round(paper.metrics.tableCoverageScore * 100);
   const chartCoverage = Math.round(paper.metrics.chartCoverageScore * 100);
   const equationCoverage = Math.round(paper.metrics.equationCoverageScore * 100);
+  const equationFormat = Math.round(paper.metrics.equationFormatScore * 100);
+  const equationContent = Math.round(paper.metrics.equationContentScore * 100);
   const referenceCoverage = Math.round(paper.metrics.referenceCoverageScore * 100);
   const headingCoverage = Math.round(paper.metrics.headingFlowScore * 100);
   const readability = Math.round(paper.metrics.agentReadabilityScore * 100);
@@ -78,7 +85,8 @@ function formatPaperLine(paper: MarkdownQualityPaper): string {
     `${paper.metrics.score.toFixed(1)} ${paper.id}: ` +
     `tables ${paper.metrics.markdownTableCount}/${sourceTables} (${tableCoverage}%); ` +
     `charts ${paper.metrics.markdownChartCount}/${paper.metrics.sourceChartCount} (${chartCoverage}%); ` +
-    `eqs ${paper.metrics.markdownEquationCount}/${paper.metrics.sourceEquationCount} (${equationCoverage}%); ` +
+    `eqs ${paper.metrics.markdownEquationCount}/${paper.metrics.sourceEquationCount} ` +
+    `(cov ${equationCoverage}%, fmt ${equationFormat}%, body ${equationContent}%); ` +
     `refs ${paper.metrics.markdownReferenceCount}/${paper.metrics.sourceReferenceCount} (${referenceCoverage}%); ` +
     `headings ${headingCoverage}%; agent ${readability}%; ` +
     `pages ${paper.metrics.markdownPages}/${paper.metrics.sourcePages}`

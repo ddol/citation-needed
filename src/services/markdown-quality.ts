@@ -41,6 +41,28 @@ export interface AgentReadabilityIssue {
   suggestion: string;
 }
 
+export interface EquationEvidence {
+  number: string;
+  text: string;
+  normalizedText: string;
+  placeholder: boolean;
+  githubDisplayMath: boolean;
+  page?: number;
+  line?: number;
+}
+
+export interface EquationComparison {
+  number: string;
+  presentInMarkdown: boolean;
+  githubDisplayMath: boolean;
+  placeholderOnly: boolean;
+  contentSimilarity: number;
+  status: 'matched' | 'placeholder' | 'format-issue' | 'content-mismatch' | 'missing';
+  sourcePage?: number;
+  sourceText?: string;
+  markdownText?: string;
+}
+
 export interface MarkdownQualityMetrics {
   score: number;
   sourcePages: number;
@@ -56,6 +78,8 @@ export interface MarkdownQualityMetrics {
   sourceEquationCount: number;
   markdownEquationCount: number;
   equationCoverageScore: number;
+  equationFormatScore: number;
+  equationContentScore: number;
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   referenceCoverageScore: number;
@@ -86,6 +110,10 @@ export interface MarkdownQualityPaper {
   sourceEquationNumbers: string[];
   markdownEquationNumbers: string[];
   missingMarkdownEquations: string[];
+  equationComparisons: EquationComparison[];
+  malformedMarkdownEquations: string[];
+  placeholderMarkdownEquations: string[];
+  lowSimilarityMarkdownEquations: string[];
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   headingIssues: HeadingIssue[];
@@ -107,6 +135,9 @@ export interface MarkdownQualitySummary {
   totalMissingMarkdownCharts: number;
   totalSourceEquations: number;
   totalMissingMarkdownEquations: number;
+  totalMalformedMarkdownEquations: number;
+  totalPlaceholderMarkdownEquations: number;
+  totalLowSimilarityMarkdownEquations: number;
   totalSourceReferences: number;
   totalMarkdownReferences: number;
 }
@@ -173,6 +204,18 @@ export async function scoreMarkdownQuality(
     (sum, paper) => sum + paper.missingMarkdownEquations.length,
     0
   );
+  const totalMalformedMarkdownEquations = papers.reduce(
+    (sum, paper) => sum + paper.malformedMarkdownEquations.length,
+    0
+  );
+  const totalPlaceholderMarkdownEquations = papers.reduce(
+    (sum, paper) => sum + paper.placeholderMarkdownEquations.length,
+    0
+  );
+  const totalLowSimilarityMarkdownEquations = papers.reduce(
+    (sum, paper) => sum + paper.lowSimilarityMarkdownEquations.length,
+    0
+  );
   const totalSourceReferences = papers.reduce(
     (sum, paper) => sum + paper.metrics.sourceReferenceCount,
     0
@@ -195,6 +238,9 @@ export async function scoreMarkdownQuality(
       totalMissingMarkdownCharts,
       totalSourceEquations,
       totalMissingMarkdownEquations,
+      totalMalformedMarkdownEquations,
+      totalPlaceholderMarkdownEquations,
+      totalLowSimilarityMarkdownEquations,
       totalSourceReferences,
       totalMarkdownReferences,
     },
@@ -301,17 +347,23 @@ async function scorePaper(
     sourceNumberedItemsForPage(pageText, index + 1, CHART_CAPTION_RE)
   );
   const sourceChartNumbers = unique(sourceChartsByPage.flatMap((page) => page.numbers));
+  const sourceEquationEvidence = sourcePages.flatMap((pageText, index) =>
+    sourceEquationEvidenceForPage(pageText, index + 1)
+  );
   const sourceEquationsByPage = sourcePages.map((pageText, index) =>
     sourceEquationsForPage(pageText, index + 1)
   );
-  const sourceEquationNumbers = unique(sourceEquationsByPage.flatMap((page) => page.numbers));
+  const sourceEquationNumbers = unique(sourceEquationEvidence.map((equation) => equation.number));
   const sourceReferenceCount = countReferences(layoutText ?? '');
   const markdownTableNumbers = markdown ? unique(markdownTableCaptionsWithTables(markdown)) : [];
   const markdownTables = markdown ? findMarkdownTables(markdown) : [];
   const markdownChartNumbers = markdown
     ? unique(markdownNumberedItems(markdown, CHART_CAPTION_RE))
     : [];
-  const markdownEquationNumbers = markdown ? unique(markdownEquationNumbersForText(markdown)) : [];
+  const markdownEquationEvidence = markdown ? markdownEquationEvidenceForText(markdown) : [];
+  const markdownEquationNumbers = unique(
+    markdownEquationEvidence.map((equation) => equation.number)
+  );
   const markdownReferenceCount = markdown ? countReferences(markdown) : 0;
   const missingMarkdownTables = sourceTableNumbers.filter(
     (tableNumber) => !markdownTableNumbers.includes(tableNumber)
@@ -322,12 +374,19 @@ async function scorePaper(
   const missingMarkdownEquations = sourceEquationNumbers.filter(
     (equationNumber) => !markdownEquationNumbers.includes(equationNumber)
   );
+  const equationComparisons = compareEquations(sourceEquationEvidence, markdownEquationEvidence);
+  const malformedMarkdownEquations = comparisonNumbers(equationComparisons, 'format-issue');
+  const placeholderMarkdownEquations = comparisonNumbers(equationComparisons, 'placeholder');
+  const lowSimilarityMarkdownEquations = comparisonNumbers(equationComparisons, 'content-mismatch');
   const headingIssues = markdown ? scoreHeadings(markdown).issues : [];
   const agentReadabilityIssues = markdown ? assessAgentReadability(markdown) : [];
   const parserImprovementSuggestions = parserSuggestions({
     missingMarkdownTables,
     missingMarkdownCharts,
     missingMarkdownEquations,
+    malformedMarkdownEquations,
+    placeholderMarkdownEquations,
+    lowSimilarityMarkdownEquations,
     sourceReferenceCount,
     markdownReferenceCount,
     agentReadabilityIssues,
@@ -342,6 +401,15 @@ async function scorePaper(
   }
   if (missingMarkdownEquations.length > 0) {
     issues.push(`missing-markdown-equations:${missingMarkdownEquations.join(',')}`);
+  }
+  if (malformedMarkdownEquations.length > 0) {
+    issues.push(`malformed-markdown-equations:${malformedMarkdownEquations.join(',')}`);
+  }
+  if (placeholderMarkdownEquations.length > 0) {
+    issues.push(`placeholder-markdown-equations:${placeholderMarkdownEquations.join(',')}`);
+  }
+  if (lowSimilarityMarkdownEquations.length > 0) {
+    issues.push(`low-similarity-markdown-equations:${lowSimilarityMarkdownEquations.join(',')}`);
   }
   if (sourceReferenceCount > 0 && markdownReferenceCount < sourceReferenceCount) {
     issues.push(`missing-references:${sourceReferenceCount - markdownReferenceCount}`);
@@ -361,6 +429,7 @@ async function scorePaper(
     markdownTableNumbers,
     markdownChartNumbers,
     markdownEquationNumbers,
+    equationComparisons,
     markdownReferenceCount,
     missingMarkdownTables,
     missingMarkdownCharts,
@@ -387,6 +456,10 @@ async function scorePaper(
     sourceEquationNumbers,
     markdownEquationNumbers,
     missingMarkdownEquations,
+    equationComparisons,
+    malformedMarkdownEquations,
+    placeholderMarkdownEquations,
+    lowSimilarityMarkdownEquations,
     sourceReferenceCount,
     markdownReferenceCount,
     headingIssues,
@@ -524,12 +597,249 @@ function looksLikeNumberedFigureCaption(line: string): boolean {
 }
 
 function sourceEquationsForPage(pageText: string, page: number): SourceNumberedPage {
-  const numbers = equationNumbersForText(pageText);
+  const numbers = sourceEquationEvidenceForPage(pageText, page).map((equation) => equation.number);
   return { page, count: numbers.length, numbers };
 }
 
-function markdownEquationNumbersForText(markdown: string): string[] {
-  return equationNumbersForText(markdown);
+function sourceEquationEvidenceForPage(pageText: string, page: number): EquationEvidence[] {
+  return equationEvidenceFromLines(pageText.split(/\r?\n/), {
+    page,
+    githubDisplayMath: false,
+  });
+}
+
+function markdownEquationEvidenceForText(markdown: string): EquationEvidence[] {
+  const lines = markdown.split(/\r?\n/);
+  const evidence: EquationEvidence[] = [];
+  const displayMathLines = new Set<number>();
+  let inDisplayMath = false;
+  let blockStartLine = 0;
+  let blockLines: string[] = [];
+
+  const flushDisplayBlock = (): void => {
+    const text = blockLines.join('\n').trim();
+    for (const number of equationNumberMatches(text)) {
+      evidence.push(
+        buildEquationEvidence(number, text, {
+          line: blockStartLine,
+          githubDisplayMath: true,
+        })
+      );
+    }
+    blockLines = [];
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const delimiterIndexes = mathDelimiterIndexes(line);
+    if (!inDisplayMath && delimiterIndexes.length === 0) continue;
+
+    if (!inDisplayMath) {
+      inDisplayMath = true;
+      blockStartLine = i + 1;
+      displayMathLines.add(i);
+      const contentStart = delimiterIndexes[0] + 2;
+      const closing = delimiterIndexes.find((index) => index > delimiterIndexes[0]);
+      if (closing !== undefined) {
+        blockLines.push(line.slice(contentStart, closing));
+        flushDisplayBlock();
+        inDisplayMath = false;
+      } else {
+        blockLines.push(line.slice(contentStart));
+      }
+      continue;
+    }
+
+    displayMathLines.add(i);
+    const closing = delimiterIndexes[0];
+    if (closing !== undefined) {
+      blockLines.push(line.slice(0, closing));
+      flushDisplayBlock();
+      inDisplayMath = false;
+    } else {
+      blockLines.push(line);
+    }
+  }
+
+  const nonDisplayLines = lines.map((line, index) => (displayMathLines.has(index) ? '' : line));
+  evidence.push(...equationEvidenceFromLines(nonDisplayLines, { githubDisplayMath: false }));
+  return uniqueEquationEvidence(evidence);
+}
+
+function mathDelimiterIndexes(line: string): number[] {
+  const indexes: number[] = [];
+  const regex = /\$\$/g;
+  let match = regex.exec(line);
+  while (match) {
+    indexes.push(match.index);
+    match = regex.exec(line);
+  }
+  return indexes;
+}
+
+function equationEvidenceFromLines(
+  lines: string[],
+  options: { page?: number; githubDisplayMath: boolean }
+): EquationEvidence[] {
+  const evidence: EquationEvidence[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const numbers = equationNumberMatches(line);
+    if (numbers.length === 0) continue;
+
+    const context = equationContextForLine(lines, i);
+    if (!looksLikeEquation(context)) continue;
+
+    for (const number of numbers) {
+      evidence.push(
+        buildEquationEvidence(number, context, {
+          page: options.page,
+          line: i + 1,
+          githubDisplayMath: options.githubDisplayMath,
+        })
+      );
+    }
+  }
+
+  return uniqueEquationEvidence(evidence);
+}
+
+function buildEquationEvidence(
+  number: string,
+  text: string,
+  options: { page?: number; line?: number; githubDisplayMath: boolean }
+): EquationEvidence {
+  return {
+    number,
+    text: text.trim(),
+    normalizedText: normalizeEquationText(text),
+    placeholder: /Equation not extracted|Source equation not extracted|see PDF page/i.test(text),
+    githubDisplayMath: options.githubDisplayMath,
+    page: options.page,
+    line: options.line,
+  };
+}
+
+function uniqueEquationEvidence(evidence: EquationEvidence[]): EquationEvidence[] {
+  const byNumber = new Map<string, EquationEvidence>();
+  for (const item of evidence) {
+    const previous = byNumber.get(item.number);
+    if (!previous || equationEvidenceRank(item) > equationEvidenceRank(previous)) {
+      byNumber.set(item.number, item);
+    }
+  }
+  return Array.from(byNumber.values());
+}
+
+function equationEvidenceRank(evidence: EquationEvidence): number {
+  return (
+    (evidence.githubDisplayMath ? 4 : 0) +
+    (evidence.placeholder ? 0 : 2) +
+    Math.min(2, equationTokens(evidence.normalizedText).length / 8)
+  );
+}
+
+function compareEquations(
+  sourceEvidence: EquationEvidence[],
+  markdownEvidence: EquationEvidence[]
+): EquationComparison[] {
+  const markdownByNumber = new Map(markdownEvidence.map((equation) => [equation.number, equation]));
+
+  return uniqueEquationEvidence(sourceEvidence).map((source) => {
+    const markdown = markdownByNumber.get(source.number);
+    if (!markdown) {
+      return {
+        number: source.number,
+        presentInMarkdown: false,
+        githubDisplayMath: false,
+        placeholderOnly: false,
+        contentSimilarity: 0,
+        status: 'missing',
+        sourcePage: source.page,
+        sourceText: source.text,
+      };
+    }
+
+    const contentSimilarity = markdown.placeholder
+      ? 0
+      : equationSimilarity(source.normalizedText, markdown.normalizedText);
+    let status: EquationComparison['status'] = 'matched';
+    if (markdown.placeholder) {
+      status = 'placeholder';
+    } else if (!markdown.githubDisplayMath) {
+      status = 'format-issue';
+    } else if (contentSimilarity < 0.25) {
+      status = 'content-mismatch';
+    }
+
+    return {
+      number: source.number,
+      presentInMarkdown: true,
+      githubDisplayMath: markdown.githubDisplayMath,
+      placeholderOnly: markdown.placeholder,
+      contentSimilarity: round(contentSimilarity),
+      status,
+      sourcePage: source.page,
+      sourceText: source.text,
+      markdownText: markdown.text,
+    };
+  });
+}
+
+function comparisonNumbers(
+  comparisons: EquationComparison[],
+  status: EquationComparison['status']
+): string[] {
+  return comparisons
+    .filter((comparison) => comparison.status === status)
+    .map((comparison) => comparison.number);
+}
+
+function normalizeEquationText(text: string): string {
+  return text
+    .replace(/\\tag\{\d{1,3}\}/g, ' ')
+    .replace(/(?:^|[\s,.;])\(\d{1,3}\)(?=(?:\s*where\b.*)?\s*$|\s+[A-Za-z]+\s*=)/gi, ' ')
+    .replace(EQUATION_NUMBER_RE, ' ')
+    .replace(/\\text\{[^}]*Equation not extracted[^}]*\}/gi, ' ')
+    .replace(/Equation not extracted[^.\n]*/gi, ' ')
+    .replace(/\bPDF page \d+\b/gi, ' ')
+    .replace(/[∆Δ]/g, ' delta ')
+    .replace(/[Σ∑]/g, ' sum ')
+    .replace(/[√]/g, ' sqrt ')
+    .replace(/[−]/g, '-')
+    .replace(/[×]/g, '*')
+    .replace(/[÷]/g, '/')
+    .replace(/\\(?:frac|sum|sqrt|int|left|right|mathrm|operatorname|mathbf|mathit|text)\b/g, ' ')
+    .replace(/[{}()[\],.;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function equationSimilarity(sourceText: string, markdownText: string): number {
+  const sourceTokens = equationTokens(sourceText);
+  const markdownTokens = equationTokens(markdownText);
+  if (sourceTokens.length < 2 || markdownTokens.length < 2) return 1;
+
+  const markdownCounts = new Map<string, number>();
+  for (const token of markdownTokens) {
+    markdownCounts.set(token, (markdownCounts.get(token) ?? 0) + 1);
+  }
+
+  let overlap = 0;
+  for (const token of sourceTokens) {
+    const count = markdownCounts.get(token) ?? 0;
+    if (count === 0) continue;
+    overlap += 1;
+    markdownCounts.set(token, count - 1);
+  }
+
+  return (2 * overlap) / (sourceTokens.length + markdownTokens.length);
+}
+
+function equationTokens(text: string): string[] {
+  return text.match(/[a-z0-9]+|[=+\-*/^_<>|]/g) ?? [];
 }
 
 function equationNumbersForText(text: string): string[] {
@@ -583,6 +893,7 @@ function equationContextForLine(lines: string[], labelIndex: number): string {
 }
 
 function looksLikeEquationContextBoundary(line: string): boolean {
+  if (/^#{1,6}\s+\S/.test(line)) return true;
   const words = line.split(/\s+/).filter(Boolean);
   const mathSymbols = (
     line.match(/[=\u2211\u221A\u222B\u2264\u2265\u00B1\u2212\u00D7\u00F7<>|]|\^|_/g) ?? []
@@ -1052,6 +1363,9 @@ function parserSuggestions(args: {
   missingMarkdownTables: string[];
   missingMarkdownCharts: string[];
   missingMarkdownEquations: string[];
+  malformedMarkdownEquations: string[];
+  placeholderMarkdownEquations: string[];
+  lowSimilarityMarkdownEquations: string[];
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   agentReadabilityIssues: AgentReadabilityIssue[];
@@ -1071,6 +1385,15 @@ function parserSuggestions(args: {
     suggestions.add(
       'Detect equation blocks and preserve numbered equations as GitHub-compatible display math blocks.'
     );
+  }
+  if (args.malformedMarkdownEquations.length > 0) {
+    suggestions.add('Emit numbered equations as GitHub-compatible $$ display math blocks.');
+  }
+  if (args.placeholderMarkdownEquations.length > 0) {
+    suggestions.add('Recover equation bodies instead of emitting equation placeholders.');
+  }
+  if (args.lowSimilarityMarkdownEquations.length > 0) {
+    suggestions.add('Improve equation body reconstruction from PDF layout text.');
   }
   if (args.sourceReferenceCount > 0 && args.markdownReferenceCount < args.sourceReferenceCount) {
     suggestions.add(
@@ -1101,6 +1424,7 @@ function buildMetrics(args: {
   markdownTableNumbers: string[];
   markdownChartNumbers: string[];
   markdownEquationNumbers: string[];
+  equationComparisons: EquationComparison[];
   markdownReferenceCount: number;
   missingMarkdownTables: string[];
   missingMarkdownCharts: string[];
@@ -1121,6 +1445,18 @@ function buildMetrics(args: {
   const markdownChartCount = args.markdownChartNumbers.length;
   const sourceEquationCount = args.sourceEquationNumbers.length;
   const markdownEquationCount = args.markdownEquationNumbers.length;
+  const formattedEquationCount = args.equationComparisons.filter(
+    (comparison) => comparison.githubDisplayMath
+  ).length;
+  const equationFormatScore =
+    sourceEquationCount === 0 ? 1 : formattedEquationCount / sourceEquationCount;
+  const equationContentScore =
+    sourceEquationCount === 0
+      ? 1
+      : args.equationComparisons.reduce(
+          (sum, comparison) => sum + comparison.contentSimilarity,
+          0
+        ) / sourceEquationCount;
   const { sourceReferenceCount, markdownReferenceCount } = args;
   const headingFlowScore = scoreHeadings(markdown).score;
   const artifactScore = scoreArtifacts(markdown);
@@ -1142,6 +1478,8 @@ function buildMetrics(args: {
       sourceEquationCount,
       markdownEquationCount,
       equationCoverageScore: 0,
+      equationFormatScore: 0,
+      equationContentScore: 0,
       sourceReferenceCount,
       markdownReferenceCount,
       referenceCoverageScore: 0,
@@ -1177,6 +1515,8 @@ function buildMetrics(args: {
       sourceEquationCount,
       markdownEquationCount,
       equationCoverageScore: 0,
+      equationFormatScore: sourceEquationCount === 0 ? 0 : round(equationFormatScore),
+      equationContentScore: sourceEquationCount === 0 ? 0 : round(equationContentScore),
       sourceReferenceCount,
       markdownReferenceCount,
       referenceCoverageScore: 0,
@@ -1225,7 +1565,9 @@ function buildMetrics(args: {
       (0.18 * tableCoverageScore +
         0.1 * tableFormattingScore +
         0.1 * chartCoverageScore +
-        0.08 * equationCoverageScore +
+        0.04 * equationCoverageScore +
+        0.02 * equationFormatScore +
+        0.02 * equationContentScore +
         0.08 * referenceCoverageScore +
         0.14 * headingFlowScore +
         0.08 * arxivPlacementScore +
@@ -1250,6 +1592,8 @@ function buildMetrics(args: {
     sourceEquationCount,
     markdownEquationCount,
     equationCoverageScore: round(equationCoverageScore),
+    equationFormatScore: round(equationFormatScore),
+    equationContentScore: round(equationContentScore),
     sourceReferenceCount,
     markdownReferenceCount,
     referenceCoverageScore: round(referenceCoverageScore),

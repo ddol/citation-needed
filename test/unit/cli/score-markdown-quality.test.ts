@@ -50,6 +50,9 @@ describe('score-markdown-quality command', () => {
         totalMissingMarkdownCharts: 0,
         totalSourceEquations: 1,
         totalMissingMarkdownEquations: 0,
+        totalMalformedMarkdownEquations: 0,
+        totalPlaceholderMarkdownEquations: 0,
+        totalLowSimilarityMarkdownEquations: 0,
         totalSourceReferences: 3,
         totalMarkdownReferences: 3,
       },
@@ -73,6 +76,19 @@ describe('score-markdown-quality command', () => {
           sourceEquationNumbers: ['1'],
           markdownEquationNumbers: ['1'],
           missingMarkdownEquations: [],
+          equationComparisons: [
+            {
+              number: '1',
+              presentInMarkdown: true,
+              githubDisplayMath: true,
+              placeholderOnly: false,
+              contentSimilarity: 1,
+              status: 'matched',
+            },
+          ],
+          malformedMarkdownEquations: [],
+          placeholderMarkdownEquations: [],
+          lowSimilarityMarkdownEquations: [],
           sourceReferenceCount: 3,
           markdownReferenceCount: 3,
           headingIssues: [],
@@ -94,6 +110,8 @@ describe('score-markdown-quality command', () => {
             sourceEquationCount: 1,
             markdownEquationCount: 1,
             equationCoverageScore: 1,
+            equationFormatScore: 1,
+            equationContentScore: 1,
             sourceReferenceCount: 3,
             markdownReferenceCount: 3,
             referenceCoverageScore: 1,
@@ -135,7 +153,7 @@ describe('score-markdown-quality command', () => {
     });
     expect(output()).toContain('Scored 1/1 paper(s); average 92.5');
     expect(output()).toContain(
-      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (100%); refs 3/3 (100%); headings 100%; agent 100%; pages 2/2'
+      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (cov 100%, fmt 100%, body 100%); refs 3/3 (100%); headings 100%; agent 100%; pages 2/2'
     );
     expect(output()).toContain('source page 1: 1 table(s) (1)');
     expect(output()).toContain('source page 2: 1 table(s)');
@@ -156,6 +174,9 @@ describe('score-markdown-quality command', () => {
         totalMissingMarkdownCharts: 1,
         totalSourceEquations: 1,
         totalMissingMarkdownEquations: 1,
+        totalMalformedMarkdownEquations: 0,
+        totalPlaceholderMarkdownEquations: 0,
+        totalLowSimilarityMarkdownEquations: 0,
         totalSourceReferences: 2,
         totalMarkdownReferences: 1,
       },
@@ -175,6 +196,19 @@ describe('score-markdown-quality command', () => {
           sourceEquationNumbers: ['1'],
           markdownEquationNumbers: [],
           missingMarkdownEquations: ['1'],
+          equationComparisons: [
+            {
+              number: '1',
+              presentInMarkdown: false,
+              githubDisplayMath: false,
+              placeholderOnly: false,
+              contentSimilarity: 0,
+              status: 'missing',
+            },
+          ],
+          malformedMarkdownEquations: [],
+          placeholderMarkdownEquations: [],
+          lowSimilarityMarkdownEquations: [],
           sourceReferenceCount: 2,
           markdownReferenceCount: 1,
           headingIssues: [{ line: 4, message: 'four consecutive h3 headings' }],
@@ -205,6 +239,8 @@ describe('score-markdown-quality command', () => {
             sourceEquationCount: 1,
             markdownEquationCount: 0,
             equationCoverageScore: 0,
+            equationFormatScore: 0,
+            equationContentScore: 0,
             sourceReferenceCount: 2,
             markdownReferenceCount: 1,
             referenceCoverageScore: 0.5,
