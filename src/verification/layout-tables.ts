@@ -11,8 +11,8 @@ interface LayoutTable {
   markdown: string;
 }
 
-const CAPTION_RE = /^\s*Table\s+(\d+)\s*:/;
-const LAYOUT_CAPTION_RE = /\bTable\s+(\d+)\s*:/;
+const CAPTION_RE = /\b(?:Table|Tab\.?)\s+(\d+)\s*[:.]/i;
+const LAYOUT_CAPTION_RE = /\b(?:Table|Tab\.?)\s+(\d+)\s*[:.]/i;
 
 export function extractPdfLayoutText(pdfPath: string): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -44,6 +44,14 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
       (candidate) => candidate.number === match[1] && !usedTables.has(candidate)
     );
     if (!table) continue;
+
+    const captionIndex = match.index ?? 0;
+    const prefix = lines[i].slice(0, captionIndex).trim();
+    if (prefix && looksLikeCollapsedTableLine(prefix)) {
+      lines[i] = `${table.markdown}\n${lines[i].slice(captionIndex).trimStart()}`;
+      usedTables.add(table);
+      continue;
+    }
 
     const previous = previousNonEmptyLine(lines, i);
     if (previous === undefined || lines[previous].trim().startsWith('|')) continue;
@@ -277,4 +285,13 @@ function formatMarkdownRow(cells: string[]): string {
 
 function escapeTableCell(cell: string): string {
   return cell.replace(/\\?\|/g, (match) => (match === '\\|' ? match : '\\|'));
+}
+
+function looksLikeCollapsedTableLine(line: string): boolean {
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const numericTokens = tokens.filter((token) => /\d/.test(token)).length;
+  const compactHeaderTokens = tokens.filter((token) =>
+    /[A-Za-z][A-Za-z/().%-]*$/.test(token)
+  ).length;
+  return tokens.length >= 8 && numericTokens >= 3 && compactHeaderTokens >= 2;
 }

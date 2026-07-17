@@ -8,6 +8,7 @@ import { registerIndexCommand } from './commands/index-corpus';
 import { registerResetCommand } from './commands/reset';
 import { registerCheckLocalPapersCommand } from './commands/check-local-papers';
 import { registerExtractMarkdownCommand } from './commands/extract-markdown';
+import { registerScoreMarkdownQualityCommand } from './commands/score-markdown-quality';
 import { VERSION } from '../utils/version';
 
 export function runCli(argv: string[]): void {
@@ -26,6 +27,7 @@ export function runCli(argv: string[]): void {
   registerResetCommand(program);
   registerCheckLocalPapersCommand(program);
   registerExtractMarkdownCommand(program);
+  registerScoreMarkdownQualityCommand(program);
 
   program.parse(argv);
 }

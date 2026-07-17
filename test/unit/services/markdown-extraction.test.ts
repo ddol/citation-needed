@@ -2,7 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { Database } from '../../../src/db/index';
-import { reextractMarkdownFromLocalPdfs } from '../../../src/services/markdown-extraction';
+import {
+  reextractMarkdownFromLocalPdfs,
+  reextractMarkdownFromPdfFolder,
+} from '../../../src/services/markdown-extraction';
 
 describe('reextractMarkdownFromLocalPdfs', () => {
   let dir: string;
@@ -139,5 +142,37 @@ describe('reextractMarkdownFromLocalPdfs', () => {
       doi: '10.1/no-md-path',
       message: 'No Markdown path is known; pass --markdown-path to create one.',
     });
+  });
+
+  test('extracts markdown directly from a local PDF folder without DB rows', async () => {
+    const nestedPdfDir = path.join(pdfDir, 'nested');
+    fs.mkdirSync(nestedPdfDir, { recursive: true });
+    const firstPdf = path.join(pdfDir, 'first.pdf');
+    const secondPdf = path.join(nestedPdfDir, 'second.pdf');
+    fs.writeFileSync(firstPdf, '%PDF-1.4\nfirst');
+    fs.writeFileSync(secondPdf, '%PDF-1.4\nsecond');
+    const extractMarkdown = jest.fn(
+      async (pdfPath: string) => `markdown for ${path.basename(pdfPath)}`
+    );
+    const onProgress = jest.fn();
+
+    const summary = await reextractMarkdownFromPdfFolder({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      recursive: true,
+      extractMarkdown,
+      onProgress,
+    });
+
+    expect(summary).toMatchObject({ scanned: 2, extracted: 2, missingPdf: 0, failed: 0 });
+    expect(extractMarkdown).toHaveBeenCalledWith(firstPdf);
+    expect(extractMarkdown).toHaveBeenCalledWith(secondPdf);
+    expect(fs.readFileSync(path.join(markdownDir, 'first.md'), 'utf-8')).toBe(
+      'markdown for first.pdf'
+    );
+    expect(fs.readFileSync(path.join(markdownDir, 'nested', 'second.md'), 'utf-8')).toBe(
+      'markdown for second.pdf'
+    );
+    expect(onProgress.mock.calls.map(([progress]) => progress.current)).toEqual([0, 1, 2]);
   });
 });

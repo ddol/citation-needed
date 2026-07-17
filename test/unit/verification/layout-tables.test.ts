@@ -84,4 +84,48 @@ describe('repairMarkdownTablesWithLayout', () => {
 
     expect(repairMarkdownTablesWithLayout(markdown, 'Table 9: Broken.')).toBe(markdown);
   });
+
+  test('repairs a collapsed table that appears on the same line as a period caption', () => {
+    const markdown = [
+      'Dataset Year Size nuScenes 2019 1000 KITTI 2012 22 Table 1. AV dataset comparison.',
+    ].join('\n');
+    const layout = [
+      'Dataset       Year      Size',
+      'nuScenes      2019      1000',
+      'KITTI         2012      22',
+      '',
+      'Table 1. AV dataset comparison.',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        '| Dataset | Year | Size |',
+        '| --- | --- | --- |',
+        '| nuScenes | 2019 | 1000 |',
+        '| KITTI | 2012 | 22 |',
+        'Table 1. AV dataset comparison.',
+      ].join('\n')
+    );
+  });
+
+  test('matches abbreviated table captions from source layout', () => {
+    const markdown = ['Method Score Alpha 1 Beta 2', 'Tab. 2. Scores.'].join('\n');
+    const layout = [
+      'Method       Score',
+      'Alpha            1',
+      'Beta             2',
+      '',
+      'Tab. 2. Scores.',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        '| Method | Score |',
+        '| --- | --- |',
+        '| Alpha | 1 |',
+        '| Beta | 2 |',
+        'Tab. 2. Scores.',
+      ].join('\n')
+    );
+  });
 });

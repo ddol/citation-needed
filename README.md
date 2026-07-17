@@ -61,6 +61,12 @@ citation-needed list
 # Index extracted Markdown into the full-text search tables
 citation-needed index
 
+# Re-run Markdown extraction from already downloaded PDFs
+citation-needed extract-markdown --paper-path ./papers/pdf --markdown-path ./papers/markdown
+
+# Score extracted Markdown against local PDF layout signals
+citation-needed score-markdown-quality --paper-path ./papers/pdf --markdown-path ./papers/markdown --json
+
 # Download a single PDF manually if needed
 citation-needed download 10.1234/example.doi --url https://arxiv.org/pdf/2301.12345
 
@@ -82,6 +88,10 @@ citation-needed server
 By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the BibTeX file and Markdown files to `papers/markdown/`. File naming prefers the BibTeX key, then DOI. Use `--paper-path` and `--markdown-path` to change output directories for that run.
 
 `check-local-papers` is local-only: it scans PDF files in `--paper-path`, extracts text locally, and reports `matched`, `missing`, `mismatch`, `ambiguous`, or `skipped` entries without hitting Unpaywall, arXiv, Crossref, or publisher sites.
+
+`score-markdown-quality` is local-only: it compares extracted Markdown with PDF layout text to report per-paper source table counts by page, Markdown table coverage, heading-flow issues, arXiv tag placement, page-break alignment, completeness, and extraction-artifact scores. Use `--json` and `--fail-below <score>` for an automated Markdown-improvement loop.
+
+`extract-markdown` is local-only. Without `--paper-path`, it refreshes Markdown for PDFs already recorded in the local database. With `--paper-path` and `--markdown-path`, it scans that PDF folder directly and writes matching Markdown files without requiring database rows.
 
 The standalone `download` command only downloads a PDF and updates an existing citation when that DOI is already in the database. It requires either `--url` or `--email` for an Unpaywall lookup; the fuller retrieval cascade, Markdown extraction, and proxy-authenticated fallback live in `import-bibtex`.
 

@@ -20,6 +20,15 @@ export interface MarkdownReextractOptions {
   onProgress?: (progress: MarkdownReextractProgress) => void;
 }
 
+export interface MarkdownFolderReextractOptions {
+  paperPath: string;
+  markdownPath: string;
+  limit?: number;
+  recursive?: boolean;
+  extractMarkdown?: (pdfPath: string) => Promise<string>;
+  onProgress?: (progress: MarkdownReextractProgress) => void;
+}
+
 export interface MarkdownReextractError {
   doi: string;
   message: string;
@@ -64,6 +73,27 @@ function markdownPathForCitation(
   }
 
   return undefined;
+}
+
+function listPdfFiles(root: string, recursive: boolean): string[] {
+  if (!fs.existsSync(root)) return [];
+
+  const files: string[] = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory() && recursive) {
+      files.push(...listPdfFiles(fullPath, true));
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.pdf')) {
+      files.push(fullPath);
+    }
+  }
+
+  return files.sort();
+}
+
+function markdownPathForPdf(pdfRoot: string, markdownRoot: string, pdfPath: string): string {
+  const relative = path.relative(pdfRoot, pdfPath).replace(/\.pdf$/i, '.md');
+  return path.join(markdownRoot, relative);
 }
 
 export async function reextractMarkdownFromLocalPdfs(
@@ -154,6 +184,60 @@ export async function reextractMarkdownFromLocalPdfs(
         current: summary.scanned,
         total: citations.length,
         doi: citation.doi,
+        status: 'failed',
+      });
+    }
+  }
+
+  return summary;
+}
+
+export async function reextractMarkdownFromPdfFolder(
+  options: MarkdownFolderReextractOptions
+): Promise<MarkdownReextractSummary> {
+  const extractMarkdown = options.extractMarkdown ?? extractPdfMarkdown;
+  const pdfRoot = path.resolve(options.paperPath);
+  const markdownRoot = path.resolve(options.markdownPath);
+  const pdfs = listPdfFiles(pdfRoot, Boolean(options.recursive)).slice(0, options.limit);
+  const emitProgress = options.onProgress ?? (() => undefined);
+  const summary: MarkdownReextractSummary = {
+    scanned: 0,
+    extracted: 0,
+    missingPdf: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  emitProgress({ current: 0, total: pdfs.length, status: 'starting' });
+
+  for (const pdfPath of pdfs) {
+    summary.scanned += 1;
+    const id = path.basename(pdfPath, path.extname(pdfPath));
+    const markdownFile = markdownPathForPdf(pdfRoot, markdownRoot, pdfPath);
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const markdown = await extractMarkdown(pdfPath);
+      fs.mkdirSync(path.dirname(markdownFile), { recursive: true });
+      fs.writeFileSync(markdownFile, markdown, 'utf-8');
+      summary.extracted += 1;
+      emitProgress({
+        current: summary.scanned,
+        total: pdfs.length,
+        doi: id,
+        status: 'extracted',
+        markdownPath: markdownFile,
+      });
+    } catch (error) {
+      summary.failed += 1;
+      summary.errors.push({
+        doi: id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      emitProgress({
+        current: summary.scanned,
+        total: pdfs.length,
+        doi: id,
         status: 'failed',
       });
     }

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import {
+  reextractMarkdownFromPdfFolder,
   reextractMarkdownFromLocalPdfs,
   type MarkdownReextractProgress,
   type MarkdownReextractSummary,
@@ -9,7 +10,9 @@ import { dim, green, print, printError, red } from '../output';
 interface ExtractMarkdownCommandOptions {
   doi?: string;
   limit?: string;
+  paperPath?: string;
   markdownPath?: string;
+  recursive?: boolean;
   json?: boolean;
 }
 
@@ -40,6 +43,33 @@ function hasFailures(summary: MarkdownReextractSummary): boolean {
   return summary.missingPdf > 0 || summary.failed > 0;
 }
 
+async function runExtraction(
+  options: ExtractMarkdownCommandOptions,
+  onProgress?: (progress: MarkdownReextractProgress) => void
+): Promise<MarkdownReextractSummary> {
+  const limit = parseLimit(options.limit);
+
+  if (options.paperPath) {
+    if (!options.markdownPath) {
+      throw new Error('--markdown-path is required when --paper-path is used');
+    }
+    return reextractMarkdownFromPdfFolder({
+      paperPath: options.paperPath,
+      markdownPath: options.markdownPath,
+      limit,
+      recursive: options.recursive,
+      onProgress,
+    });
+  }
+
+  return reextractMarkdownFromLocalPdfs({
+    doi: options.doi,
+    limit,
+    markdownPath: options.markdownPath,
+    onProgress,
+  });
+}
+
 function createProgressRenderer(): {
   render: (progress: MarkdownReextractProgress) => void;
   finish: () => void;
@@ -68,17 +98,14 @@ export function registerExtractMarkdownCommand(program: Command): void {
     .description('Re-run PDF-to-Markdown extraction from already downloaded local PDFs')
     .option('--doi <doi>', 'Only re-extract Markdown for one DOI')
     .option('--limit <n>', 'Maximum number of citations to scan')
+    .option('--paper-path <path>', 'Directory of local PDFs to extract without using the DB')
     .option('--markdown-path <path>', 'Directory for Markdown files without an existing path')
+    .option('--recursive', 'Recursively scan --paper-path for PDFs')
     .option('--json', 'Print machine-readable JSON')
     .action(async (options: ExtractMarkdownCommandOptions) => {
       const progress = options.json ? undefined : createProgressRenderer();
       try {
-        const summary = await reextractMarkdownFromLocalPdfs({
-          doi: options.doi,
-          limit: parseLimit(options.limit),
-          markdownPath: options.markdownPath,
-          onProgress: progress?.render,
-        });
+        const summary = await runExtraction(options, progress?.render);
         progress?.finish();
 
         if (options.json) {

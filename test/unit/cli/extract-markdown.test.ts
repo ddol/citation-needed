@@ -3,10 +3,13 @@ import { stripAnsi } from '../../helpers/ansi';
 import { registerExtractMarkdownCommand } from '../../../src/cli/commands/extract-markdown';
 
 const mockReextractMarkdownFromLocalPdfs = jest.fn();
+const mockReextractMarkdownFromPdfFolder = jest.fn();
 
 jest.mock('../../../src/services/markdown-extraction', () => ({
   reextractMarkdownFromLocalPdfs: (...args: unknown[]) =>
     mockReextractMarkdownFromLocalPdfs(...args),
+  reextractMarkdownFromPdfFolder: (...args: unknown[]) =>
+    mockReextractMarkdownFromPdfFolder(...args),
 }));
 
 describe('extract-markdown command', () => {
@@ -103,6 +106,57 @@ describe('extract-markdown command', () => {
     expect(writes).toContain('\rMarkdown extraction 1/2 10.1/first (extracted)');
     expect(writes).toContain('\rMarkdown extraction 2/2 10.1/second (missing-pdf)');
     expect(writes.endsWith('\n')).toBe(true);
+  });
+
+  test('extracts directly from a PDF folder when --paper-path is provided', async () => {
+    mockReextractMarkdownFromPdfFolder.mockResolvedValue({
+      scanned: 2,
+      extracted: 2,
+      missingPdf: 0,
+      failed: 0,
+      errors: [],
+    });
+    const program = new Command();
+    registerExtractMarkdownCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'citation-needed',
+      'extract-markdown',
+      '--paper-path',
+      '/tmp/pdf',
+      '--markdown-path',
+      '/tmp/markdown',
+      '--recursive',
+    ]);
+
+    expect(mockReextractMarkdownFromPdfFolder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paperPath: '/tmp/pdf',
+        markdownPath: '/tmp/markdown',
+        recursive: true,
+        onProgress: expect.any(Function),
+      })
+    );
+    expect(mockReextractMarkdownFromLocalPdfs).not.toHaveBeenCalled();
+    expect(output()).toContain('Re-extracted Markdown for 2 citation(s)');
+  });
+
+  test('requires --markdown-path when extracting directly from a PDF folder', async () => {
+    const program = new Command();
+    registerExtractMarkdownCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'citation-needed',
+      'extract-markdown',
+      '--paper-path',
+      '/tmp/pdf',
+    ]);
+
+    expect(mockReextractMarkdownFromPdfFolder).not.toHaveBeenCalled();
+    expect(output()).toContain('--markdown-path is required when --paper-path is used');
+    expect(process.exitCode).toBe(1);
   });
 
   test('prints JSON and exits non-zero when local PDFs are missing', async () => {

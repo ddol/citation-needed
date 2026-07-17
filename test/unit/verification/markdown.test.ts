@@ -6,6 +6,7 @@ import pdf2md from '@opendocsg/pdf2md';
 import {
   extractPdfMarkdown,
   formatGeneratedMarkdown,
+  repairMarkdownHeadings,
   repairMarkdownTables,
 } from '../../../src/verification/markdown';
 
@@ -72,6 +73,82 @@ describe('formatGeneratedMarkdown', () => {
     await expect(
       formatGeneratedMarkdown('| Metric | Value |\n| --- | --- |\n| Accuracy | 0.91 |')
     ).resolves.toBe('| Metric   | Value |\n| -------- | ----- |\n| Accuracy | 0.91  |');
+  });
+});
+
+describe('repairMarkdownHeadings', () => {
+  test('demotes pre-abstract author metadata and normalizes real section headings', () => {
+    const markdown = [
+      '## Paper Title',
+      '',
+      '### Ada Lovelace Bob Smith',
+      '',
+      '### University of Examples',
+      '',
+      '### Abstract',
+      '',
+      '### 1. Introduction',
+      '',
+      '#### 1.1. Contributions',
+    ].join('\n');
+
+    expect(repairMarkdownHeadings(markdown)).toBe(
+      [
+        '## Paper Title',
+        '',
+        'Ada Lovelace Bob Smith',
+        '',
+        'University of Examples',
+        '',
+        '## Abstract',
+        '',
+        '## 1. Introduction',
+        '',
+        '### 1.1. Contributions',
+      ].join('\n')
+    );
+  });
+
+  test('demotes formula fragments and figure labels emitted as headings', () => {
+    const markdown = ['## gt:', '#### |TP| + |FN|', '#### (1)', '### 4.1 CLEARMOT'].join('\n');
+
+    expect(repairMarkdownHeadings(markdown)).toBe(
+      ['gt:', '|TP| + |FN|', '(1)', '### 4.1 CLEARMOT'].join('\n')
+    );
+  });
+
+  test('demotes wrapped prose headings while preserving roman numeral sections', () => {
+    const markdown = [
+      '## Abstract—This paper introduces a benchmark.',
+      '',
+      '##### dynamic agents are essential for robots and automated vehicles',
+      '',
+      '#### II. RELATED WORK',
+      '',
+      '#### Datasets and Benchmarks: LiDAR datasets for autonomous driving are important.',
+    ].join('\n');
+
+    expect(repairMarkdownHeadings(markdown)).toBe(
+      [
+        '## Abstract',
+        '',
+        'This paper introduces a benchmark.',
+        '',
+        'dynamic agents are essential for robots and automated vehicles',
+        '',
+        '## II. RELATED WORK',
+        '',
+        'Datasets and Benchmarks: LiDAR datasets for autonomous driving are important.',
+      ].join('\n')
+    );
+  });
+
+  test('normalizes all-caps section labels that were emitted too deeply', () => {
+    const markdown = ['#### ACKNOWLEDGEMENTS', '#### S.1. ADDITIONAL DATASET DETAILS'].join('\n');
+
+    expect(repairMarkdownHeadings(markdown)).toBe(
+      ['## ACKNOWLEDGEMENTS', '## S.1. ADDITIONAL DATASET DETAILS'].join('\n')
+    );
   });
 });
 

@@ -51,9 +51,11 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
   }
 
   const markdown = await formatGeneratedMarkdown(
-    repairMarkdownTablesWithLayout(
-      repairMarkdownTables((await defaultExtractor.extract(pdfPath)).trim()),
-      await extractPdfLayoutText(pdfPath)
+    repairMarkdownHeadings(
+      repairMarkdownTablesWithLayout(
+        repairMarkdownTables((await defaultExtractor.extract(pdfPath)).trim()),
+        await extractPdfLayoutText(pdfPath)
+      )
     )
   );
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
@@ -112,6 +114,45 @@ export function repairMarkdownTables(markdown: string): string {
 
   flush();
   return repaired.join('\n');
+}
+
+export function repairMarkdownHeadings(markdown: string): string {
+  const lines = markdown.split('\n');
+  let seenAbstract = false;
+
+  return lines
+    .map((line) => {
+      const match = line.match(/^(#{1,6})\s+(.+)$/);
+      if (!match) return line;
+
+      const level = match[1].length;
+      const text = match[2].trim();
+      const normalizedText = text.replace(/\s+/g, ' ');
+      const isAbstractHeading = /^abstract\b/i.test(normalizedText);
+
+      if (isAbstractHeading) {
+        seenAbstract = true;
+        const abstractBody = normalizedText.match(/^Abstract[—-]\s*(.+)$/i)?.[1];
+        return abstractBody ? `## Abstract\n\n${abstractBody}` : '## Abstract';
+      }
+
+      const allCapsHeadingLevel = normalizedAllCapsHeadingLevel(level, normalizedText);
+      if (allCapsHeadingLevel !== undefined) {
+        return `${'#'.repeat(allCapsHeadingLevel)} ${normalizedText}`;
+      }
+
+      if (
+        isFormulaOrFigureHeading(normalizedText) ||
+        isProseHeading(level, normalizedText) ||
+        (!seenAbstract && level >= 3 && !isAbstractHeading && !isNumberedSection(normalizedText))
+      ) {
+        return normalizedText;
+      }
+
+      const normalizedLevel = normalizedHeadingLevel(level, normalizedText);
+      return `${'#'.repeat(normalizedLevel)} ${normalizedText}`;
+    })
+    .join('\n');
 }
 
 function classifyCandidateLine(line: string): CandidateLine | null {
@@ -194,4 +235,44 @@ function looksLikeProseLine(line: string, cells: string[]): boolean {
   const wordCount = line.split(/\s+/).filter(Boolean).length;
   const hasSentenceEnding = /[.!?]\s*$/.test(line);
   return hasSentenceEnding && wordCount > cells.length * 3;
+}
+
+function isFormulaOrFigureHeading(text: string): boolean {
+  const plain = text.replace(/[*_`]/g, '').trim();
+  if (/^(?:gt|[A-Z])\s*[:.]$/i.test(plain)) return true;
+  if (/^\(?\d+\)?$/.test(plain)) return true;
+  if (!/[A-Za-z]{3,}/.test(plain)) return true;
+  if (isNumberedSection(plain)) return false;
+
+  const mathTokens = (plain.match(/[∑√∫≈≤≥±−=|{}[\]()]/g) ?? []).length;
+  const words = plain.split(/\s+/).filter((word) => /[A-Za-z]{3,}/.test(word)).length;
+  return mathTokens >= 2 && words <= 2;
+}
+
+function normalizedHeadingLevel(currentLevel: number, text: string): number {
+  if (/^(?:abstract|references)\b/i.test(text)) return 2;
+  if (/^[A-Z]\.\s+\S/.test(text)) return 2;
+  if (/^[IVX]+\.\s+\S/.test(text)) return 2;
+  if (/^S\.\d+\.?\s+\S/i.test(text)) return 2;
+  if (/^\d+\.\d+\.?\s+\S/.test(text)) return 3;
+  if (/^\d+\.\s+\S/.test(text)) return 2;
+  return currentLevel;
+}
+
+function isNumberedSection(text: string): boolean {
+  return /^(?:\d+\.\s+\S|\d+(?:\.\d+)+\.?\s+\S|[A-Z]\.\s+\S|[IVX]+\.\s+\S)/.test(text);
+}
+
+function isProseHeading(level: number, text: string): boolean {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (isNumberedSection(text)) return false;
+  if (level >= 4 && (/^[a-z]/.test(text) || /[.!?]$/.test(text))) return true;
+  if (level >= 4 && words.length >= 5) return true;
+  return level <= 2 && /^\d+\s+\S/.test(text) && words.length >= 6;
+}
+
+function normalizedAllCapsHeadingLevel(level: number, text: string): number | undefined {
+  if (level > 4) return undefined;
+  if (/^(?:[A-Z][A-Z0-9 -]{3,}|S\.\d+\.?\s+[A-Z0-9 -]+)$/.test(text)) return 2;
+  return undefined;
 }

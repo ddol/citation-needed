@@ -94,16 +94,18 @@ migrations (`PRAGMA user_version`, `src/db/migrations.ts`):
 
 ## CLI Commands
 
-| Command              | Purpose                                                     |
-| -------------------- | ----------------------------------------------------------- |
-| `import-bibtex`      | Full pipeline: parse → retrieve → extract Markdown          |
-| `check-local-papers` | Offline audit of a PDF folder against a `.bib` — no network |
-| `index`              | Chunk extracted Markdown into the FTS5 tables               |
-| `list`               | List stored citations                                       |
-| `download`           | Fetch one PDF for a DOI already in the database             |
-| `reset`              | Maintenance: wipe the database (dry run unless `--yes`)     |
-| `auth`               | Configure contact email and institutional proxies           |
-| `server`             | Start the MCP server (stdio)                                |
+| Command                  | Purpose                                                     |
+| ------------------------ | ----------------------------------------------------------- |
+| `import-bibtex`          | Full pipeline: parse → retrieve → extract Markdown          |
+| `check-local-papers`     | Offline audit of a PDF folder against a `.bib` — no network |
+| `extract-markdown`       | Re-run local PDF-to-Markdown extraction without downloads   |
+| `score-markdown-quality` | Local Markdown/PDF quality scoring for extraction loops     |
+| `index`                  | Chunk extracted Markdown into the FTS5 tables               |
+| `list`                   | List stored citations                                       |
+| `download`               | Fetch one PDF for a DOI already in the database             |
+| `reset`                  | Maintenance: wipe the database (dry run unless `--yes`)     |
+| `auth`                   | Configure contact email and institutional proxies           |
+| `server`                 | Start the MCP server (stdio)                                |
 
 When `citation-needed import-bibtex path/to/references.bib` runs:
 
