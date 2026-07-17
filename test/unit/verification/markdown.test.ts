@@ -4,10 +4,16 @@ import path from 'path';
 
 import pdf2md from '@opendocsg/pdf2md';
 import {
+  addFigureSourceLinks,
+  addMissingSourcePlaceholders,
   extractPdfMarkdown,
   formatGeneratedMarkdown,
   normalizeExtractionArtifacts,
+  normalizeReferenceList,
+  removeDuplicateMarkdownTables,
   repairCaptionBoundaries,
+  repairEquationBlocks,
+  repairLooseLineSpacing,
   repairMarkdownHeadings,
   repairMarkdownTables,
 } from '../../../src/verification/markdown';
@@ -68,6 +74,25 @@ describe('extractPdfMarkdown', () => {
       fs.rmSync(path.dirname(pdfPath), { recursive: true, force: true });
     }
   });
+
+  test('applies reference and equation cleanup after extracting markdown', async () => {
+    const pdfPath = tempPdfPath();
+    try {
+      fs.writeFileSync(pdfPath, Buffer.from('%PDF-1.4\nmock'));
+
+      (pdf2md as jest.Mock).mockResolvedValueOnce(
+        ['E = mc^2 (1)', '', 'REFERENCES [1] A. Author. First. [2] B. Author. Second.'].join('\n')
+      );
+
+      const result = await extractPdfMarkdown(pdfPath);
+
+      expect(result).toContain(['```text', 'E = mc^2 (1)', '```'].join('\n'));
+      expect(result).toContain('- [1] A. Author. First.');
+      expect(result).toContain('- [2] B. Author. Second.');
+    } finally {
+      fs.rmSync(path.dirname(pdfPath), { recursive: true, force: true });
+    }
+  });
 });
 
 describe('formatGeneratedMarkdown', () => {
@@ -119,6 +144,191 @@ describe('repairCaptionBoundaries', () => {
   });
 });
 
+describe('normalizeReferenceList', () => {
+  test('splits IEEE bracketed references into a Markdown list', () => {
+    const markdown = [
+      '## References',
+      '',
+      '[1] A. Author, “First paper,” 2020. [2] B. Author, “Second paper,” 2021.',
+      '[3] C. Author, “Third paper,” 2022.',
+    ].join('\n');
+
+    expect(normalizeReferenceList(markdown)).toBe(
+      [
+        '## References',
+        '',
+        '- [1] A. Author, “First paper,” 2020.',
+        '- [2] B. Author, “Second paper,” 2021.',
+        '- [3] C. Author, “Third paper,” 2022.',
+      ].join('\n')
+    );
+  });
+
+  test('splits same-line REFERENCES heading and entries', () => {
+    const markdown = 'REFERENCES [1] A. Author, “First,” 2020. [2] B. Author, “Second,” 2021.';
+
+    expect(normalizeReferenceList(markdown)).toBe(
+      [
+        '## References',
+        '',
+        '- [1] A. Author, “First,” 2020.',
+        '- [2] B. Author, “Second,” 2021.',
+      ].join('\n')
+    );
+  });
+
+  test('preserves numbered Springer-style references as a Markdown list', () => {
+    const markdown = [
+      'References',
+      '',
+      '1. First Author (2020) First title',
+      '   continuation line',
+      '2. Second Author (2021) Second title',
+    ].join('\n');
+
+    expect(normalizeReferenceList(markdown)).toBe(
+      [
+        '## References',
+        '',
+        '1. First Author (2020) First title continuation line',
+        '2. Second Author (2021) Second title',
+      ].join('\n')
+    );
+  });
+
+  test('splits author-year references without numeric labels', () => {
+    const markdown = [
+      '## References',
+      '',
+      'Baisa, N.L. (2018). Online tracking paper. Bergmann, P., Meinhardt, T., & Leal-Taixé, L. (2019). Tracking without bells.',
+    ].join('\n');
+
+    expect(normalizeReferenceList(markdown)).toBe(
+      [
+        '## References',
+        '',
+        '- Baisa, N.L. (2018). Online tracking paper.',
+        '- Bergmann, P., Meinhardt, T., & Leal-Taixé, L. (2019). Tracking without bells.',
+      ].join('\n')
+    );
+  });
+});
+
+describe('repairEquationBlocks', () => {
+  test('wraps split equation blocks with labels in fenced text', () => {
+    const markdown = ['∆x =', 'xg − xa', 'da', ', (1)', '', 'where da is the diagonal.'].join('\n');
+
+    expect(repairEquationBlocks(markdown)).toBe(
+      [
+        '',
+        '```text',
+        '∆x =',
+        'xg − xa',
+        'da',
+        ', (1)',
+        '```',
+        '',
+        'where da is the diagonal.',
+      ].join('\n')
+    );
+  });
+
+  test('does not wrap numbered references as equations', () => {
+    const markdown = ['## References', '', '[1] A. Author. Title.'].join('\n');
+
+    expect(repairEquationBlocks(markdown)).toBe(markdown);
+  });
+});
+
+describe('addFigureSourceLinks', () => {
+  test('adds source PDF page links after standalone captions', () => {
+    const markdown = ['Fig. 2. Architecture overview.', '', 'Body text.'].join('\n');
+    const layout = ['page one', '\f', 'Fig. 2. Architecture overview.'].join('\n');
+
+    expect(addFigureSourceLinks(markdown, layout, '/tmp/papers/pdf/Paper.pdf')).toBe(
+      [
+        'Fig. 2. Architecture overview.',
+        '',
+        '> Figure source: [PDF page 2](../pdf/Paper.pdf#page=2)',
+        '',
+        'Body text.',
+      ].join('\n')
+    );
+  });
+
+  test('does not add links for prose figure mentions', () => {
+    const markdown = 'The method is summarized in Figure 2. We discuss it next.';
+    const layout = 'The method is summarized in Figure 2. We discuss it next.';
+
+    expect(addFigureSourceLinks(markdown, layout, '/tmp/Paper.pdf')).toBe(markdown);
+  });
+});
+
+describe('addMissingSourcePlaceholders', () => {
+  test('adds placeholders for source figures and equations absent from Markdown', () => {
+    const markdown = ['Intro text.', '<!-- PAGE_BREAK -->', 'Second page text.'].join('\n');
+    const layout = [
+      'Figure 1. Overview.',
+      'x = y + z (1)',
+      '\f',
+      'Fig. 2. Detail.',
+      'Second page.',
+    ].join('\n');
+
+    expect(addMissingSourcePlaceholders(markdown, layout, '/tmp/papers/pdf/Paper.pdf')).toBe(
+      [
+        'Intro text.',
+        '',
+        'Figure 1. Source figure not extracted; see [PDF page 1](../pdf/Paper.pdf#page=1).',
+        '',
+        'Equation source = PDF page 1 (1)',
+        '<!-- PAGE_BREAK -->',
+        'Second page text.',
+        '',
+        'Figure 2. Source figure not extracted; see [PDF page 2](../pdf/Paper.pdf#page=2).',
+        '',
+      ].join('\n')
+    );
+  });
+});
+
+describe('repairLooseLineSpacing', () => {
+  test('removes pathological blank lines inside wrapped prose', () => {
+    const markdown = [
+      '## Abstract',
+      '',
+      'This paragraph was',
+      '',
+      'split across many',
+      '',
+      'blank lines by OCR.',
+      '',
+      'Fig. 1. Caption remains separate.',
+    ].join('\n');
+
+    expect(repairLooseLineSpacing(markdown)).toBe(
+      [
+        '## Abstract',
+        '',
+        'This paragraph was',
+        'split across many',
+        'blank lines by OCR.',
+        '',
+        'Fig. 1. Caption remains separate.',
+      ].join('\n')
+    );
+  });
+});
+
+describe('removeDuplicateMarkdownTables', () => {
+  test('removes exact repeated Markdown table blocks near each other', () => {
+    const table = ['| A | B |', '| --- | --- |', '| 1 | 2 |'].join('\n');
+    const markdown = [table, '', 'Paragraph.', '', table].join('\n');
+
+    expect(removeDuplicateMarkdownTables(markdown)).toBe([table, '', 'Paragraph.', ''].join('\n'));
+  });
+});
+
 describe('repairMarkdownHeadings', () => {
   test('demotes pre-abstract author metadata and normalizes real section headings', () => {
     const markdown = [
@@ -149,6 +359,22 @@ describe('repairMarkdownHeadings', () => {
         '',
         '### 1.1. Contributions',
       ].join('\n')
+    );
+  });
+
+  test('demotes h2 author and affiliation headings before the abstract', () => {
+    const markdown = [
+      '## Paper Title',
+      '',
+      '## Ada Lovelace',
+      '',
+      '## Example University',
+      '',
+      '## Abstract',
+    ].join('\n');
+
+    expect(repairMarkdownHeadings(markdown)).toBe(
+      ['## Paper Title', '', 'Ada Lovelace', '', 'Example University', '', '## Abstract'].join('\n')
     );
   });
 
