@@ -76,9 +76,12 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
       )
     )
   );
-  const markdown = await formatGeneratedMarkdown(
-    repairLooseLineSpacing(repairMarkdownTablesWithLayout(firstPass, layoutText))
+  const finalPass = await formatGeneratedMarkdown(
+    removeDuplicateMarkdownTables(
+      repairLooseLineSpacing(repairMarkdownTablesWithLayout(firstPass, layoutText))
+    )
   );
+  const markdown = removeDuplicateMarkdownTables(normalizeDisplayMathBlocks(finalPass));
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
 }
@@ -236,7 +239,7 @@ export function normalizeReferenceList(markdown: string): string {
   if (!referenceText) return [...before, '## References'].join('\n');
 
   const entries = splitReferenceEntries(referenceText);
-  if (entries.length < 2) return markdown;
+  if (entries.length < 1) return markdown;
 
   return [...before, '## References', '', ...entries].join('\n');
 }
@@ -258,6 +261,12 @@ export function repairEquationBlocks(markdown: string): string {
     }
     if (looksLikeReferenceHeading(trimmed)) inReferences = true;
 
+    const inlineEquation = splitInlineLabeledEquation(trimmed);
+    if (!inFence && !inReferences && inlineEquation) {
+      repaired.push(...inlineEquation);
+      continue;
+    }
+
     if (
       inFence ||
       inReferences ||
@@ -274,11 +283,11 @@ export function repairEquationBlocks(markdown: string): string {
         repaired.pop();
       }
       const block = lines.slice(blockStart, i + 1).filter((blockLine) => blockLine.trim());
-      repaired.push('', '```text', ...block.map((blockLine) => blockLine.trim()), '```', '');
+      repaired.push(...equationLinesToMathBlock(block));
       continue;
     }
 
-    repaired.push('', '```text', trimmed, '```', '');
+    repaired.push(...equationLinesToMathBlock([trimmed]));
   }
 
   return compactExcessBlankLines(repaired).join('\n');
@@ -302,7 +311,7 @@ export function addFigureSourceLinks(
     const caption = figureCaptionForLine(lines[i]);
     if (!caption) continue;
 
-    const next = lines[i + 1]?.trim() ?? '';
+    const next = nextNonEmptyLine(lines, i + 1);
     if (/^>\s*Figure source:/i.test(next)) continue;
 
     const page = figurePages.get(caption);
@@ -339,7 +348,12 @@ export function addMissingSourcePlaceholders(
     sections = appendToMarkdownPageSection(
       sections,
       page,
-      `Equation source = PDF page ${page} (${equation})`
+      [
+        '$$',
+        `\\text{Equation not extracted; see PDF page ${page}}`,
+        `\\tag{${equation}}`,
+        '$$',
+      ].join('\n')
     );
   }
 
@@ -383,12 +397,28 @@ export function removeDuplicateMarkdownTables(markdown: string): string {
     while (end < lines.length && isMarkdownPipeRow(lines[end])) end += 1;
     const block = lines.slice(i, end);
     const key = block.map((line) => line.replace(/\s+/g, ' ').trim()).join('\n');
-    const previous = seen.get(key);
-    if (previous === undefined || repaired.length - previous > 120) {
+    if (!seen.has(key)) {
       seen.set(key, repaired.length);
       repaired.push(...block);
     }
     i = end - 1;
+  }
+
+  return compactExcessBlankLines(repaired).join('\n').trimEnd();
+}
+
+export function normalizeDisplayMathBlocks(markdown: string): string {
+  const repaired: string[] = [];
+  let inMath = false;
+
+  for (const line of markdown.split('\n')) {
+    if (line.trim() === '$$') {
+      repaired.push('$$');
+      inMath = !inMath;
+      continue;
+    }
+
+    repaired.push(inMath ? line.trim() : line);
   }
 
   return repaired.join('\n');
@@ -400,11 +430,10 @@ function splitEmbeddedCaption(line: string): string[] {
   if (/^(?:Table|Tab\.?|Figure|Fig\.?|Chart)\s+\d+\s*[:.]/i.test(trimmed)) return [line];
 
   const match = line.match(/\b(?:Table|Tab\.?|Figure|Fig\.?|Chart)\s+\d+\s*[:.]/i);
-  if (!match || match.index === undefined || match.index < 20) return [line];
+  if (!match || match.index! < 20) return [line];
 
-  const prefix = line.slice(0, match.index).trimEnd();
-  const caption = line.slice(match.index).trimStart();
-  if (!prefix || !caption) return [line];
+  const prefix = line.slice(0, match.index!).trimEnd();
+  const caption = line.slice(match.index!).trimStart();
   if (!/[.!?)]$/.test(prefix) && prefix.length < 80) return [line];
 
   return [prefix, '', caption];
@@ -420,7 +449,8 @@ function referenceHeadingPrefixRe(): RegExp {
 
 function splitReferenceEntries(text: string): string[] {
   const textWithoutPageBreaks = text.replace(/<!--\s*PAGE_BREAK\s*-->/gi, '\n\n');
-  if (/\[\d{1,3}\]/.test(textWithoutPageBreaks)) {
+  const bracketedReferenceCount = Array.from(textWithoutPageBreaks.matchAll(/\[\d{1,3}\]/g)).length;
+  if (bracketedReferenceCount >= 2) {
     return splitBracketedReferences(textWithoutPageBreaks);
   }
 
@@ -428,7 +458,46 @@ function splitReferenceEntries(text: string): string[] {
     return splitNumberedReferences(textWithoutPageBreaks);
   }
 
+  if (/^\s*[-*+]\s+\S/m.test(textWithoutPageBreaks)) {
+    return splitBulletReferences(textWithoutPageBreaks);
+  }
+
+  if (bracketedReferenceCount > 0) {
+    return splitBracketedReferences(textWithoutPageBreaks);
+  }
+
   return splitAuthorYearReferences(textWithoutPageBreaks);
+}
+
+function splitBulletReferences(text: string): string[] {
+  const entries: string[] = [];
+  let current: string[] = [];
+
+  const flush = (): void => {
+    const rawEntry = current.join(' ').replace(/\s+/g, ' ').trim();
+    if (rawEntry) entries.push(rawEntry);
+    current = [];
+  };
+
+  for (const line of text.split(/\r?\n/)) {
+    const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (bullet) {
+      flush();
+      current.push(bullet[1].trim());
+      continue;
+    }
+
+    if (current.length > 0 && line.trim()) {
+      current.push(line.trim());
+    }
+  }
+  flush();
+
+  return entries.map((entry, index) => {
+    const labeled = entry.match(/^\[(\d{1,3})\]\s*(.+)$/);
+    if (labeled) return `${Number(labeled[1])}. ${labeled[2].trim()}`;
+    return `${index + 1}. ${entry}`;
+  });
 }
 
 function splitBracketedReferences(text: string): string[] {
@@ -437,11 +506,16 @@ function splitBracketedReferences(text: string): string[] {
   const entries: string[] = [];
 
   for (let i = 0; i < matches.length; i += 1) {
-    const start = matches[i].index ?? 0;
-    const end =
-      i + 1 < matches.length ? (matches[i + 1].index ?? normalized.length) : normalized.length;
-    const entry = normalized.slice(start, end).trim();
-    if (entry) entries.push(`- ${entry}`);
+    const start = matches[i].index!;
+    const end = i + 1 < matches.length ? matches[i + 1].index! : normalized.length;
+    const referenceNumber = Number(matches[i][1]);
+    const rawEntry = normalized
+      .slice(start, end)
+      .replace(/^\[\d{1,3}\]\s*/, '')
+      .trim();
+    const { entry, terminate } = trimReferenceEntryCruft(rawEntry);
+    if (entry) entries.push(`${referenceNumber}. ${entry}`);
+    if (terminate) break;
   }
 
   return entries;
@@ -456,11 +530,11 @@ function splitNumberedReferences(text: string): string[] {
   const entries: string[] = [];
 
   for (let i = 0; i < matches.length; i += 1) {
-    const start = (matches[i].index ?? 0) + (matches[i][0].startsWith(' ') ? 1 : 0);
-    const end =
-      i + 1 < matches.length ? (matches[i + 1].index ?? normalized.length) : normalized.length;
-    const entry = normalized.slice(start, end).trim();
+    const start = matches[i].index! + (matches[i][0].startsWith(' ') ? 1 : 0);
+    const end = i + 1 < matches.length ? matches[i + 1].index! : normalized.length;
+    const { entry, terminate } = trimReferenceEntryCruft(normalized.slice(start, end).trim());
     if (entry) entries.push(entry);
+    if (terminate) break;
   }
 
   return entries;
@@ -473,7 +547,7 @@ function splitAuthorYearReferences(text: string): string[] {
     /(?<=\.)\s+(?=[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'´`.-]+,\s+(?:[A-Z]\.|[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'´`.-]+).*?\(\d{4}[a-z]?\)\.)/g;
 
   for (const match of normalized.matchAll(authorStartRe)) {
-    starts.add((match.index ?? 0) + match[0].length);
+    starts.add(match.index! + match[0].length);
   }
 
   const sorted = Array.from(starts).sort((a, b) => a - b);
@@ -482,9 +556,167 @@ function splitAuthorYearReferences(text: string): string[] {
   const entries: string[] = [];
   for (let i = 0; i < sorted.length; i += 1) {
     const entry = normalized.slice(sorted[i], sorted[i + 1] ?? normalized.length).trim();
-    if (entry) entries.push(`- ${entry}`);
+    if (entry) entries.push(`${i + 1}. ${entry}`);
   }
   return entries;
+}
+
+function trimReferenceEntryCruft(entry: string): { entry: string; terminate: boolean } {
+  const captionAfterPageLocator = entry.match(
+    /\.\s+\d+(?:,\s*\d+)*\s+(?=(?:(?:Figure|Fig\.?|Table|Appendix)\s+(?:\d+|[A-Z]\.|[IVXLCDM]+)(?:\s*[:.]|\b)|[-*+]\s+[A-Z][^:]{1,80}:))/i
+  );
+  if (captionAfterPageLocator?.index !== undefined) {
+    return {
+      entry: entry
+        .slice(0, captionAfterPageLocator.index + captionAfterPageLocator[0].trimEnd().length)
+        .trim(),
+      terminate: true,
+    };
+  }
+
+  const headingMatch = entry.match(/\s+#{1,6}\s+\S/);
+  if (headingMatch?.index !== undefined) {
+    return {
+      entry: entry.slice(0, headingMatch.index).trim(),
+      terminate: true,
+    };
+  }
+
+  return { entry, terminate: false };
+}
+
+function equationLinesToMathBlock(lines: string[]): string[] {
+  const trimmedLines = lines
+    .map((line) => line.trim())
+    .filter((line) => line && !/<!--\s*PAGE_BREAK\s*-->/i.test(line));
+
+  const lastIndex = trimmedLines.length - 1;
+  const label = equationLabelForLine(trimmedLines[lastIndex]);
+  if (label) {
+    trimmedLines[lastIndex] = trimmedLines[lastIndex]
+      .replace(/(?:^|[\s,.;])\(\d{1,3}\)(?:\s*(?:where\b.*)?|\s*)$/i, '')
+      .replace(/[,.]\s*$/, '')
+      .trim();
+  }
+
+  const latexLines = trimmedLines
+    .map(equationSegmentForMath)
+    .map(normalizeEquationLatexLine)
+    .filter(Boolean);
+  const body =
+    latexLines.length > 1
+      ? [
+          '\\begin{aligned}',
+          ...latexLines.map((line, index) =>
+            index + 1 < latexLines.length ? `${line} \\\\` : line
+          ),
+          '\\end{aligned}',
+        ]
+      : latexLines;
+
+  if (label) body.push(`\\tag{${label}}`);
+
+  return ['', '$$', ...body, '$$', ''];
+}
+
+function equationLabelForLine(line: string): string | undefined {
+  const match = line.match(/(?:^|[\s,.;])\((\d{1,3})\)(?:\s*(?:where\b.*)?|\s*)$/i);
+  return match?.[1];
+}
+
+function containsEquationLabel(line: string): boolean {
+  return /(?:^|[\s,.;])\(\d{1,3}\)/.test(line);
+}
+
+function splitInlineLabeledEquation(line: string): string[] | undefined {
+  if (line.length < 40 || !line.includes('=')) return undefined;
+
+  for (const labelMatch of line.matchAll(/\((\d{1,3})\)/g)) {
+    const labelIndex = labelMatch.index!;
+
+    const beforeLabel = line.slice(0, labelIndex).trimEnd();
+    const equationStart = equationStartIndex(beforeLabel);
+    if (equationStart < 0) continue;
+
+    const prefix = beforeLabel.slice(0, equationStart).trimEnd();
+    const equation = beforeLabel
+      .slice(equationStart)
+      .replace(/[,.]\s*$/, '')
+      .trim();
+    if (!looksLikeEquationLine(equation)) continue;
+
+    const afterLabel = line.slice(labelIndex + labelMatch[0].length).trimStart();
+    const repaired = prefix
+      ? [prefix, ...equationLinesToMathBlock([`${equation} (${labelMatch[1]})`])]
+      : equationLinesToMathBlock([`${equation} (${labelMatch[1]})`]);
+    if (afterLabel) repaired.push(afterLabel);
+    return repaired;
+  }
+
+  return undefined;
+}
+
+function equationStartIndex(text: string): number {
+  const assignmentMatches = Array.from(text.matchAll(/[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω^_]*\s*=/g));
+  for (let i = assignmentMatches.length - 1; i >= 0; i -= 1) {
+    const index = assignmentMatches[i].index!;
+    const prefix = text.slice(0, index).trim();
+    if (!prefix) return index;
+    if (prefix.split(/\s+/).filter(Boolean).length >= 3) return index;
+  }
+  return -1;
+}
+
+function equationSegmentForMath(line: string): string {
+  const colonIndex = line.lastIndexOf(':');
+  if (colonIndex >= 0) {
+    const suffix = line.slice(colonIndex + 1).trim();
+    if (looksLikeEquationContextLine(suffix)) return suffix;
+  }
+
+  const equationStart = line.search(/[A-Za-z][A-Za-z0-9^_]*\s*=/);
+  if (equationStart > 0) {
+    const prefix = line.slice(0, equationStart).trim();
+    const suffix = line.slice(equationStart).trim();
+    if (prefix.split(/\s+/).filter(Boolean).length >= 4 && looksLikeEquationContextLine(suffix)) {
+      return suffix;
+    }
+  }
+
+  return line;
+}
+
+function normalizeEquationLatexLine(line: string): string {
+  return replaceEquationControlGlyphs(line)
+    .replace(/∆/g, '\\Delta ')
+    .replace(/∑/g, '\\sum ')
+    .replace(/√/g, '\\sqrt ')
+    .replace(/∫/g, '\\int ')
+    .replace(/≤/g, '\\le ')
+    .replace(/≥/g, '\\ge ')
+    .replace(/≈/g, '\\approx ')
+    .replace(/±/g, '\\pm ')
+    .replace(/−/g, '-')
+    .replace(/×/g, '\\times ')
+    .replace(/÷/g, '\\div ')
+    .replace(/∈/g, '\\in ')
+    .replace(/∪/g, '\\cup ')
+    .replace(/∞/g, '\\infty ')
+    .replace(/α/g, '\\alpha ')
+    .replace(/β/g, '\\beta ')
+    .replace(/γ/g, '\\gamma ')
+    .replace(/θ/g, '\\theta ')
+    .replace(/λ/g, '\\lambda ')
+    .replace(/μ/g, '\\mu ')
+    .replace(/π/g, '\\pi ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function replaceEquationControlGlyphs(line: string): string {
+  return Array.from(line)
+    .map((char) => (char.charCodeAt(0) === 15 ? '\\epsilon ' : char))
+    .join('');
 }
 
 function equationLabelRe(): RegExp {
@@ -492,38 +724,47 @@ function equationLabelRe(): RegExp {
 }
 
 function looksLikeEquationLine(line: string): boolean {
-  const mathSymbols = (line.match(/[=∑√∫≈≤≥±−×÷<>|{}^_]|\\(?:frac|sum|sqrt|int)/g) ?? []).length;
+  const mathSymbols = (line.match(/[=+*∑√∫≈≤≥±−×÷<>|{}^_]|\\(?:frac|sum|sqrt|int)/g) ?? []).length;
   const words = (line.match(/[A-Za-z]{3,}/g) ?? []).length;
-  return mathSymbols >= 1 && words <= 24;
+  if (mathSymbols >= 2) return words <= 24;
+  return mathSymbols === 1 && words <= 1;
 }
 
 function equationBlockStart(lines: string[], labelIndex: number): number {
   let start = labelIndex;
-  for (let i = labelIndex - 1; i >= 0 && labelIndex - i <= 10; i -= 1) {
+  for (let i = labelIndex - 1; i >= 0 && labelIndex - i <= 16; i -= 1) {
     const trimmed = lines[i].trim();
     if (!trimmed) {
-      if (start < labelIndex) break;
       continue;
     }
-    if (
-      isStructuralLine(trimmed) ||
-      looksLikeReferenceHeading(trimmed) ||
-      figureCaptionForLine(trimmed)
-    ) {
+    if (/<!--\s*PAGE_BREAK\s*-->/i.test(trimmed)) continue;
+    if (containsEquationLabel(trimmed)) break;
+    if (looksLikeReferenceHeading(trimmed) || figureCaptionForLine(trimmed)) {
       break;
     }
-    if (!looksLikeEquationContextLine(trimmed)) break;
-    start = i;
+    if (/^(?:Table|Tab\.?)\s+(?:\d+|[IVXLCDM]+)(?:\s*[:.]|\b)/i.test(trimmed)) break;
+    if (isEquationBlockBoundary(trimmed)) break;
+    if (looksLikeEquationContextLine(trimmed)) {
+      start = i;
+      continue;
+    }
+    break;
   }
   return start;
 }
 
+function isEquationBlockBoundary(line: string): boolean {
+  return (
+    /^(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s|!\[|\[|<!--|```|~~~)/.test(line) ||
+    /^\|\s*[^|]+\s+\|\s*[^|]+/.test(line)
+  );
+}
+
 function looksLikeEquationContextLine(line: string): boolean {
   if (line.length > 120) return false;
-  if (looksLikeReferenceHeading(line)) return false;
-  const mathSymbols = (line.match(/[=∑√∫≈≤≥±−×÷<>|{}^_]|\\(?:frac|sum|sqrt|int)/g) ?? []).length;
+  const mathSymbols = (line.match(/[=+*∑√∫≈≤≥±−×÷<>|{}^_]|\\(?:frac|sum|sqrt|int)/g) ?? []).length;
   const words = (line.match(/[A-Za-z]{3,}/g) ?? []).length;
-  return mathSymbols >= 1 || words <= 3;
+  return mathSymbols >= 2 || words <= 3;
 }
 
 function figurePagesForLayout(layoutText: string): Map<string, number> {
@@ -580,8 +821,11 @@ function figuresInMarkdown(markdown: string): Set<string> {
 function equationsInMarkdown(markdown: string): Set<string> {
   const equations = new Set<string>();
   for (const line of markdown.split(/\r?\n/)) {
+    for (const tagMatch of line.matchAll(/\\tag\{(\d{1,3})\}/g)) {
+      equations.add(tagMatch[1]);
+    }
     const match = line.trim().match(/\((\d{1,3})\)(?:\s*(?:where\b.*)?|\s*)$/i);
-    if (match && (looksLikeEquationLine(line) || /Equation source\s*=/.test(line))) {
+    if (match && /Equation source\s*=/.test(line)) {
       equations.add(match[1]);
     }
   }
@@ -591,8 +835,11 @@ function equationsInMarkdown(markdown: string): Set<string> {
 function appendToMarkdownPageSection(sections: string[], page: number, text: string): string[] {
   const sectionIndex = Math.max(0, Math.min(sections.length - 1, (page - 1) * 2));
   const section = sections[sectionIndex];
-  if (section.includes(text)) return sections;
-  const separator = section.endsWith('\n') ? '\n' : '\n\n';
+  const referencesBoundary =
+    /^## References\b/m.test(section) && !/^## Extracted Source Placeholders\b/m.test(section)
+      ? '\n\n## Extracted Source Placeholders\n\n'
+      : '';
+  const separator = referencesBoundary || (section.endsWith('\n') ? '\n' : '\n\n');
   const updated = [...sections];
   updated[sectionIndex] = `${section}${separator}${text}\n`;
   return updated;
@@ -603,20 +850,28 @@ function figureCaptionForLine(line: string): string | undefined {
   if (!trimmed) return undefined;
 
   const match = trimmed.match(/\b(?:Figure|Fig\.?|Chart)\s+(S\.\d+|\d+(?:\.\d+)?)(?:\s*[:.]|\b)/i);
-  if (!match || match.index === undefined) return undefined;
+  if (!match) return undefined;
   if (/^(?:Figure|Fig\.?|Chart)\s+/i.test(trimmed)) return normalizedFigureId(match);
   if (/^(?:\([a-z0-9^]+\)\s*){1,8}(?:Figure|Fig\.?|Chart)\s+/i.test(trimmed)) {
     return normalizedFigureId(match);
   }
 
-  const prefix = trimmed.slice(0, match.index).trim();
-  if (!prefix || /[.!?]$/.test(prefix)) return undefined;
-  if (match.index > 36 || prefix.split(/\s+/).filter(Boolean).length > 4) return undefined;
+  const prefix = trimmed.slice(0, match.index!).trim();
+  if (/[.!?]$/.test(prefix)) return undefined;
+  if (match.index! > 36 || prefix.split(/\s+/).filter(Boolean).length > 4) return undefined;
   return normalizedFigureId(match);
 }
 
 function normalizedFigureId(match: RegExpMatchArray): string {
   return match[1].toUpperCase();
+}
+
+function nextNonEmptyLine(lines: string[], startIndex: number): string {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
 }
 
 function canJoinParagraphLines(previousLine: string, nextLine: string): boolean {

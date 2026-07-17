@@ -50,7 +50,7 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
     );
     if (!table) continue;
 
-    const captionIndex = match.index ?? 0;
+    const captionIndex = match.index!;
     const prefix = lines[i].slice(0, captionIndex).trim();
     const prefixIsOnlyEmphasis = /^\*+$/.test(prefix);
     if (table.placement === 'below') {
@@ -150,7 +150,7 @@ function extractPageLayoutTables(lines: string[]): LayoutTable[] {
     const match = lines[i].match(LAYOUT_CAPTION_RE);
     if (!match) continue;
 
-    const block = collectBlockAboveCaption(lines, i, match.index ?? 0);
+    const block = collectBlockAboveCaption(lines, i, match.index!);
     const markdown = layoutBlockToMarkdown(block);
     if (markdown) {
       tables.push({ number: match[1], markdown, placement: 'above' });
@@ -265,7 +265,6 @@ function layoutBlockToMarkdown(lines: string[]): string | undefined {
   if (width < 2) return undefined;
 
   const anchorRowIndex = segmentedRows.findIndex((segments) => segments.length === width);
-  if (anchorRowIndex < 0) return undefined;
 
   const anchors = segmentedRows[anchorRowIndex].map((segment) => segment.start);
   const headerRows = segmentedRows.slice(0, anchorRowIndex);
@@ -274,15 +273,13 @@ function layoutBlockToMarkdown(lines: string[]): string | undefined {
     .map((segments) => mapSegmentsToColumns(segments, anchors))
     .filter((row) => row.filter(Boolean).length >= 2);
 
-  if (bodyRows.length < 1) return undefined;
-
   const header = buildHeader(headerRows, anchors);
   const [finalHeader, finalBody] =
     header.filter(Boolean).length >= 2
       ? [header.map((cell, index) => cell || `Column ${index + 1}`), bodyRows]
       : [bodyRows[0], bodyRows.slice(1)];
 
-  if (finalBody.length < 2 || finalHeader.length !== width || !hasTabularBody(finalBody)) {
+  if (finalBody.length < 2 || !hasTabularBody(finalBody)) {
     return undefined;
   }
 
@@ -317,11 +314,14 @@ function hasTabularBody(rows: string[][]): boolean {
 
 function segmentsForLine(line: string): TextSegment[] {
   const matches = line.matchAll(/\S+(?: \S+)*/g);
-  return Array.from(matches, (match) => ({
-    text: normalizeCell(match[0]),
-    start: match.index ?? 0,
-    end: (match.index ?? 0) + match[0].length,
-  }));
+  return Array.from(matches, (match) => {
+    const start = match.index!;
+    return {
+      text: normalizeCell(match[0]),
+      start,
+      end: start + match[0].length,
+    };
+  });
 }
 
 function looksLikeProseSegments(segments: TextSegment[]): boolean {
@@ -344,7 +344,7 @@ function looksLikeTableStartLine(line: string): boolean {
   const text = segments.map((segment) => segment.text).join(' ');
   const words = text.split(/\s+/).filter(Boolean);
   const numericTokens = (text.match(/\d+(?:\.\d+)?/g) ?? []).length;
-  return numericTokens > 0 || words.length <= 10;
+  return numericTokens > 0 || words.length <= 10 || (segments.length >= 3 && words.length <= 16);
 }
 
 function mostCommonWidth(rows: TextSegment[][]): number {

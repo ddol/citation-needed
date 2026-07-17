@@ -537,6 +537,12 @@ function equationNumbersForText(text: string): string[] {
   const numbers: string[] = [];
 
   for (let i = 0; i < lines.length; i += 1) {
+    const taggedMatches = Array.from(lines[i].matchAll(/\\tag\{(\d{1,3})\}/g), (match) => match[1]);
+    if (taggedMatches.length > 0) {
+      numbers.push(...taggedMatches);
+      continue;
+    }
+
     const context = equationContextForLine(lines, i);
     if (!looksLikeEquation(context)) continue;
 
@@ -549,6 +555,9 @@ function equationNumbersForText(text: string): string[] {
 }
 
 function equationNumberMatches(line: string): string[] {
+  const taggedMatches = Array.from(line.matchAll(/\\tag\{(\d{1,3})\}/g), (match) => match[1]);
+  if (taggedMatches.length > 0) return taggedMatches;
+
   const matches = Array.from(
     line.matchAll(/(?:^|[\s,.;])\((\d{1,3})\)(?=(?:\s*where\b.*)?\s*$|\s+[A-Za-z]+\s*=)/gi),
     (match) => match[1]
@@ -615,7 +624,30 @@ function referenceSection(text: string): string | undefined {
   const lines = text.split(/\r?\n/);
   const index = lines.findIndex((line) => /^\s*#{0,6}\s*References\b/i.test(line.trim()));
   if (index < 0) return undefined;
-  return lines.slice(index + 1).join('\n');
+
+  const body: string[] = [];
+  let sawReferenceEntry = false;
+  for (const line of lines.slice(index + 1)) {
+    const trimmed = line.trim();
+    if (isReferenceEntryLine(trimmed)) sawReferenceEntry = true;
+    if (sawReferenceEntry && isPostReferenceMarker(trimmed)) break;
+    body.push(line);
+  }
+  return body.join('\n');
+}
+
+function isReferenceEntryLine(line: string): boolean {
+  return /^(?:\[\d{1,3}\]|\d{1,3}\.\s+\S)/.test(line);
+}
+
+function isPostReferenceMarker(line: string): boolean {
+  return (
+    /^#{1,6}\s+\S/.test(line) ||
+    /^(?:Figure|Fig\.?|Table|Tab\.?)\s+(?:\d+|[IVXLCDM]+)(?:\.\s+Source\b|\s*[:.]\s+)/i.test(
+      line
+    ) ||
+    /^>\s*Figure source:/i.test(line)
+  );
 }
 
 function countSourceTableBlocks(pageText: string): number {
@@ -975,7 +1007,8 @@ function assessAgentReadability(markdown: string): AgentReadabilityIssue[] {
           line: i + 1,
           severity: 'medium',
           message: 'equation fragment was emitted as a heading',
-          suggestion: 'emit equations as fenced math/plain blocks with equation labels preserved',
+          suggestion:
+            'emit equations as GitHub-compatible display math blocks with labels preserved',
         });
       }
     }
@@ -1036,7 +1069,7 @@ function parserSuggestions(args: {
   }
   if (args.missingMarkdownEquations.length > 0) {
     suggestions.add(
-      'Detect equation blocks and preserve numbered equations as fenced math/plain blocks.'
+      'Detect equation blocks and preserve numbered equations as GitHub-compatible display math blocks.'
     );
   }
   if (args.sourceReferenceCount > 0 && args.markdownReferenceCount < args.sourceReferenceCount) {

@@ -419,6 +419,35 @@ describe('scoreMarkdownQuality', () => {
     });
   });
 
+  test('does not count post-reference figure placeholders as references', async () => {
+    writePaper(
+      'references-with-trailing-placeholders',
+      [
+        '## References',
+        '',
+        '1. First Author. Title.',
+        '2. Second Author. Title.',
+        '',
+        'Figure 6. Source figure not extracted; see [PDF page 11](../pdf/Paper.pdf#page=11).',
+        '',
+        '> Figure source: [PDF page 11](../pdf/Paper.pdf#page=11)',
+        '',
+        '1. Appendix step that should not count as a reference.',
+      ].join('\n')
+    );
+    const layout = ['References', '1. First Author. Title.', '2. Second Author. Title.'].join('\n');
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    expect(report.summary.totalMarkdownReferences).toBe(2);
+    expect(report.papers[0].markdownReferenceCount).toBe(2);
+    expect(report.papers[0].metrics.referenceCoverageScore).toBe(1);
+  });
+
   test('counts figure captions with subfigure or short title prefixes', async () => {
     writePaper(
       'prefixed-figures',
@@ -478,6 +507,45 @@ describe('scoreMarkdownQuality', () => {
 
     expect(report.papers[0].sourceEquationNumbers).toEqual(['2', '3']);
     expect(report.papers[0].markdownEquationNumbers).toEqual(['2', '3']);
+    expect(report.papers[0].metrics.equationCoverageScore).toBe(1);
+  });
+
+  test('counts GitHub display math tags as Markdown equation labels', async () => {
+    writePaper('tagged-equation', ['## Metric', '', '$$', 'E = mc^2', '\\tag{1}', '$$'].join('\n'));
+    const layout = 'E = mc^2 (1)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    expect(report.papers[0].sourceEquationNumbers).toEqual(['1']);
+    expect(report.papers[0].markdownEquationNumbers).toEqual(['1']);
+    expect(report.papers[0].metrics.equationCoverageScore).toBe(1);
+  });
+
+  test('counts tagged display math placeholders as Markdown equation labels', async () => {
+    writePaper(
+      'tagged-placeholder',
+      [
+        '## Metric',
+        '',
+        '$$',
+        '\\text{Equation not extracted; see PDF page 1}',
+        '\\tag{2}',
+        '$$',
+      ].join('\n')
+    );
+    const layout = 'A = B + C (2)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    expect(report.papers[0].markdownEquationNumbers).toEqual(['2']);
     expect(report.papers[0].metrics.equationCoverageScore).toBe(1);
   });
 
