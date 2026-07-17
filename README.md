@@ -89,7 +89,7 @@ By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the Bi
 
 `check-local-papers` is local-only: it scans PDF files in `--paper-path`, extracts text locally, and reports `matched`, `missing`, `mismatch`, `ambiguous`, or `skipped` entries without hitting Unpaywall, arXiv, Crossref, or publisher sites.
 
-`score-markdown-quality` is local-only: it compares extracted Markdown with PDF layout text to report per-paper source table counts by page, Markdown table coverage, heading-flow issues, arXiv tag placement, page-break alignment, completeness, and extraction-artifact scores. Use `--json` and `--fail-below <score>` for an automated Markdown-improvement loop.
+`score-markdown-quality` is local-only: it compares extracted Markdown with PDF layout text to report per-paper source table/chart/equation counts, Markdown coverage for tables, figures, equations, and references, heading-flow issues, arXiv tag placement, page-break alignment, completeness, extraction artifacts, and agent-readability parser suggestions. Use `--json` and `--fail-below <score>` for an automated Markdown-improvement loop.
 
 `extract-markdown` is local-only. Without `--paper-path`, it refreshes Markdown for PDFs already recorded in the local database. With `--paper-path` and `--markdown-path`, it scans that PDF folder directly and writes matching Markdown files without requiring database rows.
 

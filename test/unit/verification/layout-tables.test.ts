@@ -128,4 +128,138 @@ describe('repairMarkdownTablesWithLayout', () => {
       ].join('\n')
     );
   });
+
+  test('repairs Springer-style captions without punctuation after the table number', () => {
+    const markdown = [
+      '**Table 1** An overview of metric choices',
+      'MOTA IDF1 HOTA Final Tracks Final Tracks Balanced',
+    ].join('\n');
+    const layout = [
+      'Table 1 An overview of metric choices',
+      '                       MOTA              IDF1              HOTA',
+      'Representation         Final Tracks      Final Tracks      Final Tracks',
+      'Matching Domain        Detection         Trajectory        Detection',
+      'Bias Toward            Detection         Association       Balanced',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        '**Table 1** An overview of metric choices',
+        '',
+        '| Column 1 | MOTA | IDF1 | HOTA |',
+        '| --- | --- | --- | --- |',
+        '| Representation | Final Tracks | Final Tracks | Final Tracks |',
+        '| Matching Domain | Detection | Trajectory | Detection |',
+        '| Bias Toward | Detection | Association | Balanced |',
+      ].join('\n')
+    );
+  });
+
+  test('repairs roman numeral table captions with rows below the caption', () => {
+    const markdown = [
+      'TABLE II. Speed comparison of ground segmentation methods.',
+      'Method Speed Method Speed LineFit [15] 58.96 GPF [16] 29.72 RANSAC [9] 15.43 R-GPF [2] 35.30',
+    ].join('\n');
+    const layout = [
+      'TABLE II. Speed comparison of ground segmentation methods.',
+      ' Method                   Speed     Method                      Speed',
+      ' LineFit [15]              58.96    GPF [16]                    29.72',
+      ' RANSAC [9]                15.43    R-GPF [2]                   35.30',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        'TABLE II. Speed comparison of ground segmentation methods.',
+        '',
+        '| Method | Speed | Method | Speed |',
+        '| --- | --- | --- | --- |',
+        '| LineFit [15] | 58.96 | GPF [16] | 29.72 |',
+        '| RANSAC [9] | 15.43 | R-GPF [2] | 35.30 |',
+      ].join('\n')
+    );
+  });
+
+  test('skips prose caption continuations before rows below a caption', () => {
+    const markdown = [
+      'Table 1: Dataset comparison. This caption continues before the rows.',
+      'dataset statistics WOD 100 KITTI 50',
+    ].join('\n');
+    const layout = [
+      'Table 1: Dataset comparison. This caption continues',
+      'over another line before the table starts.',
+      '',
+      'dataset statistics   WOD   KITTI',
+      '# sequences          100    50',
+      '# images             2000   300',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        'Table 1: Dataset comparison. This caption continues before the rows.',
+        '',
+        '| dataset statistics | WOD | KITTI |',
+        '| --- | --- | --- |',
+        '| # sequences | 100 | 50 |',
+        '| # images | 2000 | 300 |',
+      ].join('\n')
+    );
+  });
+
+  test('skips hyphenated caption continuations before dense rows below a caption', () => {
+    const markdown = [
+      'Table 2. Long caption starts.',
+      '',
+      'Dataset (a)^ ADE/FDE (m) Linear LSTM S-LSTM ETH 1.33/2.94 1.09/2.41 1.09/2.35 Hotel 0.39/0.72 0.86/1.91 0.79/1.76',
+    ].join('\n');
+    const layout = [
+      'Table 2. Long caption starts with a hyphenated continua-',
+      'tion line that should not become part of the table',
+      'Bold indicates best.',
+      '',
+      'Dataset                 (a) ADE/FDE (m)',
+      '           Linear       LSTM       S-LSTM [13]',
+      'ETH        1.33/2.94    1.09/2.41  1.09/2.35',
+      'Hotel      0.39/0.72    0.86/1.91  0.79/1.76',
+      'Univ       0.82/1.59    0.61/1.31  0.67/1.40',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        'Table 2. Long caption starts.',
+        '',
+        '| Dataset | Linear | LSTM | (a) ADE/FDE (m) S-LSTM [13] |',
+        '| --- | --- | --- | --- |',
+        '| ETH | 1.33/2.94 | 1.09/2.41 | 1.09/2.35 |',
+        '| Hotel | 0.39/0.72 | 0.86/1.91 | 0.79/1.76 |',
+        '| Univ | 0.82/1.59 | 0.61/1.31 | 0.67/1.40 |',
+      ].join('\n')
+    );
+  });
+
+  test('removes packed pipe fragments after inserting a layout table', () => {
+    const markdown = [
+      'Table 1: Dataset comparison. Caption starts.',
+      'caption continues. | dataset statistics | WOD | KITTI |',
+      '| --- | --- | --- | | # sequences | 100 | 50 |',
+    ].join('\n');
+    const layout = [
+      'Table 1: Dataset comparison. Caption starts.',
+      'caption continues.',
+      '',
+      'dataset statistics   WOD   KITTI',
+      '# sequences          100    50',
+      '# images             2000   300',
+    ].join('\n');
+
+    expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(
+      [
+        'Table 1: Dataset comparison. Caption starts.',
+        '',
+        '| dataset statistics | WOD | KITTI |',
+        '| --- | --- | --- |',
+        '| # sequences | 100 | 50 |',
+        '| # images | 2000 | 300 |',
+      ].join('\n')
+    );
+  });
 });

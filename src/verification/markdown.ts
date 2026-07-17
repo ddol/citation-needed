@@ -41,7 +41,7 @@ interface CandidateLine {
 interface MarkdownFormatter {
   format(
     markdown: string,
-    options: { parser: 'markdown'; proseWrap: 'preserve' }
+    options: { parser: 'markdown'; proseWrap: 'always'; printWidth: number }
   ): string | Promise<string>;
 }
 
@@ -50,22 +50,46 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
     throw new Error(`PDF file not found: ${pdfPath}`);
   }
 
-  const markdown = await formatGeneratedMarkdown(
-    repairMarkdownHeadings(
-      repairMarkdownTablesWithLayout(
-        repairMarkdownTables((await defaultExtractor.extract(pdfPath)).trim()),
-        await extractPdfLayoutText(pdfPath)
+  const layoutText = await extractPdfLayoutText(pdfPath);
+  const firstPass = await formatGeneratedMarkdown(
+    repairCaptionBoundaries(
+      repairMarkdownHeadings(
+        repairMarkdownTablesWithLayout(
+          repairMarkdownTables(
+            normalizeExtractionArtifacts((await defaultExtractor.extract(pdfPath)).trim())
+          ),
+          layoutText
+        )
       )
     )
+  );
+  const markdown = await formatGeneratedMarkdown(
+    repairMarkdownTablesWithLayout(firstPass, layoutText)
   );
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
 }
 
+export function normalizeExtractionArtifacts(markdown: string): string {
+  return Array.from(markdown)
+    .map((char) => (char.charCodeAt(0) === 15 ? 'ε' : char))
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 31 || code === 9 || code === 10 || code === 13;
+    })
+    .join('');
+}
+
 export async function formatGeneratedMarkdown(markdown: string): Promise<string> {
   try {
     const prettier = require('prettier') as MarkdownFormatter;
-    return (await prettier.format(markdown, { parser: 'markdown', proseWrap: 'preserve' })).trim();
+    return (
+      await prettier.format(markdown, {
+        parser: 'markdown',
+        proseWrap: 'always',
+        printWidth: 100,
+      })
+    ).trim();
   } catch (error) {
     logger.warn('Markdown formatting failed; returning unformatted extraction', {
       err: error instanceof Error ? error.message : String(error),
@@ -155,6 +179,45 @@ export function repairMarkdownHeadings(markdown: string): string {
     .join('\n');
 }
 
+export function repairCaptionBoundaries(markdown: string): string {
+  const repaired: string[] = [];
+  let inFence = false;
+
+  for (const line of markdown.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      repaired.push(line);
+      continue;
+    }
+
+    if (inFence) {
+      repaired.push(line);
+      continue;
+    }
+
+    const split = splitEmbeddedCaption(line);
+    repaired.push(...split);
+  }
+
+  return repaired.join('\n');
+}
+
+function splitEmbeddedCaption(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed) return [line];
+  if (/^(?:Table|Tab\.?|Figure|Fig\.?|Chart)\s+\d+\s*[:.]/i.test(trimmed)) return [line];
+
+  const match = line.match(/\b(?:Table|Tab\.?|Figure|Fig\.?|Chart)\s+\d+\s*[:.]/i);
+  if (!match || match.index === undefined || match.index < 20) return [line];
+
+  const prefix = line.slice(0, match.index).trimEnd();
+  const caption = line.slice(match.index).trimStart();
+  if (!prefix || !caption) return [line];
+  if (!/[.!?)]$/.test(prefix) && prefix.length < 80) return [line];
+
+  return [prefix, '', caption];
+}
+
 function classifyCandidateLine(line: string): CandidateLine | null {
   const trimmed = line.trim();
   if (!trimmed || trimmed.length > 180) return null;
@@ -241,12 +304,13 @@ function isFormulaOrFigureHeading(text: string): boolean {
   const plain = text.replace(/[*_`]/g, '').trim();
   if (/^(?:gt|[A-Z])\s*[:.]$/i.test(plain)) return true;
   if (/^\(?\d+\)?$/.test(plain)) return true;
+  if (/^[A-Z0-9,./ -]+$/.test(plain) && /[,/]/.test(plain)) return true;
   if (!/[A-Za-z]{3,}/.test(plain)) return true;
   if (isNumberedSection(plain)) return false;
 
   const mathTokens = (plain.match(/[∑√∫≈≤≥±−=|{}[\]()]/g) ?? []).length;
   const words = plain.split(/\s+/).filter((word) => /[A-Za-z]{3,}/.test(word)).length;
-  return mathTokens >= 2 && words <= 2;
+  return mathTokens >= 1 && words <= 2;
 }
 
 function normalizedHeadingLevel(currentLevel: number, text: string): number {

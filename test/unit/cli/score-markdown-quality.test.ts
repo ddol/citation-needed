@@ -46,6 +46,12 @@ describe('score-markdown-quality command', () => {
         averageScore: 92.5,
         totalSourceTables: 2,
         totalMissingMarkdownTables: 0,
+        totalSourceCharts: 1,
+        totalMissingMarkdownCharts: 0,
+        totalSourceEquations: 1,
+        totalMissingMarkdownEquations: 0,
+        totalSourceReferences: 3,
+        totalMarkdownReferences: 3,
       },
       papers: [
         {
@@ -59,7 +65,19 @@ describe('score-markdown-quality command', () => {
           sourceTableNumbers: ['1'],
           markdownTableNumbers: ['1'],
           missingMarkdownTables: [],
+          sourceChartsByPage: [{ page: 1, count: 1, numbers: ['1'] }],
+          sourceChartNumbers: ['1'],
+          markdownChartNumbers: ['1'],
+          missingMarkdownCharts: [],
+          sourceEquationsByPage: [{ page: 1, count: 1, numbers: ['1'] }],
+          sourceEquationNumbers: ['1'],
+          markdownEquationNumbers: ['1'],
+          missingMarkdownEquations: [],
+          sourceReferenceCount: 3,
+          markdownReferenceCount: 3,
           headingIssues: [],
+          agentReadabilityIssues: [],
+          parserImprovementSuggestions: [],
           issues: [],
           metrics: {
             score: 92.5,
@@ -70,10 +88,20 @@ describe('score-markdown-quality command', () => {
             markdownTableCount: 2,
             tableCoverageScore: 1,
             tableFormattingScore: 1,
+            sourceChartCount: 1,
+            markdownChartCount: 1,
+            chartCoverageScore: 1,
+            sourceEquationCount: 1,
+            markdownEquationCount: 1,
+            equationCoverageScore: 1,
+            sourceReferenceCount: 3,
+            markdownReferenceCount: 3,
+            referenceCoverageScore: 1,
             headingFlowScore: 1,
             arxivPlacementScore: 0.75,
             completenessScore: 0.9,
             artifactScore: 1,
+            agentReadabilityScore: 1,
             sourceWordCount: 100,
             markdownWordCount: 95,
           },
@@ -106,7 +134,9 @@ describe('score-markdown-quality command', () => {
       recursive: true,
     });
     expect(output()).toContain('Scored 1/1 paper(s); average 92.5');
-    expect(output()).toContain('paper-a: tables 2/2 (100%); headings 100%; arXiv 75%; pages 2/2');
+    expect(output()).toContain(
+      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (100%); refs 3/3 (100%); headings 100%; agent 100%; pages 2/2'
+    );
     expect(output()).toContain('source page 1: 1 table(s) (1)');
     expect(output()).toContain('source page 2: 1 table(s)');
     expect(process.exitCode).toBe(0);
@@ -122,6 +152,12 @@ describe('score-markdown-quality command', () => {
         averageScore: 61,
         totalSourceTables: 1,
         totalMissingMarkdownTables: 1,
+        totalSourceCharts: 1,
+        totalMissingMarkdownCharts: 1,
+        totalSourceEquations: 1,
+        totalMissingMarkdownEquations: 1,
+        totalSourceReferences: 2,
+        totalMarkdownReferences: 1,
       },
       papers: [
         {
@@ -131,7 +167,28 @@ describe('score-markdown-quality command', () => {
           sourceTableNumbers: ['1'],
           markdownTableNumbers: [],
           missingMarkdownTables: ['1'],
+          sourceChartsByPage: [{ page: 1, count: 1, numbers: ['1'] }],
+          sourceChartNumbers: ['1'],
+          markdownChartNumbers: [],
+          missingMarkdownCharts: ['1'],
+          sourceEquationsByPage: [{ page: 1, count: 1, numbers: ['1'] }],
+          sourceEquationNumbers: ['1'],
+          markdownEquationNumbers: [],
+          missingMarkdownEquations: ['1'],
+          sourceReferenceCount: 2,
+          markdownReferenceCount: 1,
           headingIssues: [{ line: 4, message: 'four consecutive h3 headings' }],
+          agentReadabilityIssues: [
+            {
+              line: 6,
+              severity: 'high',
+              message: 'very long line is hard for an agent to scan and quote precisely',
+              suggestion: 'split extracted multi-column/table text into blocks',
+            },
+          ],
+          parserImprovementSuggestions: [
+            'Improve table recovery from layout text and same-line captions.',
+          ],
           issues: ['missing-markdown-tables:1', 'heading-flow-issues'],
           metrics: {
             score: 61,
@@ -142,10 +199,20 @@ describe('score-markdown-quality command', () => {
             markdownTableCount: 0,
             tableCoverageScore: 0,
             tableFormattingScore: 1,
+            sourceChartCount: 1,
+            markdownChartCount: 0,
+            chartCoverageScore: 0,
+            sourceEquationCount: 1,
+            markdownEquationCount: 0,
+            equationCoverageScore: 0,
+            sourceReferenceCount: 2,
+            markdownReferenceCount: 1,
+            referenceCoverageScore: 0.5,
             headingFlowScore: 0.7,
             arxivPlacementScore: 1,
             completenessScore: 0.8,
             artifactScore: 1,
+            agentReadabilityScore: 0.85,
             sourceWordCount: 100,
             markdownWordCount: 80,
           },

@@ -6,6 +6,8 @@ import pdf2md from '@opendocsg/pdf2md';
 import {
   extractPdfMarkdown,
   formatGeneratedMarkdown,
+  normalizeExtractionArtifacts,
+  repairCaptionBoundaries,
   repairMarkdownHeadings,
   repairMarkdownTables,
 } from '../../../src/verification/markdown';
@@ -73,6 +75,47 @@ describe('formatGeneratedMarkdown', () => {
     await expect(
       formatGeneratedMarkdown('| Metric | Value |\n| --- | --- |\n| Accuracy | 0.91 |')
     ).resolves.toBe('| Metric   | Value |\n| -------- | ----- |\n| Accuracy | 0.91  |');
+    expect(jest.mocked(require('prettier').format)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ parser: 'markdown', proseWrap: 'always', printWidth: 100 })
+    );
+  });
+});
+
+describe('normalizeExtractionArtifacts', () => {
+  test('replaces bad epsilon control glyphs and removes other C0 controls', () => {
+    expect(normalizeExtractionArtifacts('∀\u000f > 0\u0001 and text')).toBe('∀ε > 0 and text');
+  });
+});
+
+describe('repairCaptionBoundaries', () => {
+  test('splits embedded figure captions onto their own line', () => {
+    const markdown = [
+      'This paragraph introduces the method. Fig. 1. Overview of the complete pipeline.',
+      '',
+      'Next paragraph.',
+    ].join('\n');
+
+    expect(repairCaptionBoundaries(markdown)).toBe(
+      [
+        'This paragraph introduces the method.',
+        '',
+        'Fig. 1. Overview of the complete pipeline.',
+        '',
+        'Next paragraph.',
+      ].join('\n')
+    );
+  });
+
+  test('leaves citations and fenced code untouched', () => {
+    const markdown = [
+      'Prior work [12] reports a Table 1 result without starting a caption.',
+      '```',
+      'prefix text Fig. 2. code sample',
+      '```',
+    ].join('\n');
+
+    expect(repairCaptionBoundaries(markdown)).toBe(markdown);
   });
 });
 
@@ -110,10 +153,17 @@ describe('repairMarkdownHeadings', () => {
   });
 
   test('demotes formula fragments and figure labels emitted as headings', () => {
-    const markdown = ['## gt:', '#### |TP| + |FN|', '#### (1)', '### 4.1 CLEARMOT'].join('\n');
+    const markdown = [
+      '## gt:',
+      '#### |TP| + |FN|',
+      '#### (1)',
+      '#### APH = 100',
+      '#### TOP F,SL,SR,R',
+      '### 4.1 CLEARMOT',
+    ].join('\n');
 
     expect(repairMarkdownHeadings(markdown)).toBe(
-      ['gt:', '|TP| + |FN|', '(1)', '### 4.1 CLEARMOT'].join('\n')
+      ['gt:', '|TP| + |FN|', '(1)', 'APH = 100', 'TOP F,SL,SR,R', '### 4.1 CLEARMOT'].join('\n')
     );
   });
 

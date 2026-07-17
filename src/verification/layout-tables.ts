@@ -9,10 +9,15 @@ interface TextSegment {
 interface LayoutTable {
   number: string;
   markdown: string;
+  placement: 'above' | 'below';
 }
 
-const CAPTION_RE = /\b(?:Table|Tab\.?)\s+(\d+)\s*[:.]/i;
-const LAYOUT_CAPTION_RE = /\b(?:Table|Tab\.?)\s+(\d+)\s*[:.]/i;
+const TABLE_ID_RE = String.raw`(\d+|[IVXLCDM]+)`;
+const CAPTION_RE = new RegExp(String.raw`\b(?:Table|Tab\.?)\s+${TABLE_ID_RE}(?:\s*[:.]|\b)`, 'i');
+const LAYOUT_CAPTION_RE = new RegExp(
+  String.raw`\b(?:Table|Tab\.?)\s+${TABLE_ID_RE}(?:\s*[:.]|\b)`,
+  'i'
+);
 
 export function extractPdfLayoutText(pdfPath: string): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -47,7 +52,19 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
 
     const captionIndex = match.index ?? 0;
     const prefix = lines[i].slice(0, captionIndex).trim();
-    if (prefix && looksLikeCollapsedTableLine(prefix)) {
+    const prefixIsOnlyEmphasis = /^\*+$/.test(prefix);
+    if (table.placement === 'below') {
+      const caption = lines[i].slice(captionIndex).trimStart();
+      lines[i] =
+        prefix && !prefixIsOnlyEmphasis
+          ? `${prefix}\n\n${caption}\n\n${table.markdown}`
+          : `${lines[i]}\n\n${table.markdown}`;
+      clearFollowingCollapsedTableLines(lines, i + 1);
+      usedTables.add(table);
+      continue;
+    }
+
+    if (prefix && !prefixIsOnlyEmphasis && looksLikeCollapsedTableLine(prefix)) {
       lines[i] = `${table.markdown}\n${lines[i].slice(captionIndex).trimStart()}`;
       usedTables.add(table);
       continue;
@@ -61,6 +78,63 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
   }
 
   return lines.join('\n');
+}
+
+function clearFollowingCollapsedTableLines(lines: string[], startIndex: number): void {
+  let firstRemovableIndex = startIndex;
+  let removeCount = 0;
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) {
+      if (removeCount === 0) {
+        firstRemovableIndex = i;
+        continue;
+      }
+      break;
+    }
+    if (
+      /^(?:#{1,6}\s|<!--|(?:Table|Tab\.?|Figure|Fig\.?)\s+(?:\d+|[IVXLCDM]+)(?:\s*[:.]|\b))/i.test(
+        trimmed
+      )
+    ) {
+      break;
+    }
+    if (
+      !looksLikeCollapsedTableLine(trimmed) &&
+      !looksLikeCategoricalCollapsedTableLine(trimmed) &&
+      !looksLikePackedTableLine(trimmed) &&
+      !looksLikePipeTableFragment(trimmed)
+    ) {
+      break;
+    }
+    removeCount = i - firstRemovableIndex + 1;
+  }
+
+  if (removeCount > 0) {
+    lines.splice(firstRemovableIndex, removeCount);
+  }
+}
+
+function looksLikePackedTableLine(line: string): boolean {
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const numericTokens = tokens.filter((token) => /\d/.test(token)).length;
+  return tokens.length >= 5 && numericTokens >= 2 && !/[.!?]$/.test(line);
+}
+
+function looksLikeCategoricalCollapsedTableLine(line: string): boolean {
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const numericTokens = tokens.filter((token) => /\d/.test(token)).length;
+  const shortTokens = tokens.filter((token) => token.length <= 18).length;
+  return (
+    tokens.length >= 6 &&
+    numericTokens <= 1 &&
+    shortTokens >= tokens.length - 1 &&
+    !/[.!?]$/.test(line)
+  );
+}
+
+function looksLikePipeTableFragment(line: string): boolean {
+  return (line.match(/\|/g) ?? []).length >= 2;
 }
 
 function extractLayoutTables(layoutText: string): LayoutTable[] {
@@ -79,11 +153,46 @@ function extractPageLayoutTables(lines: string[]): LayoutTable[] {
     const block = collectBlockAboveCaption(lines, i, match.index ?? 0);
     const markdown = layoutBlockToMarkdown(block);
     if (markdown) {
-      tables.push({ number: match[1], markdown });
+      tables.push({ number: match[1], markdown, placement: 'above' });
+      continue;
+    }
+
+    const belowMarkdown = layoutBlockToMarkdown(collectBlockBelowCaption(lines, i));
+    if (belowMarkdown) {
+      tables.push({ number: match[1], markdown: belowMarkdown, placement: 'below' });
     }
   }
 
   return tables;
+}
+
+function collectBlockBelowCaption(lines: string[], captionIndex: number): string[] {
+  const block: string[] = [];
+  let skippedBlankLines = 0;
+
+  for (let i = captionIndex + 1; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+
+    if (!trimmed) {
+      if (block.length > 0) {
+        skippedBlankLines += 1;
+        if (skippedBlankLines > 2) break;
+      }
+      continue;
+    }
+
+    if (/\b(?:Table|Tab\.?|Figure|Fig\.?)\s+(?:\d+|[IVXLCDM]+)(?:\s*[:.]|\b)/i.test(trimmed)) break;
+    if (/^(?:[A-Z]\.|[IVXLCDM]+\.|\d+\.|References\b)/.test(trimmed) && block.length >= 2) break;
+    if (block.length === 0 && !looksLikeTableStartLine(raw)) continue;
+    if (block.length >= 1 && looksLikeParagraphLine(trimmed)) break;
+
+    block.push(raw.trimEnd());
+    skippedBlankLines = 0;
+    if (block.length >= 40) break;
+  }
+
+  return block;
 }
 
 function collectBlockAboveCaption(
@@ -105,7 +214,7 @@ function collectBlockAboveCaption(
       }
       continue;
     }
-    if (/\b(Table|Figure)\s+\d+\s*:/.test(raw)) break;
+    if (/\b(Table|Figure)\s+\d+(?:\s*:|\b)/.test(raw)) break;
 
     const cropped = raw.slice(cropStart).trimEnd();
     if (cropped.trim()) {
@@ -123,7 +232,7 @@ function inferTableStart(lines: string[], captionIndex: number, captionIndent: n
 
   const starts: number[] = [];
   for (let i = captionIndex - 1; i >= Math.max(0, captionIndex - 40); i -= 1) {
-    if (/\b(Table|Figure)\s+\d+\s*:/.test(lines[i])) break;
+    if (/\b(Table|Figure)\s+\d+(?:\s*:|\b)/.test(lines[i])) break;
 
     const segments = segmentsForLine(lines[i]);
     const lineStarts: number[] = [];
@@ -173,7 +282,7 @@ function layoutBlockToMarkdown(lines: string[]): string | undefined {
       ? [header.map((cell, index) => cell || `Column ${index + 1}`), bodyRows]
       : [bodyRows[0], bodyRows.slice(1)];
 
-  if (finalBody.length < 2 || finalHeader.length !== width || !hasNumericBody(finalBody)) {
+  if (finalBody.length < 2 || finalHeader.length !== width || !hasTabularBody(finalBody)) {
     return undefined;
   }
 
@@ -192,6 +301,20 @@ function hasNumericBody(rows: string[][]): boolean {
   return numericRows.length >= Math.ceil(rows.length / 2) && !packedNumericCell;
 }
 
+function hasTabularBody(rows: string[][]): boolean {
+  if (hasNumericBody(rows)) return true;
+  if (rows.length < 3) return false;
+
+  const populatedRows = rows.filter((row) => row.filter(Boolean).length >= 2);
+  const firstColumnValues = new Set(populatedRows.map((row) => row[0]).filter(Boolean));
+  const longCells = populatedRows.flat().filter((cell) => cell.split(/\s+/).length > 8).length;
+  return (
+    populatedRows.length >= 3 &&
+    firstColumnValues.size >= Math.min(3, populatedRows.length) &&
+    longCells === 0
+  );
+}
+
 function segmentsForLine(line: string): TextSegment[] {
   const matches = line.matchAll(/\S+(?: \S+)*/g);
   return Array.from(matches, (match) => ({
@@ -206,6 +329,22 @@ function looksLikeProseSegments(segments: TextSegment[]): boolean {
   const words = text.split(/\s+/).filter(Boolean);
   const numberCount = (text.match(/\d+(?:\.\d+)?/g) ?? []).length;
   return segments.length <= 2 && words.length >= 7 && numberCount < 2;
+}
+
+function looksLikeParagraphLine(line: string): boolean {
+  const words = line.split(/\s+/).filter(Boolean);
+  const numberCount = (line.match(/\d+(?:\.\d+)?/g) ?? []).length;
+  return words.length >= 12 && numberCount < 3 && /[.!?]$/.test(line);
+}
+
+function looksLikeTableStartLine(line: string): boolean {
+  const segments = segmentsForLine(line);
+  if (segments.length < 2) return false;
+
+  const text = segments.map((segment) => segment.text).join(' ');
+  const words = text.split(/\s+/).filter(Boolean);
+  const numericTokens = (text.match(/\d+(?:\.\d+)?/g) ?? []).length;
+  return numericTokens > 0 || words.length <= 10;
 }
 
 function mostCommonWidth(rows: TextSegment[][]): number {

@@ -39,7 +39,14 @@ function formatSummary(report: MarkdownQualityReport, failBelow?: number): strin
     `Scored ${report.summary.scored}/${report.summary.papers} paper(s); ` +
       `average ${report.summary.averageScore}; ` +
       `${report.summary.totalSourceTables} source table(s); ` +
-      `${report.summary.totalMissingMarkdownTables} numbered table(s) missing from Markdown.`,
+      `${report.summary.totalSourceCharts} chart(s); ` +
+      `${report.summary.totalSourceEquations} equation(s).`,
+    `Missing from Markdown: ${report.summary.totalMissingMarkdownTables} table(s); ` +
+      `${report.summary.totalMissingMarkdownCharts} chart(s); ` +
+      `${report.summary.totalMissingMarkdownEquations} equation(s).`,
+    dim(
+      `References: ${report.summary.totalMarkdownReferences}/${report.summary.totalSourceReferences} detected.`
+    ),
     dim(
       `Missing Markdown: ${report.summary.missingMarkdown}; missing PDF: ${report.summary.missingPdf}.`
     ),
@@ -62,12 +69,18 @@ function formatSummary(report: MarkdownQualityReport, failBelow?: number): strin
 function formatPaperLine(paper: MarkdownQualityPaper): string {
   const sourceTables = paper.metrics.sourceTableCount;
   const tableCoverage = Math.round(paper.metrics.tableCoverageScore * 100);
+  const chartCoverage = Math.round(paper.metrics.chartCoverageScore * 100);
+  const equationCoverage = Math.round(paper.metrics.equationCoverageScore * 100);
+  const referenceCoverage = Math.round(paper.metrics.referenceCoverageScore * 100);
   const headingCoverage = Math.round(paper.metrics.headingFlowScore * 100);
-  const arxivCoverage = Math.round(paper.metrics.arxivPlacementScore * 100);
+  const readability = Math.round(paper.metrics.agentReadabilityScore * 100);
   return (
     `${paper.metrics.score.toFixed(1)} ${paper.id}: ` +
     `tables ${paper.metrics.markdownTableCount}/${sourceTables} (${tableCoverage}%); ` +
-    `headings ${headingCoverage}%; arXiv ${arxivCoverage}%; ` +
+    `charts ${paper.metrics.markdownChartCount}/${paper.metrics.sourceChartCount} (${chartCoverage}%); ` +
+    `eqs ${paper.metrics.markdownEquationCount}/${paper.metrics.sourceEquationCount} (${equationCoverage}%); ` +
+    `refs ${paper.metrics.markdownReferenceCount}/${paper.metrics.sourceReferenceCount} (${referenceCoverage}%); ` +
+    `headings ${headingCoverage}%; agent ${readability}%; ` +
     `pages ${paper.metrics.markdownPages}/${paper.metrics.sourcePages}`
   );
 }
@@ -81,8 +94,27 @@ function formatPaperIssues(paper: MarkdownQualityPaper): string[] {
       issues.push(`source page ${page.page}: ${page.count} table(s)${suffix}`);
     }
   }
+  for (const page of paper.sourceChartsByPage) {
+    if (page.count > 0) {
+      const suffix = page.numbers.length > 0 ? ` (${page.numbers.join(', ')})` : '';
+      issues.push(`source page ${page.page}: ${page.count} chart/figure(s)${suffix}`);
+    }
+  }
+  for (const page of paper.sourceEquationsByPage) {
+    if (page.count > 0) {
+      const suffix = page.numbers.length > 0 ? ` (${page.numbers.join(', ')})` : '';
+      issues.push(`source page ${page.page}: ${page.count} equation(s)${suffix}`);
+    }
+  }
   for (const issue of paper.headingIssues.slice(0, 3)) {
     issues.push(`line ${issue.line}: ${issue.message}`);
+  }
+  for (const issue of paper.agentReadabilityIssues.slice(0, 3)) {
+    const prefix = issue.line ? `line ${issue.line}: ` : '';
+    issues.push(`${prefix}${issue.message}`);
+  }
+  for (const suggestion of paper.parserImprovementSuggestions.slice(0, 2)) {
+    issues.push(`parser: ${suggestion}`);
   }
 
   return issues;

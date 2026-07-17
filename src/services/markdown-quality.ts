@@ -23,9 +23,22 @@ export interface SourceTablePage {
   tableNumbers: string[];
 }
 
+export interface SourceNumberedPage {
+  page: number;
+  count: number;
+  numbers: string[];
+}
+
 export interface HeadingIssue {
   line: number;
   message: string;
+}
+
+export interface AgentReadabilityIssue {
+  line?: number;
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  suggestion: string;
 }
 
 export interface MarkdownQualityMetrics {
@@ -37,10 +50,20 @@ export interface MarkdownQualityMetrics {
   markdownTableCount: number;
   tableCoverageScore: number;
   tableFormattingScore: number;
+  sourceChartCount: number;
+  markdownChartCount: number;
+  chartCoverageScore: number;
+  sourceEquationCount: number;
+  markdownEquationCount: number;
+  equationCoverageScore: number;
+  sourceReferenceCount: number;
+  markdownReferenceCount: number;
+  referenceCoverageScore: number;
   headingFlowScore: number;
   arxivPlacementScore: number;
   completenessScore: number;
   artifactScore: number;
+  agentReadabilityScore: number;
   sourceWordCount: number;
   markdownWordCount: number;
 }
@@ -55,7 +78,19 @@ export interface MarkdownQualityPaper {
   sourceTableNumbers: string[];
   markdownTableNumbers: string[];
   missingMarkdownTables: string[];
+  sourceChartsByPage: SourceNumberedPage[];
+  sourceChartNumbers: string[];
+  markdownChartNumbers: string[];
+  missingMarkdownCharts: string[];
+  sourceEquationsByPage: SourceNumberedPage[];
+  sourceEquationNumbers: string[];
+  markdownEquationNumbers: string[];
+  missingMarkdownEquations: string[];
+  sourceReferenceCount: number;
+  markdownReferenceCount: number;
   headingIssues: HeadingIssue[];
+  agentReadabilityIssues: AgentReadabilityIssue[];
+  parserImprovementSuggestions: string[];
   issues: string[];
   metrics: MarkdownQualityMetrics;
 }
@@ -68,6 +103,12 @@ export interface MarkdownQualitySummary {
   averageScore: number;
   totalSourceTables: number;
   totalMissingMarkdownTables: number;
+  totalSourceCharts: number;
+  totalMissingMarkdownCharts: number;
+  totalSourceEquations: number;
+  totalMissingMarkdownEquations: number;
+  totalSourceReferences: number;
+  totalMarkdownReferences: number;
 }
 
 export interface MarkdownQualityReport {
@@ -91,6 +132,8 @@ interface MarkdownTable {
 }
 
 const TABLE_CAPTION_RE = /\b(?:Table|Tab\.?)\s+(\d+)(?:\s*[:.]|\b)/i;
+const CHART_CAPTION_RE = /\b(?:Figure|Fig\.?|Chart)\s+(\d+)(?:\s*[:.]|\b)/i;
+const EQUATION_NUMBER_RE = /(?:^|[\s,.;])\((\d{1,3})\)(?:\s*where\b.*)?\s*$/i;
 const ARXIV_RE = /\barXiv\s*:\s*\d{4}\.\d{4,5}(?:v\d+)?/i;
 const TABLE_ROW_SEPARATOR_RE = /\t+| {2,}/;
 
@@ -117,6 +160,27 @@ export async function scoreMarkdownQuality(
     (sum, paper) => sum + paper.missingMarkdownTables.length,
     0
   );
+  const totalSourceCharts = papers.reduce((sum, paper) => sum + paper.metrics.sourceChartCount, 0);
+  const totalMissingMarkdownCharts = papers.reduce(
+    (sum, paper) => sum + paper.missingMarkdownCharts.length,
+    0
+  );
+  const totalSourceEquations = papers.reduce(
+    (sum, paper) => sum + paper.metrics.sourceEquationCount,
+    0
+  );
+  const totalMissingMarkdownEquations = papers.reduce(
+    (sum, paper) => sum + paper.missingMarkdownEquations.length,
+    0
+  );
+  const totalSourceReferences = papers.reduce(
+    (sum, paper) => sum + paper.metrics.sourceReferenceCount,
+    0
+  );
+  const totalMarkdownReferences = papers.reduce(
+    (sum, paper) => sum + paper.metrics.markdownReferenceCount,
+    0
+  );
 
   return {
     summary: {
@@ -127,6 +191,12 @@ export async function scoreMarkdownQuality(
       averageScore: scored.length > 0 ? round(totalScore / scored.length) : 0,
       totalSourceTables,
       totalMissingMarkdownTables,
+      totalSourceCharts,
+      totalMissingMarkdownCharts,
+      totalSourceEquations,
+      totalMissingMarkdownEquations,
+      totalSourceReferences,
+      totalMarkdownReferences,
     },
     papers,
   };
@@ -225,29 +295,78 @@ async function scorePaper(
   const sourceTablesByPage = sourcePages.map((pageText, index) =>
     sourceTablesForPage(pageText, index + 1)
   );
-  const sourceTableNumbers = sourceTablesByPage.flatMap((page) => page.tableNumbers);
+  const sourceTableNumbers = unique(sourceTablesByPage.flatMap((page) => page.tableNumbers));
   const sourceTableCount = sourceTablesByPage.reduce((sum, page) => sum + page.count, 0);
-  const markdownTableNumbers = markdown ? markdownTableCaptionsWithTables(markdown) : [];
+  const sourceChartsByPage = sourcePages.map((pageText, index) =>
+    sourceNumberedItemsForPage(pageText, index + 1, CHART_CAPTION_RE)
+  );
+  const sourceChartNumbers = unique(sourceChartsByPage.flatMap((page) => page.numbers));
+  const sourceEquationsByPage = sourcePages.map((pageText, index) =>
+    sourceEquationsForPage(pageText, index + 1)
+  );
+  const sourceEquationNumbers = unique(sourceEquationsByPage.flatMap((page) => page.numbers));
+  const sourceReferenceCount = countReferences(layoutText ?? '');
+  const markdownTableNumbers = markdown ? unique(markdownTableCaptionsWithTables(markdown)) : [];
   const markdownTables = markdown ? findMarkdownTables(markdown) : [];
+  const markdownChartNumbers = markdown
+    ? unique(markdownNumberedItems(markdown, CHART_CAPTION_RE))
+    : [];
+  const markdownEquationNumbers = markdown ? unique(markdownEquationNumbersForText(markdown)) : [];
+  const markdownReferenceCount = markdown ? countReferences(markdown) : 0;
   const missingMarkdownTables = sourceTableNumbers.filter(
     (tableNumber) => !markdownTableNumbers.includes(tableNumber)
   );
+  const missingMarkdownCharts = sourceChartNumbers.filter(
+    (chartNumber) => !markdownChartNumbers.includes(chartNumber)
+  );
+  const missingMarkdownEquations = sourceEquationNumbers.filter(
+    (equationNumber) => !markdownEquationNumbers.includes(equationNumber)
+  );
   const headingIssues = markdown ? scoreHeadings(markdown).issues : [];
+  const agentReadabilityIssues = markdown ? assessAgentReadability(markdown) : [];
+  const parserImprovementSuggestions = parserSuggestions({
+    missingMarkdownTables,
+    missingMarkdownCharts,
+    missingMarkdownEquations,
+    sourceReferenceCount,
+    markdownReferenceCount,
+    agentReadabilityIssues,
+    headingIssues,
+  });
 
   if (missingMarkdownTables.length > 0) {
     issues.push(`missing-markdown-tables:${missingMarkdownTables.join(',')}`);
   }
+  if (missingMarkdownCharts.length > 0) {
+    issues.push(`missing-markdown-charts:${missingMarkdownCharts.join(',')}`);
+  }
+  if (missingMarkdownEquations.length > 0) {
+    issues.push(`missing-markdown-equations:${missingMarkdownEquations.join(',')}`);
+  }
+  if (sourceReferenceCount > 0 && markdownReferenceCount < sourceReferenceCount) {
+    issues.push(`missing-references:${sourceReferenceCount - markdownReferenceCount}`);
+  }
   if (headingIssues.length > 0) issues.push('heading-flow-issues');
+  if (agentReadabilityIssues.length > 0) issues.push('agent-readability-issues');
 
   const metrics = buildMetrics({
     sourcePages,
     sourceTableCount,
     sourceTableNumbers,
+    sourceChartNumbers,
+    sourceEquationNumbers,
+    sourceReferenceCount,
     markdown,
     markdownTables,
     markdownTableNumbers,
+    markdownChartNumbers,
+    markdownEquationNumbers,
+    markdownReferenceCount,
     missingMarkdownTables,
+    missingMarkdownCharts,
+    missingMarkdownEquations,
     headingIssues,
+    agentReadabilityIssues,
   });
 
   return {
@@ -260,7 +379,19 @@ async function scorePaper(
     sourceTableNumbers,
     markdownTableNumbers,
     missingMarkdownTables,
+    sourceChartsByPage,
+    sourceChartNumbers,
+    markdownChartNumbers,
+    missingMarkdownCharts,
+    sourceEquationsByPage,
+    sourceEquationNumbers,
+    markdownEquationNumbers,
+    missingMarkdownEquations,
+    sourceReferenceCount,
+    markdownReferenceCount,
     headingIssues,
+    agentReadabilityIssues,
+    parserImprovementSuggestions,
     issues,
     metrics,
   };
@@ -279,6 +410,12 @@ function sourceTablesForPage(pageText: string, page: number): SourceTablePage {
   if (tableNumbers.length === 0 && looksLikeReferencesPage(pageText)) {
     return { page, count: 0, tableNumbers };
   }
+  if (tableNumbers.length === 0 && looksLikeDiagramPage(pageText)) {
+    return { page, count: 0, tableNumbers };
+  }
+  if (tableNumbers.length === 0 && looksLikeEquationHeavyPage(pageText)) {
+    return { page, count: 0, tableNumbers };
+  }
   const tableBlocks = countSourceTableBlocks(pageText);
   return { page, count: Math.max(tableNumbers.length, tableBlocks), tableNumbers };
 }
@@ -293,22 +430,192 @@ function looksLikeReferencesPage(pageText: string): boolean {
   return startsWithReferences && referenceRows >= 3;
 }
 
+function looksLikeDiagramPage(pageText: string): boolean {
+  if (!/\b(?:Figure|Fig\.?|Chart)\s+\d+\s*[:.]/i.test(pageText)) return false;
+
+  const lines = pageText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const shortLines = lines.filter((line) => line.length <= 36).length;
+  const diagramTerms = (
+    pageText.match(
+      /\b(?:module|frame|point cloud|feature|network|kalman|projection|conv|mlp|lstm|cnn|detection|tracking|flowchart|architecture)\b/gi
+    ) ?? []
+  ).length;
+  const numericTokens = (pageText.match(/\b\d+(?:x\d+)+\b|\b\d+(?:\.\d+)?\b/g) ?? []).length;
+
+  return shortLines >= 12 && diagramTerms >= 8 && numericTokens >= 6;
+}
+
+function looksLikeEquationHeavyPage(pageText: string): boolean {
+  const equationLabels = equationNumbersForText(pageText).length;
+  if (equationLabels === 0) return false;
+
+  const mathSymbols = (
+    pageText.match(
+      /[=\u2211\u221A\u222B\u2264\u2265\u00B1\u2212\u00D7\u00F7<>]|\\(?:frac|sum|sqrt|int)|\^|_/g
+    ) ?? []
+  ).length;
+  const matrixGlyphs = (pageText.match(/[]/g) ?? []).length;
+  return mathSymbols >= 12 || matrixGlyphs >= 4;
+}
+
 function tableCaptionsForText(text: string): string[] {
   const captions: string[] = [];
+  const captionRegex = new RegExp(TABLE_CAPTION_RE.source, 'gi');
 
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
-    const match = trimmed.match(TABLE_CAPTION_RE);
-    if (!match) continue;
-    if (
-      /^(?:Table|Tab\.?)\s+\d+/i.test(trimmed) ||
-      /^\*{0,2}(?:Table|Tab\.?)\s+\d+/i.test(trimmed)
-    ) {
+    for (const match of trimmed.matchAll(captionRegex)) {
+      if (!looksLikeSourceTableCaptionLine(trimmed, match.index ?? 0)) continue;
       captions.push(match[1]);
     }
   }
 
   return captions;
+}
+
+function looksLikeSourceTableCaptionLine(line: string, captionIndex: number): boolean {
+  if (/^(?:Table|Tab\.?)\s+\d+/i.test(line)) return true;
+  if (/^\*{0,2}(?:Table|Tab\.?)\s+\d+/i.test(line)) return true;
+
+  const caption = line.slice(captionIndex);
+  const prefix = line.slice(0, captionIndex);
+  return (
+    captionIndex >= 24 && /\s{4,}$/.test(prefix) && /^(?:Table|Tab\.?)\s+\d+\s*[:.]/i.test(caption)
+  );
+}
+
+function sourceNumberedItemsForPage(
+  pageText: string,
+  page: number,
+  captionRegex: RegExp
+): SourceNumberedPage {
+  const numbers = markdownNumberedItems(pageText, captionRegex);
+  return { page, count: numbers.length, numbers };
+}
+
+function markdownNumberedItems(markdown: string, captionRegex: RegExp): string[] {
+  const numbers: string[] = [];
+
+  for (const line of markdown.split(/\r?\n/)) {
+    const trimmed = line.trim().replace(/^\*+|\*+$/g, '');
+    if (!looksLikeNumberedFigureCaption(trimmed)) continue;
+
+    const match = trimmed.match(captionRegex);
+    if (match) numbers.push(match[1]);
+  }
+
+  return numbers;
+}
+
+function looksLikeNumberedFigureCaption(line: string): boolean {
+  if (/^(?:Figure|Fig\.?|Chart)\s+\d+/i.test(line)) return true;
+  if (/^(?:\([a-z0-9^]+\)\s*){1,6}(?:Figure|Fig\.?|Chart)\s+\d+/i.test(line)) return true;
+
+  const match = line.match(/\b(?:Figure|Fig\.?|Chart)\s+\d+/i);
+  if (!match || match.index === undefined || match.index > 36) return false;
+
+  const prefix = line.slice(0, match.index).trim();
+  if (!prefix || /[.!?]$/.test(prefix)) return false;
+  const prefixWords = prefix.split(/\s+/).filter(Boolean);
+  return prefixWords.length <= 4;
+}
+
+function sourceEquationsForPage(pageText: string, page: number): SourceNumberedPage {
+  const numbers = equationNumbersForText(pageText);
+  return { page, count: numbers.length, numbers };
+}
+
+function markdownEquationNumbersForText(markdown: string): string[] {
+  return equationNumbersForText(markdown);
+}
+
+function equationNumbersForText(text: string): string[] {
+  const lines = text.split(/\r?\n/);
+  const numbers: string[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const context = equationContextForLine(lines, i);
+    if (!looksLikeEquation(context)) continue;
+
+    for (const match of equationNumberMatches(lines[i])) {
+      numbers.push(match);
+    }
+  }
+
+  return numbers;
+}
+
+function equationNumberMatches(line: string): string[] {
+  const matches = Array.from(
+    line.matchAll(/(?:^|[\s,.;])\((\d{1,3})\)(?=(?:\s*where\b.*)?\s*$|\s+[A-Za-z]+\s*=)/gi),
+    (match) => match[1]
+  );
+  if (matches.length > 0) return matches;
+
+  const endMatch = line.match(EQUATION_NUMBER_RE);
+  return endMatch ? [endMatch[1]] : [];
+}
+
+function equationContextForLine(lines: string[], labelIndex: number): string {
+  const context: string[] = [lines[labelIndex]];
+
+  for (let i = labelIndex - 1; i >= 0 && context.length < 12; i -= 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    if (looksLikeEquationContextBoundary(trimmed)) break;
+    context.unshift(trimmed);
+    if (context.length >= 3 && equationSignalCount(context.join(' ')) >= 2) break;
+  }
+
+  return context.join(' ');
+}
+
+function looksLikeEquationContextBoundary(line: string): boolean {
+  const words = line.split(/\s+/).filter(Boolean);
+  const mathSymbols = (
+    line.match(/[=\u2211\u221A\u222B\u2264\u2265\u00B1\u2212\u00D7\u00F7<>|]|\^|_/g) ?? []
+  ).length;
+  return words.length >= 10 && mathSymbols === 0 && /[.!?]$/.test(line);
+}
+
+function looksLikeEquation(text: string): boolean {
+  const mathSymbols = equationSignalCount(text);
+  const naturalLanguageWords = (text.match(/[A-Za-z]{3,}/g) ?? []).length;
+  return (
+    mathSymbols >= 1 &&
+    (naturalLanguageWords <= 12 || (mathSymbols >= 3 && naturalLanguageWords <= 32))
+  );
+}
+
+function equationSignalCount(text: string): number {
+  return (
+    text.match(
+      /[=\u2211\u221A\u222B\u2264\u2265\u00B1\u2212\u00D7\u00F7<>|]|\\(?:frac|sum|sqrt|int)|\^|_/g
+    ) ?? []
+  ).length;
+}
+
+function countReferences(text: string): number {
+  const references = referenceSection(text);
+  if (!references) return 0;
+
+  const bracketed = references.match(/\[\d{1,3}\]/g) ?? [];
+  if (bracketed.length > 0) return new Set(bracketed).size;
+
+  const numberedLines = references
+    .split(/\r?\n/)
+    .filter((line) => /^\s*\d{1,3}\.\s+\S/.test(line)).length;
+  return numberedLines;
+}
+
+function referenceSection(text: string): string | undefined {
+  const lines = text.split(/\r?\n/);
+  const index = lines.findIndex((line) => /^\s*#{0,6}\s*References\b/i.test(line.trim()));
+  if (index < 0) return undefined;
+  return lines.slice(index + 1).join('\n');
 }
 
 function countSourceTableBlocks(pageText: string): number {
@@ -346,6 +653,7 @@ function sourceTableCells(line: string): string[] {
 
 function isSourceTableBlock(rows: string[][]): boolean {
   if (rows.length < 3) return false;
+  if (looksLikeChartAxisBlock(rows)) return false;
 
   const widths = new Map<number, number>();
   let numericRows = 0;
@@ -372,6 +680,22 @@ function isSourceTableBlock(rows: string[][]): boolean {
   return true;
 }
 
+function looksLikeChartAxisBlock(rows: string[][]): boolean {
+  const text = rows.flat().join(' ');
+  const axisTerms = (
+    text.match(
+      /\b(?:accuracy|precision|recall|ratio|noise|std|threshold|epoch|iteration|time|frequency)\b/gi
+    ) ?? []
+  ).length;
+  const chartSeriesTerms = (
+    text.match(/\b(?:random|furthest|xyz|density|baseline|method|model)\b/gi) ?? []
+  ).length;
+  const decimalTokens = (text.match(/\b\d+\.\d+\b/g) ?? []).length;
+  const tableTerms = (text.match(/\b(?:Table|Tab\.?|FLOPs?|params?|dataset)\b/gi) ?? []).length;
+
+  return axisTerms >= 3 && decimalTokens >= 4 && chartSeriesTerms >= 1 && tableTerms === 0;
+}
+
 function looksLikeSourceProse(cells: string[]): boolean {
   const text = cells.join(' ');
   const words = text.split(/\s+/).filter(Boolean);
@@ -388,7 +712,31 @@ function markdownTableCaptionsWithTables(markdown: string): string[] {
     if (!match) continue;
 
     const previous = previousNonEmptyLine(lines, i);
+    if (isInsideMarkdownTable(lines, i)) {
+      tableNumbers.push(match[1]);
+      continue;
+    }
     if (previous !== undefined && isInsideMarkdownTable(lines, previous)) {
+      tableNumbers.push(match[1]);
+      continue;
+    }
+
+    if (previous !== undefined && hasNearbyMarkdownTableAbove(lines, previous)) {
+      tableNumbers.push(match[1]);
+      continue;
+    }
+
+    if (previous !== undefined && hasNearbyTableEvidenceAbove(lines, previous)) {
+      tableNumbers.push(match[1]);
+      continue;
+    }
+
+    if (hasNearbyMarkdownTableBelow(lines, i)) {
+      tableNumbers.push(match[1]);
+      continue;
+    }
+
+    if (hasNearbyTableEvidenceBelow(lines, i)) {
       tableNumbers.push(match[1]);
     }
   }
@@ -422,6 +770,75 @@ function isInsideMarkdownTable(lines: string[], lineIndex: number): boolean {
     if (i > 0 && isSeparatorRow(lines[i])) return true;
   }
   return false;
+}
+
+function hasNearbyMarkdownTableAbove(lines: string[], fromIndex: number): boolean {
+  let checked = 0;
+  for (let i = fromIndex; i >= 0 && checked < 4; i -= 1) {
+    if (!lines[i].trim()) continue;
+    checked += 1;
+    if (isInsideMarkdownTable(lines, i)) return true;
+    if (/^(?:#{1,6}\s|(?:Table|Tab\.?|Figure|Fig\.?)\s+\d+(?:\s*[:.]|\b))/i.test(lines[i].trim())) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function hasNearbyTableEvidenceAbove(lines: string[], fromIndex: number): boolean {
+  let checked = 0;
+  let evidenceLines = 0;
+  for (let i = fromIndex; i >= 0 && checked < 10; i -= 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    checked += 1;
+    if (/^(?:#{1,6}\s|(?:Table|Tab\.?|Figure|Fig\.?)\s+\d+(?:\s*[:.]|\b))/i.test(trimmed)) {
+      break;
+    }
+    if (looksLikeMarkdownTableEvidence(trimmed)) evidenceLines += 1;
+  }
+  return evidenceLines >= 2;
+}
+
+function hasNearbyMarkdownTableBelow(lines: string[], fromIndex: number): boolean {
+  let checked = 0;
+  for (let i = fromIndex + 1; i < lines.length && checked < 6; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    checked += 1;
+    if (i + 1 < lines.length && isPipeRow(lines[i]) && isSeparatorRow(lines[i + 1])) {
+      return true;
+    }
+    if (/^(?:#{1,6}\s|(?:Table|Tab\.?|Figure|Fig\.?)\s+\d+(?:\s*[:.]|\b))/i.test(trimmed)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function hasNearbyTableEvidenceBelow(lines: string[], fromIndex: number): boolean {
+  let checked = 0;
+  let evidenceLines = 0;
+  for (let i = fromIndex + 1; i < lines.length && checked < 10; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    checked += 1;
+    if (/^(?:#{1,6}\s|(?:Table|Tab\.?|Figure|Fig\.?)\s+\d+(?:\s*[:.]|\b))/i.test(trimmed)) {
+      break;
+    }
+    if (looksLikeMarkdownTableEvidence(trimmed)) evidenceLines += 1;
+  }
+  return evidenceLines >= 1;
+}
+
+function looksLikeMarkdownTableEvidence(line: string): boolean {
+  const pipeCount = (line.match(/\|/g) ?? []).length;
+  const numericTokens = (line.match(/\d+(?:\.\d+)?/g) ?? []).length;
+  const tokens = line.split(/\s+/).filter(Boolean);
+  return (
+    (pipeCount >= 3 && numericTokens >= 2) ||
+    (numericTokens >= 8 && tokens.length >= 12 && !/[.!?]$/.test(line))
+  );
 }
 
 function isPipeRow(line: string): boolean {
@@ -475,7 +892,11 @@ function scoreHeadings(markdown: string): { score: number; issues: HeadingIssue[
 
   for (let i = 0; i < headings.length; i += 1) {
     const block = headings.slice(i, i + 4);
-    if (block.length >= 4 && block.every((heading) => heading.level === 3)) {
+    if (
+      block.length >= 4 &&
+      block.every((heading) => heading.level === 3) &&
+      !block.every((heading) => isNumberedHeading(heading.text))
+    ) {
       score -= 0.25;
       issues.push({
         line: block[0].line,
@@ -496,15 +917,163 @@ function scoreHeadings(markdown: string): { score: number; issues: HeadingIssue[
   return { score: clamp(score), issues };
 }
 
+function isNumberedHeading(text: string): boolean {
+  return /^\d+(?:\.\d+)+\.?\s+\S/.test(text);
+}
+
+function assessAgentReadability(markdown: string): AgentReadabilityIssue[] {
+  const lines = markdown.split(/\r?\n/);
+  const issues: AgentReadabilityIssue[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || isPipeRow(trimmed)) continue;
+
+    const numericTokens = (trimmed.match(/\d+(?:\.\d+)?/g) ?? []).length;
+    if (trimmed.length > 260) {
+      issues.push({
+        line: i + 1,
+        severity: 'high',
+        message: 'very long line is hard for an agent to scan and quote precisely',
+        suggestion:
+          'preserve paragraph wrapping or split extracted multi-column/table text into blocks',
+      });
+    } else if (trimmed.length > 180 && numericTokens >= 8) {
+      issues.push({
+        line: i + 1,
+        severity: 'medium',
+        message: 'dense numeric line may be a collapsed table or chart label block',
+        suggestion: 'recover a Markdown table or fenced layout block from PDF layout coordinates',
+      });
+    }
+
+    if (/\b(?:Table|Tab\.?|Figure|Fig\.?|Chart)\s+\d+[:.]/i.test(trimmed) && trimmed.length > 180) {
+      issues.push({
+        line: i + 1,
+        severity: 'high',
+        message: 'caption appears merged with surrounding data or prose',
+        suggestion: 'split captions onto their own line and attach preceding table/figure evidence',
+      });
+    }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const text = heading[2].trim();
+      const words = text.split(/\s+/).filter(Boolean);
+      if (level >= 4 && (words.length >= 5 || /^[a-z]/.test(text))) {
+        issues.push({
+          line: i + 1,
+          severity: 'medium',
+          message: 'wrapped body text was emitted as a deep heading',
+          suggestion: 'demote prose-like h4-h6 lines unless they match a section-number pattern',
+        });
+      }
+      if (/[\u2211\u221A\u222B=|{}]|\(\d+\)/.test(text) && words.length <= 4) {
+        issues.push({
+          line: i + 1,
+          severity: 'medium',
+          message: 'equation fragment was emitted as a heading',
+          suggestion: 'emit equations as fenced math/plain blocks with equation labels preserved',
+        });
+      }
+    }
+  }
+
+  const referenceIssues = assessReferenceReadability(markdown);
+  issues.push(...referenceIssues);
+
+  return issues.slice(0, 50);
+}
+
+function assessReferenceReadability(markdown: string): AgentReadabilityIssue[] {
+  const references = referenceSection(markdown);
+  if (!references) return [];
+
+  const lines = references.split(/\r?\n/).filter((line) => line.trim());
+  const referenceCount = countReferences(markdown);
+  const veryLongReferenceLines = lines.filter((line) => line.length > 240).length;
+  if (referenceCount >= 5 && veryLongReferenceLines >= Math.ceil(referenceCount / 4)) {
+    return [
+      {
+        severity: 'medium',
+        message: 'references section has many overlong lines',
+        suggestion: 'split references into one entry per paragraph or list item during extraction',
+      },
+    ];
+  }
+  return [];
+}
+
+function scoreAgentReadability(issues: AgentReadabilityIssue[]): number {
+  const penalty = issues.reduce((sum, issue) => {
+    if (issue.severity === 'high') return sum + 0.15;
+    if (issue.severity === 'medium') return sum + 0.08;
+    return sum + 0.03;
+  }, 0);
+  return clamp(1 - penalty);
+}
+
+function parserSuggestions(args: {
+  missingMarkdownTables: string[];
+  missingMarkdownCharts: string[];
+  missingMarkdownEquations: string[];
+  sourceReferenceCount: number;
+  markdownReferenceCount: number;
+  agentReadabilityIssues: AgentReadabilityIssue[];
+  headingIssues: HeadingIssue[];
+}): string[] {
+  const suggestions = new Set<string>();
+
+  if (args.missingMarkdownTables.length > 0) {
+    suggestions.add('Improve table recovery from layout text and same-line captions.');
+  }
+  if (args.missingMarkdownCharts.length > 0) {
+    suggestions.add(
+      'Preserve figure/chart captions and emit image placeholders with page anchors.'
+    );
+  }
+  if (args.missingMarkdownEquations.length > 0) {
+    suggestions.add(
+      'Detect equation blocks and preserve numbered equations as fenced math/plain blocks.'
+    );
+  }
+  if (args.sourceReferenceCount > 0 && args.markdownReferenceCount < args.sourceReferenceCount) {
+    suggestions.add(
+      'Parse references into one entry per paragraph/list item after the References heading.'
+    );
+  }
+  if (args.headingIssues.length > 0) {
+    suggestions.add(
+      'Demote metadata, formulas, and wrapped prose that are incorrectly emitted as headings.'
+    );
+  }
+  for (const issue of args.agentReadabilityIssues) {
+    suggestions.add(issue.suggestion);
+  }
+
+  return Array.from(suggestions);
+}
+
 function buildMetrics(args: {
   sourcePages: string[];
   sourceTableCount: number;
   sourceTableNumbers: string[];
+  sourceChartNumbers: string[];
+  sourceEquationNumbers: string[];
+  sourceReferenceCount: number;
   markdown?: string;
   markdownTables: MarkdownTable[];
   markdownTableNumbers: string[];
+  markdownChartNumbers: string[];
+  markdownEquationNumbers: string[];
+  markdownReferenceCount: number;
   missingMarkdownTables: string[];
+  missingMarkdownCharts: string[];
+  missingMarkdownEquations: string[];
   headingIssues: HeadingIssue[];
+  agentReadabilityIssues: AgentReadabilityIssue[];
 }): MarkdownQualityMetrics {
   const { sourceTableCount } = args;
   const markdown = args.markdown ?? '';
@@ -515,8 +1084,14 @@ function buildMetrics(args: {
   const markdownTableCount = args.markdownTables.length;
   const validTables = args.markdownTables.filter((table) => table.valid).length;
   const tableFormattingScore = markdownTableCount === 0 ? 1 : validTables / markdownTableCount;
+  const sourceChartCount = args.sourceChartNumbers.length;
+  const markdownChartCount = args.markdownChartNumbers.length;
+  const sourceEquationCount = args.sourceEquationNumbers.length;
+  const markdownEquationCount = args.markdownEquationNumbers.length;
+  const { sourceReferenceCount, markdownReferenceCount } = args;
   const headingFlowScore = scoreHeadings(markdown).score;
   const artifactScore = scoreArtifacts(markdown);
+  const agentReadabilityScore = scoreAgentReadability(args.agentReadabilityIssues);
 
   if (!markdown) {
     return {
@@ -528,10 +1103,20 @@ function buildMetrics(args: {
       markdownTableCount,
       tableCoverageScore: 0,
       tableFormattingScore: 0,
+      sourceChartCount,
+      markdownChartCount,
+      chartCoverageScore: 0,
+      sourceEquationCount,
+      markdownEquationCount,
+      equationCoverageScore: 0,
+      sourceReferenceCount,
+      markdownReferenceCount,
+      referenceCoverageScore: 0,
       headingFlowScore: 0,
       arxivPlacementScore: 0,
       completenessScore: 0,
       artifactScore: 0,
+      agentReadabilityScore: 0,
       sourceWordCount,
       markdownWordCount,
     };
@@ -540,7 +1125,11 @@ function buildMetrics(args: {
   if (sourcePages === 0) {
     return {
       score: round(
-        100 * (0.14 * tableFormattingScore + 0.18 * headingFlowScore + 0.08 * artifactScore)
+        100 *
+          (0.1 * tableFormattingScore +
+            0.14 * headingFlowScore +
+            0.05 * artifactScore +
+            0.05 * agentReadabilityScore)
       ),
       sourcePages,
       markdownPages,
@@ -549,10 +1138,20 @@ function buildMetrics(args: {
       markdownTableCount,
       tableCoverageScore: 0,
       tableFormattingScore: round(tableFormattingScore),
+      sourceChartCount,
+      markdownChartCount,
+      chartCoverageScore: 0,
+      sourceEquationCount,
+      markdownEquationCount,
+      equationCoverageScore: 0,
+      sourceReferenceCount,
+      markdownReferenceCount,
+      referenceCoverageScore: 0,
       headingFlowScore: round(headingFlowScore),
       arxivPlacementScore: 0,
       completenessScore: 0,
       artifactScore: round(artifactScore),
+      agentReadabilityScore: round(agentReadabilityScore),
       sourceWordCount,
       markdownWordCount,
     };
@@ -569,6 +1168,16 @@ function buildMetrics(args: {
     sourceTableCount === 0
       ? 1
       : (matchedNumberedTables + inferredUnnumberedMatches) / sourceTableCount;
+  const chartCoverageScore = coverageFromMissing(
+    sourceChartCount,
+    args.missingMarkdownCharts.length
+  );
+  const equationCoverageScore = coverageFromMissing(
+    sourceEquationCount,
+    args.missingMarkdownEquations.length
+  );
+  const referenceCoverageScore =
+    sourceReferenceCount === 0 ? 1 : clamp(markdownReferenceCount / sourceReferenceCount);
   const arxivPlacementScore = scoreArxivPlacement(args.sourcePages, markdown);
   const pageBreakScore =
     sourcePages <= 1 || markdownPages === 0
@@ -580,13 +1189,17 @@ function buildMetrics(args: {
       : clamp(Math.min(markdownWordCount / sourceWordCount, sourceWordCount / markdownWordCount));
   const score = round(
     100 *
-      (0.28 * tableCoverageScore +
-        0.14 * tableFormattingScore +
-        0.18 * headingFlowScore +
-        0.12 * arxivPlacementScore +
-        0.1 * pageBreakScore +
-        0.1 * completenessScore +
-        0.08 * artifactScore)
+      (0.18 * tableCoverageScore +
+        0.1 * tableFormattingScore +
+        0.1 * chartCoverageScore +
+        0.08 * equationCoverageScore +
+        0.08 * referenceCoverageScore +
+        0.14 * headingFlowScore +
+        0.08 * arxivPlacementScore +
+        0.07 * pageBreakScore +
+        0.07 * completenessScore +
+        0.05 * artifactScore +
+        0.05 * agentReadabilityScore)
   );
 
   return {
@@ -598,13 +1211,27 @@ function buildMetrics(args: {
     markdownTableCount,
     tableCoverageScore: round(tableCoverageScore),
     tableFormattingScore: round(tableFormattingScore),
+    sourceChartCount,
+    markdownChartCount,
+    chartCoverageScore: round(chartCoverageScore),
+    sourceEquationCount,
+    markdownEquationCount,
+    equationCoverageScore: round(equationCoverageScore),
+    sourceReferenceCount,
+    markdownReferenceCount,
+    referenceCoverageScore: round(referenceCoverageScore),
     headingFlowScore: round(headingFlowScore),
     arxivPlacementScore: round(arxivPlacementScore),
     completenessScore: round(completenessScore),
     artifactScore: round(artifactScore),
+    agentReadabilityScore: round(agentReadabilityScore),
     sourceWordCount,
     markdownWordCount,
   };
+}
+
+function coverageFromMissing(sourceCount: number, missingCount: number): number {
+  return sourceCount === 0 ? 1 : clamp(1 - missingCount / sourceCount);
 }
 
 function scoreArxivPlacement(sourcePages: string[], markdown: string): number {
@@ -667,4 +1294,8 @@ function clamp(value: number): number {
 
 function round(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values));
 }
