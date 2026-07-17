@@ -25,7 +25,7 @@ function parseLimit(value?: string): number | undefined {
   return parsed;
 }
 
-function formatSummary(summary: MarkdownReextractSummary): string[] {
+function formatSummary(summary: MarkdownReextractSummary, notes: string[] = []): string[] {
   const line =
     `Re-extracted Markdown for ${summary.extracted} citation(s); ` +
     `${summary.missingPdf} missing local PDF(s); ${summary.failed} failed; ` +
@@ -36,11 +36,27 @@ function formatSummary(summary: MarkdownReextractSummary): string[] {
     lines.push(`${error.doi}: ${error.message}`);
   }
 
+  lines.push(...notes);
+
   return lines;
 }
 
 function hasFailures(summary: MarkdownReextractSummary): boolean {
   return summary.missingPdf > 0 || summary.failed > 0;
+}
+
+function getUsageNotes(
+  options: ExtractMarkdownCommandOptions,
+  summary: MarkdownReextractSummary
+): string[] {
+  if (summary.scanned > 0 || options.paperPath || options.doi || !options.markdownPath) {
+    return [];
+  }
+
+  return [
+    'Hint: `--markdown-path` alone does not scan a PDF directory; DB-backed extraction is the default mode.',
+    'Hint: To scan local PDFs directly, pass both `--paper-path <pdf-dir>` and `--markdown-path <markdown-dir>`.',
+  ];
 }
 
 async function runExtraction(
@@ -106,16 +122,22 @@ export function registerExtractMarkdownCommand(program: Command): void {
       const progress = options.json ? undefined : createProgressRenderer();
       try {
         const summary = await runExtraction(options, progress?.render);
+        const usageNotes = getUsageNotes(options, summary);
+        const shouldFail = hasFailures(summary) || usageNotes.length > 0;
         progress?.finish();
 
         if (options.json) {
           print(JSON.stringify(summary, null, 2));
         } else {
-          const color = hasFailures(summary) ? red : green;
-          print(...formatSummary(summary).map((line, index) => (index === 0 ? color(line) : line)));
+          const color = shouldFail ? red : green;
+          print(
+            ...formatSummary(summary, usageNotes).map((line, index) =>
+              index === 0 ? color(line) : line
+            )
+          );
         }
 
-        if (hasFailures(summary)) process.exitCode = 1;
+        if (shouldFail) process.exitCode = 1;
       } catch (error) {
         progress?.finish();
         printError(red(error instanceof Error ? error.message : String(error)));

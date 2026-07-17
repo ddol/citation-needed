@@ -142,6 +142,40 @@ describe('extract-markdown command', () => {
     expect(output()).toContain('Re-extracted Markdown for 2 citation(s)');
   });
 
+  test('prints a direct-folder hint when --markdown-path is used alone and nothing is scanned', async () => {
+    mockReextractMarkdownFromLocalPdfs.mockResolvedValue({
+      scanned: 0,
+      extracted: 0,
+      missingPdf: 0,
+      failed: 0,
+      errors: [],
+    });
+    const program = new Command();
+    registerExtractMarkdownCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'citation-needed',
+      'extract-markdown',
+      '--markdown-path',
+      '/tmp/pdf',
+    ]);
+
+    expect(mockReextractMarkdownFromLocalPdfs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        markdownPath: '/tmp/pdf',
+        onProgress: expect.any(Function),
+      })
+    );
+    expect(output()).toContain(
+      'Hint: `--markdown-path` alone does not scan a PDF directory; DB-backed extraction is the default mode.'
+    );
+    expect(output()).toContain(
+      'To scan local PDFs directly, pass both `--paper-path <pdf-dir>` and `--markdown-path <markdown-dir>`.'
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
   test('requires --markdown-path when extracting directly from a PDF folder', async () => {
     const program = new Command();
     registerExtractMarkdownCommand(program);
