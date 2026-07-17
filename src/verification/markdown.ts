@@ -83,7 +83,9 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
       )
     )
   );
-  const markdown = removeDuplicateMarkdownTables(normalizeDisplayMathBlocks(finalPass));
+  const markdown = removeDuplicateMarkdownTables(
+    normalizeDisplayMathBlocks(repairNestedDisplayMathBlocks(finalPass))
+  );
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
 }
@@ -436,6 +438,74 @@ export function normalizeDisplayMathBlocks(markdown: string): string {
   return repaired.join('\n');
 }
 
+export function repairNestedDisplayMathBlocks(markdown: string): string {
+  const lines = markdown.split('\n');
+  const repaired: string[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (
+      lines[i].trim() !== '$$' ||
+      lines[i + 1]?.trim() !== '\\begin{aligned}' ||
+      lines[i + 2]?.trim() !== '$$ \\\\' ||
+      lines[i + 3]?.trim() !== '\\begin{aligned} \\\\'
+    ) {
+      repaired.push(lines[i]);
+      continue;
+    }
+
+    const firstBody: string[] = [];
+    let cursor = i + 4;
+    while (cursor < lines.length && lines[cursor].trim() !== '$$ \\\\') {
+      firstBody.push(cleanNestedMathLine(lines[cursor]));
+      cursor += 1;
+    }
+    if (cursor >= lines.length) {
+      repaired.push(lines[i]);
+      continue;
+    }
+
+    const secondBody: string[] = [];
+    cursor += 1;
+    while (
+      cursor + 2 < lines.length &&
+      !(
+        lines[cursor].trim() === '\\end{aligned}' &&
+        /^\\tag\{\d{1,3}\}$/.test(lines[cursor + 1].trim()) &&
+        lines[cursor + 2].trim() === '$$'
+      )
+    ) {
+      secondBody.push(cleanNestedMathLine(lines[cursor]));
+      cursor += 1;
+    }
+    if (cursor + 2 >= lines.length) {
+      repaired.push(lines[i]);
+      continue;
+    }
+
+    repaired.push('$$', '\\begin{aligned}', ...firstBody, '$$', '');
+    repaired.push(
+      '$$',
+      '\\begin{aligned}',
+      ...secondBody,
+      '\\end{aligned}',
+      lines[cursor + 1].trim(),
+      '$$'
+    );
+    i = cursor + 2;
+  }
+
+  return repaired.join('\n');
+}
+
+function cleanNestedMathLine(line: string): string {
+  const trimmed = line.trim();
+  if (/\\\\\s+\\\\$/.test(trimmed)) return trimmed.replace(/\s+\\\\$/, '');
+  if (/^\\(?:end\{aligned\}|tag\{\d{1,3}\})\s+\\\\$/.test(trimmed)) {
+    return trimmed.replace(/\s+\\\\$/, '');
+  }
+  return trimmed;
+}
+
 function splitEmbeddedCaption(line: string): string[] {
   const trimmed = line.trim();
   if (!trimmed) return [line];
@@ -611,10 +681,9 @@ function equationLinesToMathBlock(lines: string[]): string[] {
       .trim();
   }
 
-  const latexLines = trimmedLines
-    .map(equationSegmentForMath)
-    .map(normalizeEquationLatexLine)
-    .filter(Boolean);
+  const latexLines = repairEquationLatexLines(
+    trimmedLines.map(equationSegmentForMath).map(normalizeEquationLatexLine).filter(Boolean)
+  );
   const body =
     latexLines.length > 1
       ? [
@@ -629,6 +698,42 @@ function equationLinesToMathBlock(lines: string[]): string[] {
   if (label) body.push(`\\tag{${label}}`);
 
   return ['', '$$', ...body, '$$', ''];
+}
+
+function repairEquationLatexLines(lines: string[]): string[] {
+  const repaired: string[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const sum = lines[i].match(/^\\sum(?:\s*\^\s*([A-Za-z0-9{}\\]+))?$/);
+    if (sum && i + 1 < lines.length) {
+      const lower = normalizeEquationLimitLine(lines[i + 1]);
+      if (lower) {
+        const upper = sum[1] ? `^{${sum[1].replace(/[{}]/g, '')}}` : '';
+        repaired.push(`\\sum_{${lower}}${upper}`);
+        i += 1;
+        continue;
+      }
+    }
+    if (/^[*+\-/]\s*\S/.test(lines[i]) && repaired.length > 0) {
+      repaired[repaired.length - 1] = `${repaired[repaired.length - 1]} ${lines[i]}`;
+      continue;
+    }
+    repaired.push(lines[i]);
+  }
+
+  return repaired;
+}
+
+function normalizeEquationLimitLine(line: string): string | undefined {
+  const trimmed = line.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length > 40) return undefined;
+  if (/^(?:\\sum|\\begin|\\end|\\tag)/.test(trimmed)) return undefined;
+  if (/^[A-Za-z](?:[A-Za-z0-9,]|\s|\\hat\{[A-Za-z]\}){0,12}$/.test(trimmed)) {
+    return trimmed.replace(/\s+/g, ' ');
+  }
+  if (!/[=\\]|\\in|\\ne/.test(trimmed)) return undefined;
+  return trimmed.replace(/\s+/g, ' ');
 }
 
 function equationLabelForLine(line: string): string | undefined {
@@ -719,10 +824,20 @@ function normalizeEquationLatexLine(line: string): string {
     .replace(/α/g, '\\alpha ')
     .replace(/β/g, '\\beta ')
     .replace(/γ/g, '\\gamma ')
+    .replace(/ε/g, '\\epsilon ')
     .replace(/θ/g, '\\theta ')
     .replace(/λ/g, '\\lambda ')
     .replace(/μ/g, '\\mu ')
     .replace(/π/g, '\\pi ')
+    .replace(/φ/g, '\\phi ')
+    .replace(/ϵ/g, '\\epsilon ')
+    .replace(/∗/g, '*')
+    .replace(/ˆ\s*([A-Za-z])/g, '\\hat{$1}')
+    .replace(/ˆ(?=[\s),}\]]|$)/g, '')
+    .replace(/\b6\s*=/g, '\\ne ')
+    .replace(/\s+-\^\s+/g, ' - ')
+    .replace(/\^\s+(?=[+\-*/=)]|$)/g, ' ')
+    .replace(/([A-Za-z0-9})])\^(\s|$)/g, '$1$2')
     .replace(/\s+/g, ' ')
     .trim();
 }

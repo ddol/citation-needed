@@ -414,6 +414,7 @@ describe('scoreMarkdownQuality', () => {
     expect(report.papers[0].metrics).toMatchObject({
       chartCoverageScore: 1,
       equationCoverageScore: 1,
+      equationRenderScore: 1,
       referenceCoverageScore: 1,
       agentReadabilityScore: 1,
     });
@@ -525,6 +526,8 @@ describe('scoreMarkdownQuality', () => {
     expect(report.papers[0].metrics.equationCoverageScore).toBe(1);
     expect(report.papers[0].metrics.equationFormatScore).toBe(1);
     expect(report.papers[0].metrics.equationContentScore).toBe(1);
+    expect(report.papers[0].metrics.equationRenderScore).toBe(1);
+    expect(report.papers[0].equationRenderIssues).toEqual([]);
     expect(report.papers[0].equationComparisons).toMatchObject([
       {
         number: '1',
@@ -534,6 +537,94 @@ describe('scoreMarkdownQuality', () => {
         status: 'matched',
       },
     ]);
+  });
+
+  test('flags display math that is likely to fail rendered equation output', async () => {
+    writePaper(
+      'broken-render-equation',
+      [
+        '## Learning',
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'Lcls = \\\\',
+        '\\sum ^ M \\\\',
+        'm=1 \\\\',
+        '\\sum \\\\',
+        'k 6 =ˆk \\\\',
+        'max(0, cm,k + ε - cm,kˆ)',
+        '\\end{aligned}',
+        '\\tag{8}',
+        '$$',
+      ].join('\n')
+    );
+    const layout = 'Lcls = sum m=1 M sum k != k max(0, cm,k + epsilon - cm,k) (8)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.markdownEquationNumbers).toEqual(['8']);
+    expect(paper.equationRenderIssues.length).toBeGreaterThan(0);
+    expect(paper.issues).toContain(`equation-render-issues:${paper.equationRenderIssues.length}`);
+    expect(paper.metrics.equationRenderScore).toBeLessThan(1);
+    expect(report.summary.totalEquationRenderIssues).toBe(paper.equationRenderIssues.length);
+    expect(paper.parserImprovementSuggestions).toContain(
+      'Normalize LaTeX equation syntax so generated display math renders cleanly.'
+    );
+  });
+
+  test('flags detached short summation indices as poor render quality', async () => {
+    writePaper(
+      'detached-sum-index',
+      [
+        '$$',
+        '\\begin{aligned}',
+        'y = \\\\',
+        '\\sum \\\\',
+        'j \\\\',
+        'x_j',
+        '\\end{aligned}',
+        '\\tag{5}',
+        '$$',
+      ].join('\n')
+    );
+    const layout = 'y = sum_j x_j (5)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.equationRenderIssues).toMatchObject([
+      { number: '5', message: 'summation limit is split onto a separate rendered row' },
+    ]);
+    expect(paper.metrics.equationRenderScore).toBe(0);
+  });
+
+  test('flags operator-start equation rows as poor render quality', async () => {
+    writePaper(
+      'operator-start-row',
+      ['$$', '\\begin{aligned}', 'x = y \\\\', '* z', '\\end{aligned}', '\\tag{6}', '$$'].join('\n')
+    );
+    const layout = 'x = y * z (6)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.equationRenderIssues).toMatchObject([
+      { number: '6', message: 'operator is split onto a separate rendered row' },
+    ]);
+    expect(paper.metrics.equationRenderScore).toBe(0);
   });
 
   test('flags numbered Markdown equations that are not GitHub display math', async () => {

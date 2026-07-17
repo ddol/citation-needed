@@ -53,6 +53,7 @@ describe('score-markdown-quality command', () => {
         totalMalformedMarkdownEquations: 0,
         totalPlaceholderMarkdownEquations: 0,
         totalLowSimilarityMarkdownEquations: 0,
+        totalEquationRenderIssues: 0,
         totalSourceReferences: 3,
         totalMarkdownReferences: 3,
       },
@@ -89,6 +90,7 @@ describe('score-markdown-quality command', () => {
           malformedMarkdownEquations: [],
           placeholderMarkdownEquations: [],
           lowSimilarityMarkdownEquations: [],
+          equationRenderIssues: [],
           sourceReferenceCount: 3,
           markdownReferenceCount: 3,
           headingIssues: [],
@@ -112,6 +114,7 @@ describe('score-markdown-quality command', () => {
             equationCoverageScore: 1,
             equationFormatScore: 1,
             equationContentScore: 1,
+            equationRenderScore: 1,
             sourceReferenceCount: 3,
             markdownReferenceCount: 3,
             referenceCoverageScore: 1,
@@ -153,7 +156,7 @@ describe('score-markdown-quality command', () => {
     });
     expect(output()).toContain('Scored 1/1 paper(s); average 92.5');
     expect(output()).toContain(
-      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (cov 100%, fmt 100%, body 100%); refs 3/3 (100%); headings 100%; agent 100%; pages 2/2'
+      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (cov 100%, fmt 100%, body 100%, render 100%); refs 3/3 (100%); headings 100%; agent 100%; pages 2/2'
     );
     expect(output()).toContain('source page 1: 1 table(s) (1)');
     expect(output()).toContain('source page 2: 1 table(s)');
@@ -177,6 +180,7 @@ describe('score-markdown-quality command', () => {
         totalMalformedMarkdownEquations: 0,
         totalPlaceholderMarkdownEquations: 0,
         totalLowSimilarityMarkdownEquations: 0,
+        totalEquationRenderIssues: 0,
         totalSourceReferences: 2,
         totalMarkdownReferences: 1,
       },
@@ -209,6 +213,7 @@ describe('score-markdown-quality command', () => {
           malformedMarkdownEquations: [],
           placeholderMarkdownEquations: [],
           lowSimilarityMarkdownEquations: [],
+          equationRenderIssues: [],
           sourceReferenceCount: 2,
           markdownReferenceCount: 1,
           headingIssues: [{ line: 4, message: 'four consecutive h3 headings' }],
@@ -241,6 +246,7 @@ describe('score-markdown-quality command', () => {
             equationCoverageScore: 0,
             equationFormatScore: 0,
             equationContentScore: 0,
+            equationRenderScore: 0,
             sourceReferenceCount: 2,
             markdownReferenceCount: 1,
             referenceCoverageScore: 0.5,

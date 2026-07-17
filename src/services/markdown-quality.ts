@@ -41,6 +41,12 @@ export interface AgentReadabilityIssue {
   suggestion: string;
 }
 
+export interface EquationRenderIssue {
+  line: number;
+  number?: string;
+  message: string;
+}
+
 export interface EquationEvidence {
   number: string;
   text: string;
@@ -80,6 +86,7 @@ export interface MarkdownQualityMetrics {
   equationCoverageScore: number;
   equationFormatScore: number;
   equationContentScore: number;
+  equationRenderScore: number;
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   referenceCoverageScore: number;
@@ -114,6 +121,7 @@ export interface MarkdownQualityPaper {
   malformedMarkdownEquations: string[];
   placeholderMarkdownEquations: string[];
   lowSimilarityMarkdownEquations: string[];
+  equationRenderIssues: EquationRenderIssue[];
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   headingIssues: HeadingIssue[];
@@ -138,6 +146,7 @@ export interface MarkdownQualitySummary {
   totalMalformedMarkdownEquations: number;
   totalPlaceholderMarkdownEquations: number;
   totalLowSimilarityMarkdownEquations: number;
+  totalEquationRenderIssues: number;
   totalSourceReferences: number;
   totalMarkdownReferences: number;
 }
@@ -216,6 +225,10 @@ export async function scoreMarkdownQuality(
     (sum, paper) => sum + paper.lowSimilarityMarkdownEquations.length,
     0
   );
+  const totalEquationRenderIssues = papers.reduce(
+    (sum, paper) => sum + paper.equationRenderIssues.length,
+    0
+  );
   const totalSourceReferences = papers.reduce(
     (sum, paper) => sum + paper.metrics.sourceReferenceCount,
     0
@@ -241,6 +254,7 @@ export async function scoreMarkdownQuality(
       totalMalformedMarkdownEquations,
       totalPlaceholderMarkdownEquations,
       totalLowSimilarityMarkdownEquations,
+      totalEquationRenderIssues,
       totalSourceReferences,
       totalMarkdownReferences,
     },
@@ -378,6 +392,7 @@ async function scorePaper(
   const malformedMarkdownEquations = comparisonNumbers(equationComparisons, 'format-issue');
   const placeholderMarkdownEquations = comparisonNumbers(equationComparisons, 'placeholder');
   const lowSimilarityMarkdownEquations = comparisonNumbers(equationComparisons, 'content-mismatch');
+  const equationRenderIssues = markdown ? assessEquationRenderability(markdown) : [];
   const headingIssues = markdown ? scoreHeadings(markdown).issues : [];
   const agentReadabilityIssues = markdown ? assessAgentReadability(markdown) : [];
   const parserImprovementSuggestions = parserSuggestions({
@@ -387,6 +402,7 @@ async function scorePaper(
     malformedMarkdownEquations,
     placeholderMarkdownEquations,
     lowSimilarityMarkdownEquations,
+    equationRenderIssues,
     sourceReferenceCount,
     markdownReferenceCount,
     agentReadabilityIssues,
@@ -411,6 +427,9 @@ async function scorePaper(
   if (lowSimilarityMarkdownEquations.length > 0) {
     issues.push(`low-similarity-markdown-equations:${lowSimilarityMarkdownEquations.join(',')}`);
   }
+  if (equationRenderIssues.length > 0) {
+    issues.push(`equation-render-issues:${equationRenderIssues.length}`);
+  }
   if (sourceReferenceCount > 0 && markdownReferenceCount < sourceReferenceCount) {
     issues.push(`missing-references:${sourceReferenceCount - markdownReferenceCount}`);
   }
@@ -430,6 +449,7 @@ async function scorePaper(
     markdownChartNumbers,
     markdownEquationNumbers,
     equationComparisons,
+    equationRenderIssues,
     markdownReferenceCount,
     missingMarkdownTables,
     missingMarkdownCharts,
@@ -460,6 +480,7 @@ async function scorePaper(
     malformedMarkdownEquations,
     placeholderMarkdownEquations,
     lowSimilarityMarkdownEquations,
+    equationRenderIssues,
     sourceReferenceCount,
     markdownReferenceCount,
     headingIssues,
@@ -664,6 +685,93 @@ function markdownEquationEvidenceForText(markdown: string): EquationEvidence[] {
   const nonDisplayLines = lines.map((line, index) => (displayMathLines.has(index) ? '' : line));
   evidence.push(...equationEvidenceFromLines(nonDisplayLines, { githubDisplayMath: false }));
   return uniqueEquationEvidence(evidence);
+}
+
+function assessEquationRenderability(markdown: string): EquationRenderIssue[] {
+  const lines = markdown.split(/\r?\n/);
+  const issues: EquationRenderIssue[] = [];
+  let inDisplayMath = false;
+  let blockStartLine = 0;
+  let blockLines: string[] = [];
+
+  const flush = (): void => {
+    issues.push(...equationRenderIssuesForBlock(blockLines, blockStartLine));
+    blockLines = [];
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (trimmed === '$$') {
+      if (inDisplayMath) {
+        flush();
+        inDisplayMath = false;
+      } else {
+        inDisplayMath = true;
+        blockStartLine = i + 1;
+        blockLines = [];
+      }
+      continue;
+    }
+    if (inDisplayMath) blockLines.push(lines[i]);
+  }
+
+  if (inDisplayMath) {
+    issues.push({
+      line: blockStartLine,
+      message: 'display math block is missing a closing $$ delimiter',
+    });
+  }
+
+  return issues.slice(0, 100);
+}
+
+function equationRenderIssuesForBlock(lines: string[], startLine: number): EquationRenderIssue[] {
+  const issues: EquationRenderIssue[] = [];
+  const text = lines.join('\n');
+  const tag = text.match(/\\tag\{(\d{1,3})\}/)?.[1];
+
+  const push = (offset: number, message: string): void => {
+    issues.push({ line: startLine + offset, number: tag, message });
+  };
+
+  let alignedDepth = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (trimmed.includes('$$')) push(i, 'nested $$ delimiter inside display math block');
+    if (/\\begin\{aligned\}/.test(trimmed)) alignedDepth += 1;
+    if (/\\end\{aligned\}/.test(trimmed)) alignedDepth -= 1;
+    if (alignedDepth < 0) {
+      push(i, 'display math has \\end{aligned} before \\begin{aligned}');
+      alignedDepth = 0;
+    }
+    if (/(?:^|[+\-*/=(,{])\s*\^/.test(trimmed) || /\^\s*(?:\\\\|$)/.test(trimmed)) {
+      push(i, 'dangling superscript marker is likely to fail math rendering');
+    }
+    if (/\b6\s*=|ˆ/.test(trimmed)) {
+      push(i, 'OCR math artifact should be normalized before rendering');
+    }
+    if (/^[*+\-/]\s*\S/.test(trimmed)) {
+      push(i, 'operator is split onto a separate rendered row');
+    }
+    if (/^\\sum(?:\s*\^\s*\S+)?\s*\\\\?$/.test(trimmed)) {
+      const next = lines[i + 1]?.trim() ?? '';
+      if (
+        /^[A-Za-zΑ-Ωα-ω0-9\\{}_^,\s]+\s*(?:=|\\in|\\ne)/.test(next) ||
+        /^[A-Za-z](?:[A-Za-z0-9,]|\s|\\hat\{[A-Za-z]\}){0,12}\s*\\\\?$/.test(next)
+      ) {
+        push(i, 'summation limit is split onto a separate rendered row');
+      }
+    }
+  }
+
+  if (alignedDepth > 0) {
+    push(lines.length - 1, 'display math is missing \\end{aligned}');
+  }
+  if (alignedDepth < 0) {
+    push(lines.length - 1, 'display math has too many \\end{aligned} markers');
+  }
+
+  return issues;
 }
 
 function mathDelimiterIndexes(line: string): number[] {
@@ -1450,6 +1558,7 @@ function parserSuggestions(args: {
   malformedMarkdownEquations: string[];
   placeholderMarkdownEquations: string[];
   lowSimilarityMarkdownEquations: string[];
+  equationRenderIssues: EquationRenderIssue[];
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   agentReadabilityIssues: AgentReadabilityIssue[];
@@ -1478,6 +1587,9 @@ function parserSuggestions(args: {
   }
   if (args.lowSimilarityMarkdownEquations.length > 0) {
     suggestions.add('Improve equation body reconstruction from PDF layout text.');
+  }
+  if (args.equationRenderIssues.length > 0) {
+    suggestions.add('Normalize LaTeX equation syntax so generated display math renders cleanly.');
   }
   if (args.sourceReferenceCount > 0 && args.markdownReferenceCount < args.sourceReferenceCount) {
     suggestions.add(
@@ -1509,6 +1621,7 @@ function buildMetrics(args: {
   markdownChartNumbers: string[];
   markdownEquationNumbers: string[];
   equationComparisons: EquationComparison[];
+  equationRenderIssues: EquationRenderIssue[];
   markdownReferenceCount: number;
   missingMarkdownTables: string[];
   missingMarkdownCharts: string[];
@@ -1541,6 +1654,10 @@ function buildMetrics(args: {
           (sum, comparison) => sum + comparison.contentSimilarity,
           0
         ) / sourceEquationCount;
+  const equationRenderScore =
+    markdownEquationCount === 0
+      ? 1
+      : clamp(1 - args.equationRenderIssues.length / markdownEquationCount);
   const { sourceReferenceCount, markdownReferenceCount } = args;
   const headingFlowScore = scoreHeadings(markdown).score;
   const artifactScore = scoreArtifacts(markdown);
@@ -1564,6 +1681,7 @@ function buildMetrics(args: {
       equationCoverageScore: 0,
       equationFormatScore: 0,
       equationContentScore: 0,
+      equationRenderScore: 0,
       sourceReferenceCount,
       markdownReferenceCount,
       referenceCoverageScore: 0,
@@ -1601,6 +1719,7 @@ function buildMetrics(args: {
       equationCoverageScore: 0,
       equationFormatScore: sourceEquationCount === 0 ? 0 : round(equationFormatScore),
       equationContentScore: sourceEquationCount === 0 ? 0 : round(equationContentScore),
+      equationRenderScore: markdownEquationCount === 0 ? 0 : round(equationRenderScore),
       sourceReferenceCount,
       markdownReferenceCount,
       referenceCoverageScore: 0,
@@ -1651,7 +1770,8 @@ function buildMetrics(args: {
         0.1 * chartCoverageScore +
         0.04 * equationCoverageScore +
         0.02 * equationFormatScore +
-        0.02 * equationContentScore +
+        0.015 * equationContentScore +
+        0.005 * equationRenderScore +
         0.08 * referenceCoverageScore +
         0.14 * headingFlowScore +
         0.08 * arxivPlacementScore +
@@ -1678,6 +1798,7 @@ function buildMetrics(args: {
     equationCoverageScore: round(equationCoverageScore),
     equationFormatScore: round(equationFormatScore),
     equationContentScore: round(equationContentScore),
+    equationRenderScore: round(equationRenderScore),
     sourceReferenceCount,
     markdownReferenceCount,
     referenceCoverageScore: round(referenceCoverageScore),

@@ -11,6 +11,7 @@ import {
   normalizeDisplayMathBlocks,
   normalizeExtractionArtifacts,
   normalizeReferenceList,
+  repairNestedDisplayMathBlocks,
   removeDuplicateMarkdownTables,
   repairCaptionBoundaries,
   repairEquationBlocks,
@@ -412,13 +413,81 @@ describe('repairEquationBlocks', () => {
         '',
         '$$',
         '\\begin{aligned}',
-        'Lcontr^ = \\\\',
+        'Lcontr = \\\\',
         '1 \\\\',
         '|Pos||Neg| \\\\',
-        '\\sum \\\\',
-        'i\\in Pos',
+        '\\sum_{i\\in Pos}',
         '\\end{aligned}',
         '\\tag{14}',
+        '$$',
+        '',
+      ].join('\n')
+    );
+  });
+
+  test('folds detached summation limits and OCR hat artifacts into renderable latex', () => {
+    const markdown = [
+      'Lcls =',
+      '1',
+      'M(K − 1)',
+      '∑ ^ M',
+      'm=1',
+      '∑',
+      'k 6 =ˆk',
+      'max(0, cm,k + ϵ − cm,kˆ)',
+      '(8)',
+    ].join('\n');
+
+    expect(repairEquationBlocks(markdown)).toBe(
+      [
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'Lcls = \\\\',
+        '1 \\\\',
+        'M(K - 1) \\\\',
+        '\\sum_{m=1}^{M} \\\\',
+        '\\sum_{k \\ne \\hat{k}} \\\\',
+        'max(0, cm,k + \\epsilon - cm,k)',
+        '\\end{aligned}',
+        '\\tag{8}',
+        '$$',
+        '',
+      ].join('\n')
+    );
+  });
+
+  test('folds short detached summation indices into subscripts', () => {
+    const markdown = ['yi = xiW0 +', '∑', 'j', 'φ(concat(xi, ∆i,j, xj)W1)W2', '(5)'].join('\n');
+
+    expect(repairEquationBlocks(markdown)).toBe(
+      [
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'yi = xiW0 + \\\\',
+        '\\sum_{j} \\\\',
+        '\\phi (concat(xi, \\Delta i,j, xj)W1)W2',
+        '\\end{aligned}',
+        '\\tag{5}',
+        '$$',
+        '',
+      ].join('\n')
+    );
+  });
+
+  test('normalizes OCR multiplication and detached superscript fragments', () => {
+    const markdown = ['Lreg =', 'reg(p ˆk m,t -^ p', '∗ m,t)^', '(9)'].join('\n');
+
+    expect(repairEquationBlocks(markdown)).toBe(
+      [
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'Lreg = \\\\',
+        'reg(p \\hat{k} m,t - p * m,t)',
+        '\\end{aligned}',
+        '\\tag{9}',
         '$$',
         '',
       ].join('\n')
@@ -435,7 +504,7 @@ describe('repairEquationBlocks', () => {
     ].join('\n');
 
     expect(repairEquationBlocks(markdown)).toBe(
-      ['', '$$', 'Ldist^ = BCE(Dfeat, K)', '\\tag{11}', '$$', '', 'Next paragraph.'].join('\n')
+      ['', '$$', 'Ldist = BCE(Dfeat, K)', '\\tag{11}', '$$', '', 'Next paragraph.'].join('\n')
     );
   });
 
@@ -627,13 +696,13 @@ describe('repairEquationBlocks', () => {
   });
 
   test('normalizes common PDF math glyphs into GitHub-compatible latex', () => {
-    const markdown = '∆x = ∑ √ ∫ ≤ ≥ ≈ ± − × ÷ ∈ ∪ ∞ α β γ θ λ μ π \u000f (5)';
+    const markdown = '∆x = ∑ √ ∫ ≤ ≥ ≈ ± − × ÷ ∈ ∪ ∞ α β γ ε θ λ μ π φ \u000f (5)';
 
     expect(repairEquationBlocks(markdown)).toBe(
       [
         '',
         '$$',
-        '\\Delta x = \\sum \\sqrt \\int \\le \\ge \\approx \\pm - \\times \\div \\in \\cup \\infty \\alpha \\beta \\gamma \\theta \\lambda \\mu \\pi \\epsilon',
+        '\\Delta x = \\sum \\sqrt \\int \\le \\ge \\approx \\pm - \\times \\div \\in \\cup \\infty \\alpha \\beta \\gamma \\epsilon \\theta \\lambda \\mu \\pi \\phi \\epsilon',
         '\\tag{5}',
         '$$',
         '',
@@ -726,6 +795,47 @@ describe('normalizeDisplayMathBlocks', () => {
 
     expect(normalizeDisplayMathBlocks(markdown)).toBe(
       ['Paragraph.', '    code = true', '', '$$', 'x = y', '$$'].join('\n')
+    );
+  });
+});
+
+describe('repairNestedDisplayMathBlocks', () => {
+  test('splits nested display math blocks into separate GitHub math blocks', () => {
+    const markdown = [
+      '$$',
+      '\\begin{aligned}',
+      '$$ \\\\',
+      '\\begin{aligned} \\\\',
+      'AP = 100 \\\\ \\\\',
+      '\\int (^1) 0 max{p(r′)|r′^ >= r}dr \\\\',
+      '\\end{aligned} \\\\',
+      '\\tag{5} \\\\',
+      '$$ \\\\',
+      'APH = 100 \\\\',
+      '\\int (^1) 0 max{h(r′)|r′^ >= r}dr',
+      '\\end{aligned}',
+      '\\tag{6}',
+      '$$',
+    ].join('\n');
+
+    expect(repairNestedDisplayMathBlocks(markdown)).toBe(
+      [
+        '$$',
+        '\\begin{aligned}',
+        'AP = 100 \\\\',
+        '\\int (^1) 0 max{p(r′)|r′^ >= r}dr \\\\',
+        '\\end{aligned}',
+        '\\tag{5}',
+        '$$',
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'APH = 100 \\\\',
+        '\\int (^1) 0 max{h(r′)|r′^ >= r}dr',
+        '\\end{aligned}',
+        '\\tag{6}',
+        '$$',
+      ].join('\n')
     );
   });
 });
@@ -899,8 +1009,7 @@ describe('addMissingSourcePlaceholders', () => {
         '$$',
         '\\begin{aligned}',
         'L = \\\\',
-        '\\sum \\\\',
-        'p\\in pos \\\\',
+        '\\sum_{p\\in pos} \\\\',
         'loss(p)',
         '\\end{aligned}',
         '\\tag{4}',

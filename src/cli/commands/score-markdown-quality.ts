@@ -47,7 +47,8 @@ function formatSummary(report: MarkdownQualityReport, failBelow?: number): strin
     dim(
       `Equation quality: ${report.summary.totalMalformedMarkdownEquations} malformed; ` +
         `${report.summary.totalPlaceholderMarkdownEquations} placeholder; ` +
-        `${report.summary.totalLowSimilarityMarkdownEquations} low-similarity.`
+        `${report.summary.totalLowSimilarityMarkdownEquations} low-similarity; ` +
+        `${report.summary.totalEquationRenderIssues} render issue(s).`
     ),
     dim(
       `References: ${report.summary.totalMarkdownReferences}/${report.summary.totalSourceReferences} detected.`
@@ -78,6 +79,7 @@ function formatPaperLine(paper: MarkdownQualityPaper): string {
   const equationCoverage = Math.round(paper.metrics.equationCoverageScore * 100);
   const equationFormat = Math.round(paper.metrics.equationFormatScore * 100);
   const equationContent = Math.round(paper.metrics.equationContentScore * 100);
+  const equationRender = Math.round(paper.metrics.equationRenderScore * 100);
   const referenceCoverage = Math.round(paper.metrics.referenceCoverageScore * 100);
   const headingCoverage = Math.round(paper.metrics.headingFlowScore * 100);
   const readability = Math.round(paper.metrics.agentReadabilityScore * 100);
@@ -86,7 +88,7 @@ function formatPaperLine(paper: MarkdownQualityPaper): string {
     `tables ${paper.metrics.markdownTableCount}/${sourceTables} (${tableCoverage}%); ` +
     `charts ${paper.metrics.markdownChartCount}/${paper.metrics.sourceChartCount} (${chartCoverage}%); ` +
     `eqs ${paper.metrics.markdownEquationCount}/${paper.metrics.sourceEquationCount} ` +
-    `(cov ${equationCoverage}%, fmt ${equationFormat}%, body ${equationContent}%); ` +
+    `(cov ${equationCoverage}%, fmt ${equationFormat}%, body ${equationContent}%, render ${equationRender}%); ` +
     `refs ${paper.metrics.markdownReferenceCount}/${paper.metrics.sourceReferenceCount} (${referenceCoverage}%); ` +
     `headings ${headingCoverage}%; agent ${readability}%; ` +
     `pages ${paper.metrics.markdownPages}/${paper.metrics.sourcePages}`
@@ -120,6 +122,10 @@ function formatPaperIssues(paper: MarkdownQualityPaper): string[] {
   for (const issue of paper.agentReadabilityIssues.slice(0, 3)) {
     const prefix = issue.line ? `line ${issue.line}: ` : '';
     issues.push(`${prefix}${issue.message}`);
+  }
+  for (const issue of paper.equationRenderIssues.slice(0, 3)) {
+    const suffix = issue.number ? ` equation ${issue.number}` : '';
+    issues.push(`line ${issue.line}${suffix}: ${issue.message}`);
   }
   for (const suggestion of paper.parserImprovementSuggestions.slice(0, 2)) {
     issues.push(`parser: ${suggestion}`);
