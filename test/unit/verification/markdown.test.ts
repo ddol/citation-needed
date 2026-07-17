@@ -451,6 +451,19 @@ describe('repairEquationBlocks', () => {
     expect(repairEquationBlocks(markdown)).toBe(markdown);
   });
 
+  test('leaves existing display math blocks unchanged', () => {
+    const markdown = [
+      '$$',
+      '\\begin{aligned}',
+      'AP = 100 \\\\',
+      '\\tag{5}',
+      '\\end{aligned}',
+      '$$',
+    ].join('\n');
+
+    expect(repairEquationBlocks(markdown)).toBe(markdown);
+  });
+
   test('stops split equation recovery at figure captions and structural headings', () => {
     const figureCaptionBeforeEquation = ['Fig. 2. Pipeline overview.', 'E = mc^2', '(1)'].join(
       '\n'
@@ -580,6 +593,24 @@ describe('repairEquationBlocks', () => {
         '$$',
         '',
         'Direction prediction follows.',
+      ].join('\n')
+    );
+  });
+
+  test('splits inline labelled equations with comma-bearing identifiers', () => {
+    const markdown =
+      'The max-margin loss is Lcontri,j = max(0, Ccontr − (di − dj)), (13) where the margin is fixed.';
+
+    expect(repairEquationBlocks(markdown)).toBe(
+      [
+        'The max-margin loss is',
+        '',
+        '$$',
+        'Lcontri,j = max(0, Ccontr - (di - dj))',
+        '\\tag{13}',
+        '$$',
+        '',
+        'where the margin is fixed.',
       ].join('\n')
     );
   });
@@ -786,7 +817,7 @@ describe('addMissingSourcePlaceholders', () => {
     );
   });
 
-  test('adds placeholders for source figures and equations absent from Markdown', () => {
+  test('adds source figures and recovered equations absent from Markdown', () => {
     const markdown = ['Intro text.', '<!-- PAGE_BREAK -->', 'Second page text.'].join('\n');
     const layout = [
       'Figure 1. Overview.',
@@ -803,7 +834,7 @@ describe('addMissingSourcePlaceholders', () => {
         'Figure 1. Source figure not extracted; see [PDF page 1](../pdf/Paper.pdf#page=1).',
         '',
         '$$',
-        '\\text{Equation not extracted; see PDF page 1}',
+        'x = y + z',
         '\\tag{1}',
         '$$',
         '<!-- PAGE_BREAK -->',
@@ -831,7 +862,7 @@ describe('addMissingSourcePlaceholders', () => {
     );
   });
 
-  test('adds a placeholder when a raw equation label was not converted to display math', () => {
+  test('adds recovered display math when a raw equation label was not converted to display math', () => {
     const markdown = 'The parser left x = y + z (3) inside prose.';
     const layout = 'x = y + z (3)';
 
@@ -840,7 +871,7 @@ describe('addMissingSourcePlaceholders', () => {
         'The parser left x = y + z (3) inside prose.',
         '',
         '$$',
-        '\\text{Equation not extracted; see PDF page 1}',
+        'x = y + z',
         '\\tag{3}',
         '$$',
         '',
@@ -854,6 +885,28 @@ describe('addMissingSourcePlaceholders', () => {
 
     expect(addMissingSourcePlaceholders(markdown, layout, '/tmp/papers/pdf/Paper.pdf')).toBe(
       markdown
+    );
+  });
+
+  test('recovers split missing equations from local layout text', () => {
+    const markdown = 'The parser missed the display equation.';
+    const layout = ['L =', '∑', 'p∈pos', 'loss(p) (4)'].join('\n');
+
+    expect(addMissingSourcePlaceholders(markdown, layout, '/tmp/papers/pdf/Paper.pdf')).toBe(
+      [
+        'The parser missed the display equation.',
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'L = \\\\',
+        '\\sum \\\\',
+        'p\\in pos \\\\',
+        'loss(p)',
+        '\\end{aligned}',
+        '\\tag{4}',
+        '$$',
+        '',
+      ].join('\n')
     );
   });
 

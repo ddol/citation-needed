@@ -638,6 +638,94 @@ describe('scoreMarkdownQuality', () => {
     ]);
   });
 
+  test('compares equation bodies against cropped PDF layout formulas instead of prose context', async () => {
+    writePaper(
+      'noisy-source-equation',
+      [
+        '## Metric',
+        '',
+        '$$',
+        '\\begin{aligned}',
+        'P AT = \\\\',
+        '2 \\times P Q \\times T Q \\\\',
+        'P Q + T Q',
+        '\\end{aligned}',
+        '\\tag{1}',
+        '$$',
+      ].join('\n')
+    );
+    const layout =
+      'frames, panoptic tracking additionally enforces temporal coherence and unrelated prose P AT = 2 × PQ × TQ / (PQ + TQ) ∈ [0, 1], (1)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.lowSimilarityMarkdownEquations).toEqual([]);
+    expect(paper.equationComparisons).toMatchObject([{ number: '1', status: 'matched' }]);
+    expect(paper.metrics.equationContentScore).toBeGreaterThanOrEqual(0.5);
+  });
+
+  test('compares the right equation when multiple source labels are collapsed on one line', async () => {
+    writePaper(
+      'same-line-source-equations',
+      [
+        '$$',
+        'Lcontr = max(0, Ccontr - (di - dj))',
+        '\\tag{13}',
+        '$$',
+        '',
+        '$$',
+        'Linit = BCE(P, Ptarget)',
+        '\\tag{19}',
+        '$$',
+      ].join('\n')
+    );
+    const layout =
+      'positive sample text max-margin loss as follows: Lcontr = max(0, Ccontr − (di − dj)), (13) Linit = BCE(P, Ptarget), (19)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.sourceEquationNumbers).toEqual(['13', '19']);
+    expect(paper.lowSimilarityMarkdownEquations).toEqual([]);
+    expect(paper.equationComparisons).toMatchObject([
+      { number: '13', status: 'matched' },
+      { number: '19', status: 'matched' },
+    ]);
+    expect(paper.metrics.equationContentScore).toBeGreaterThanOrEqual(0.5);
+  });
+
+  test('does not report low similarity when source layout only exposes an equation lhs', async () => {
+    writePaper('lhs-only-source-equation', ['$$', '\\sqrt{x + y}', '\\tag{38}', '$$'].join('\n'));
+    const layout = 'HOTAα = (38)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    expect(paper.lowSimilarityMarkdownEquations).toEqual([]);
+    expect(paper.equationComparisons).toMatchObject([
+      {
+        number: '38',
+        presentInMarkdown: true,
+        githubDisplayMath: true,
+        status: 'matched',
+        contentSimilarity: 1,
+      },
+    ]);
+  });
+
   test('counts multiple inline equation labels in one math line', async () => {
     writePaper(
       'inline-equations',

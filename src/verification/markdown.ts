@@ -78,7 +78,9 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
   );
   const finalPass = await formatGeneratedMarkdown(
     removeDuplicateMarkdownTables(
-      repairLooseLineSpacing(repairMarkdownTablesWithLayout(firstPass, layoutText))
+      repairEquationBlocks(
+        repairLooseLineSpacing(repairMarkdownTablesWithLayout(firstPass, layoutText))
+      )
     )
   );
   const markdown = removeDuplicateMarkdownTables(normalizeDisplayMathBlocks(finalPass));
@@ -248,6 +250,7 @@ export function repairEquationBlocks(markdown: string): string {
   const lines = markdown.split('\n');
   const repaired: string[] = [];
   let inFence = false;
+  let inMath = false;
   let inReferences = false;
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -259,16 +262,22 @@ export function repairEquationBlocks(markdown: string): string {
       repaired.push(line);
       continue;
     }
+    if (trimmed === '$$') {
+      inMath = !inMath;
+      repaired.push(line);
+      continue;
+    }
     if (looksLikeReferenceHeading(trimmed)) inReferences = true;
 
     const inlineEquation = splitInlineLabeledEquation(trimmed);
-    if (!inFence && !inReferences && inlineEquation) {
+    if (!inFence && !inMath && !inReferences && inlineEquation) {
       repaired.push(...inlineEquation);
       continue;
     }
 
     if (
       inFence ||
+      inMath ||
       inReferences ||
       !equationLabelRe().test(trimmed) ||
       (!looksLikeEquationLine(trimmed) && equationBlockStart(lines, i) === i)
@@ -333,6 +342,7 @@ export function addMissingSourcePlaceholders(
   let sections = markdown.split(/(<!--\s*PAGE_BREAK\s*-->)/i);
   const markdownFigures = figuresInMarkdown(markdown);
   const markdownEquations = equationsInMarkdown(markdown);
+  const layoutEquations = equationsForLayout(layoutText);
 
   for (const [figure, page] of figurePagesForLayout(layoutText).entries()) {
     if (markdownFigures.has(figure)) continue;
@@ -345,15 +355,17 @@ export function addMissingSourcePlaceholders(
 
   for (const [equation, page] of equationPagesForLayout(layoutText).entries()) {
     if (markdownEquations.has(equation)) continue;
+    const recoveredEquation = layoutEquations.get(equation);
     sections = appendToMarkdownPageSection(
       sections,
       page,
-      [
-        '$$',
-        `\\text{Equation not extracted; see PDF page ${page}}`,
-        `\\tag{${equation}}`,
-        '$$',
-      ].join('\n')
+      recoveredEquation?.markdown ??
+        [
+          '$$',
+          `\\text{Equation not extracted; see PDF page ${page}}`,
+          `\\tag{${equation}}`,
+          '$$',
+        ].join('\n')
     );
   }
 
@@ -657,7 +669,9 @@ function splitInlineLabeledEquation(line: string): string[] | undefined {
 }
 
 function equationStartIndex(text: string): number {
-  const assignmentMatches = Array.from(text.matchAll(/[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω^_]*\s*=/g));
+  const assignmentMatches = Array.from(
+    text.matchAll(/[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω^_{}(),|]*\s*=/g)
+  );
   for (let i = assignmentMatches.length - 1; i >= 0; i -= 1) {
     const index = assignmentMatches[i].index!;
     const prefix = text.slice(0, index).trim();
@@ -674,7 +688,7 @@ function equationSegmentForMath(line: string): string {
     if (looksLikeEquationContextLine(suffix)) return suffix;
   }
 
-  const equationStart = line.search(/[A-Za-z][A-Za-z0-9^_]*\s*=/);
+  const equationStart = line.search(/[A-Za-z][A-Za-z0-9^_{}(),|]*\s*=/);
   if (equationStart > 0) {
     const prefix = line.slice(0, equationStart).trim();
     const suffix = line.slice(equationStart).trim();
@@ -780,6 +794,14 @@ function figurePagesForLayout(layoutText: string): Map<string, number> {
 
 function equationPagesForLayout(layoutText: string): Map<string, number> {
   const pages = new Map<string, number>();
+  for (const [equation, recovered] of equationsForLayout(layoutText).entries()) {
+    if (!pages.has(equation)) pages.set(equation, recovered.page);
+  }
+  return pages;
+}
+
+function equationsForLayout(layoutText: string): Map<string, { page: number; markdown: string }> {
+  const equations = new Map<string, { page: number; markdown: string }>();
   for (const [pageIndex, page] of layoutText.split('\f').entries()) {
     const lines = page.split(/\r?\n/);
     for (let i = 0; i < lines.length; i += 1) {
@@ -794,10 +816,27 @@ function equationPagesForLayout(layoutText: string): Map<string, number> {
         continue;
       }
 
-      if (match && !pages.has(match[1])) pages.set(match[1], pageIndex + 1);
+      if (equations.has(match[1])) continue;
+
+      const block = layoutEquationBlock(lines, i);
+      const markdown = equationLinesToMathBlock(block).join('\n').trim();
+      if (markdown && !/Equation not extracted/i.test(markdown)) {
+        equations.set(match[1], { page: pageIndex + 1, markdown });
+      }
     }
   }
-  return pages;
+  return equations;
+}
+
+function layoutEquationBlock(lines: string[], labelIndex: number): string[] {
+  const blockStart = equationBlockStart(lines, labelIndex);
+  const block = lines
+    .slice(blockStart, labelIndex + 1)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (block.length > 0) return block;
+  return [lines[labelIndex].trim()];
 }
 
 function hasNearbyEquationContext(lines: string[], lineIndex: number): boolean {

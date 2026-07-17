@@ -710,15 +710,79 @@ function buildEquationEvidence(
   text: string,
   options: { page?: number; line?: number; githubDisplayMath: boolean }
 ): EquationEvidence {
+  const equationText = isolateEquationText(number, text);
   return {
     number,
-    text: text.trim(),
-    normalizedText: normalizeEquationText(text),
-    placeholder: /Equation not extracted|Source equation not extracted|see PDF page/i.test(text),
+    text: equationText,
+    normalizedText: normalizeEquationText(equationText),
+    placeholder: /Equation not extracted|Source equation not extracted|see PDF page/i.test(
+      equationText
+    ),
     githubDisplayMath: options.githubDisplayMath,
     page: options.page,
     line: options.line,
   };
+}
+
+function isolateEquationText(number: string, text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.includes(`\\tag{${number}}`)) return trimmed;
+
+  const labelMatch = equationLabelMatchForNumber(trimmed, number);
+  if (!labelMatch) return trimmed;
+
+  const beforeLabel = trimmed.slice(0, labelMatch.index).trimEnd();
+  const equationStart = equationStartIndex(beforeLabel);
+  const equationBody = equationStart >= 0 ? beforeLabel.slice(equationStart).trim() : beforeLabel;
+  return `${equationBody} (${number})`.trim();
+}
+
+function equationLabelMatchForNumber(
+  text: string,
+  number: string
+): { index: number; label: string } | undefined {
+  const labelRegex = new RegExp(`\\(${escapeRegExp(number)}\\)`, 'g');
+  let match = labelRegex.exec(text);
+  while (match) {
+    const before = text.slice(0, match.index);
+    const after = text.slice(match.index + match[0].length);
+    if (looksLikeEquation(before) && (!after.trim() || looksLikeEquationLabelSuffix(after))) {
+      return { index: match.index, label: match[0] };
+    }
+    match = labelRegex.exec(text);
+  }
+  return undefined;
+}
+
+function looksLikeEquationLabelSuffix(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (/^(?:where\b|[,.;])/i.test(trimmed)) return true;
+  const nextLabel = trimmed.match(/^(?:[,.;]\s*)?\(?\d{1,3}\)?/);
+  if (nextLabel) return true;
+  const equationStart = equationStartIndex(trimmed);
+  return equationStart >= 0 && equationStart <= 80;
+}
+
+function equationStartIndex(text: string): number {
+  const equalsMatches = Array.from(text.matchAll(/=/g));
+  for (let i = equalsMatches.length - 1; i >= 0; i -= 1) {
+    const equalsIndex = equalsMatches[i].index!;
+    const beforeEquals = text.slice(0, equalsIndex);
+    const lhs = beforeEquals.match(
+      /[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω^_{}(),|]*(?:\s+[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω^_{}(),|]*)?\s*$/
+    );
+    if (!lhs) continue;
+    const index = beforeEquals.length - lhs[0].length;
+    const suffix = text.slice(index);
+    if (equationSignalCount(suffix) > 0) return index;
+  }
+
+  const mathTokenMatches = Array.from(
+    text.matchAll(/[A-Za-zΑ-Ωα-ω0-9|{}()[\]^_+\-*/=<>]+/g)
+  ).filter((match) => equationSignalCount(text.slice(match.index!)) > 0);
+  if (mathTokenMatches.length === 0) return -1;
+  return Math.max(0, mathTokenMatches[mathTokenMatches.length - 1].index! - 20);
 }
 
 function uniqueEquationEvidence(evidence: EquationEvidence[]): EquationEvidence[] {
@@ -761,9 +825,12 @@ function compareEquations(
       };
     }
 
-    const contentSimilarity = markdown.placeholder
-      ? 0
-      : equationSimilarity(source.normalizedText, markdown.normalizedText);
+    let contentSimilarity = 0;
+    if (!markdown.placeholder) {
+      contentSimilarity = comparableEquationBody(source.normalizedText, markdown.normalizedText)
+        ? equationSimilarity(source.normalizedText, markdown.normalizedText)
+        : 1;
+    }
     let status: EquationComparison['status'] = 'matched';
     if (markdown.placeholder) {
       status = 'placeholder';
@@ -799,6 +866,7 @@ function comparisonNumbers(
 function normalizeEquationText(text: string): string {
   return text
     .replace(/\\tag\{\d{1,3}\}/g, ' ')
+    .replace(/\\(?:begin|end)\{[^}]+\}/g, ' ')
     .replace(/(?:^|[\s,.;])\(\d{1,3}\)(?=(?:\s*where\b.*)?\s*$|\s+[A-Za-z]+\s*=)/gi, ' ')
     .replace(EQUATION_NUMBER_RE, ' ')
     .replace(/\\text\{[^}]*Equation not extracted[^}]*\}/gi, ' ')
@@ -810,6 +878,11 @@ function normalizeEquationText(text: string): string {
     .replace(/[−]/g, '-')
     .replace(/[×]/g, '*')
     .replace(/[÷]/g, '/')
+    .replace(/\\times\b/g, ' * ')
+    .replace(/\\cdot\b/g, ' * ')
+    .replace(/\\le\b/g, ' <= ')
+    .replace(/\\ge\b/g, ' >= ')
+    .replace(/\b([A-Z])\s+([A-Z]{1,3})\b/g, '$1$2')
     .replace(/\\(?:frac|sum|sqrt|int|left|right|mathrm|operatorname|mathbf|mathit|text)\b/g, ' ')
     .replace(/[{}()[\],.;:]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -835,7 +908,18 @@ function equationSimilarity(sourceText: string, markdownText: string): number {
     markdownCounts.set(token, count - 1);
   }
 
-  return (2 * overlap) / (sourceTokens.length + markdownTokens.length);
+  const dice = (2 * overlap) / (sourceTokens.length + markdownTokens.length);
+  const sourceRecall = overlap / sourceTokens.length;
+  return Math.max(dice, sourceRecall);
+}
+
+function comparableEquationBody(sourceText: string, markdownText: string): boolean {
+  const sourceTokens = equationTokens(sourceText);
+  const markdownTokens = equationTokens(markdownText);
+  if (sourceTokens.length <= 3 && sourceTokens.includes('=') && markdownTokens.length >= 2) {
+    return false;
+  }
+  return true;
 }
 
 function equationTokens(text: string): string[] {
@@ -1675,4 +1759,8 @@ function round(value: number): number {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
