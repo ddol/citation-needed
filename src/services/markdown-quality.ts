@@ -773,6 +773,18 @@ function assessEquationRenderability(markdown: string): EquationRenderIssue[] {
   return issues.slice(0, 100);
 }
 
+/**
+ * A short row with no relation or operator — `1`, `|C||D|`, `M (K - 1)`. Two in
+ * a row means a fraction was serialized as numerator-over-denominator lines.
+ */
+function isFractionFragmentRow(line: string): boolean {
+  const body = line.replace(/\s*\\\\$/, '').trim();
+  if (!body || body.length > 24) return false;
+  if (/\\(?:begin|end|tag|frac|sum|int|sqrt)/.test(body)) return false;
+  if (/[=<>]|\\in|\\ne|\\le|\\ge/.test(body)) return false;
+  return /^[A-Za-z0-9|()\][{}\\_^,.\s+*/-]+$/.test(body);
+}
+
 function equationRenderIssuesForBlock(lines: string[], startLine: number): EquationRenderIssue[] {
   const issues: EquationRenderIssue[] = [];
   const text = lines.join('\n');
@@ -809,6 +821,16 @@ function equationRenderIssuesForBlock(lines: string[], startLine: number): Equat
       ) {
         push(i, 'summation limit is split onto a separate rendered row');
       }
+    }
+    // A row that ends an equation at the `=` never renders as a formula: the
+    // right-hand side was serialized onto the following rows instead.
+    if (/(?:^|[^<>!=])=\s*\\\\$/.test(trimmed)) {
+      push(i, 'equation is fractured: right-hand side split onto a following row');
+    }
+    // A lone numerator/denominator row is the fracture signature of a fraction
+    // that was flattened into stacked rows instead of \frac.
+    if (isFractionFragmentRow(trimmed) && isFractionFragmentRow(lines[i + 1]?.trim() ?? '')) {
+      push(i, 'fraction is fractured into stacked rows instead of \\frac');
     }
   }
 

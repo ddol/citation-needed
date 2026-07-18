@@ -601,9 +601,14 @@ describe('scoreMarkdownQuality', () => {
     });
 
     const paper = report.papers[0];
-    expect(paper.equationRenderIssues).toMatchObject([
-      { number: '5', message: 'summation limit is split onto a separate rendered row' },
-    ]);
+    // This fixture is fractured in several ways at once, so assert the
+    // summation finding is present rather than that it is the only one.
+    expect(paper.equationRenderIssues).toContainEqual(
+      expect.objectContaining({
+        number: '5',
+        message: 'summation limit is split onto a separate rendered row',
+      })
+    );
     expect(paper.metrics.equationRenderScore).toBe(0);
   });
 
@@ -625,6 +630,54 @@ describe('scoreMarkdownQuality', () => {
       { number: '6', message: 'operator is split onto a separate rendered row' },
     ]);
     expect(paper.metrics.equationRenderScore).toBe(0);
+  });
+
+  test('flags a fractured equation whose right-hand side was split onto later rows', async () => {
+    // The pre-repair shape: `mAP =` ends a row, and the fraction arrives as
+    // stacked numerator/denominator fragments.
+    writePaper(
+      'fractured-equation',
+      [
+        '$$',
+        '\\begin{aligned}',
+        'mAP = \\\\',
+        '1 \\\\',
+        '|C||D| \\\\',
+        'APc,d',
+        '\\end{aligned}',
+        '\\tag{1}',
+        '$$',
+      ].join('\n')
+    );
+    const layout = 'mAP = 1 |C||D| APc,d (1)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    const paper = report.papers[0];
+    const messages = paper.equationRenderIssues.map((issue) => issue.message);
+    expect(messages).toContain('equation is fractured: right-hand side split onto a following row');
+    expect(messages).toContain('fraction is fractured into stacked rows instead of \\frac');
+    expect(paper.metrics.equationRenderScore).toBe(0);
+  });
+
+  test('accepts a reconstructed single-line equation as cleanly renderable', async () => {
+    writePaper(
+      'reconstructed-equation',
+      ['$$', 'mAP = \\frac{1}{|C||D|} \\sum_{c\\in C} AP_{c,d}', '\\tag{1}', '$$'].join('\n')
+    );
+    const layout = 'mAP = 1 |C||D| APc,d (1)';
+
+    const report = await scoreMarkdownQuality({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      readPdfLayout: jest.fn().mockResolvedValue(layout),
+    });
+
+    expect(report.papers[0].equationRenderIssues).toEqual([]);
   });
 
   test('flags numbered Markdown equations that are not GitHub display math', async () => {
