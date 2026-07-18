@@ -83,6 +83,30 @@ describe('extractLayoutHeadings', () => {
       'References',
     ]);
   });
+
+  test('deduplicates repeated headings across pages and recognizes appendix-style headings', () => {
+    const layout = [
+      ['I. INTRODUCTION', 'APPENDIX', 'I. INTRODUCTION'].join('\n'),
+      ['I. INTRODUCTION', 'A. Supplemental Details'].join('\n'),
+    ].join('\f');
+
+    expect(extractLayoutHeadings(layout).map((heading) => [heading.text, heading.page])).toEqual([
+      ['I. INTRODUCTION', 1],
+      ['APPENDIX', 1],
+      ['A. Supplemental Details', 2],
+    ]);
+  });
+
+  test('leaves a hyphenated heading alone when the continuation is not aligned', () => {
+    const layout = [
+      '                       A. Long-Heading De-',
+      'Different column text starts far away',
+    ].join('\n');
+
+    expect(extractLayoutHeadings(layout)).toEqual([
+      { text: 'A. Long-Heading De-', level: 3, page: 1 },
+    ]);
+  });
 });
 
 describe('extractLayoutTitle', () => {
@@ -123,6 +147,14 @@ describe('extractLayoutTitle', () => {
     expect(extractLayoutTitle(layout)).toBe(
       'nuScenes: A multimodal dataset for autonomous driving'
     );
+  });
+
+  test('returns undefined when the opening line is already a section heading', () => {
+    const layout = ['I. INTRODUCTION', 'Body text begins immediately after the heading.'].join(
+      '\n'
+    );
+
+    expect(extractLayoutTitle(layout)).toBeUndefined();
   });
 });
 
@@ -177,5 +209,90 @@ describe('applyLayoutHeadings', () => {
 
   test('returns markdown unchanged without layout text', () => {
     expect(applyLayoutHeadings('## Title\n\nBody.', undefined)).toBe('## Title\n\nBody.');
+  });
+
+  test('prepends a top-level title when the markdown has no headings', () => {
+    const markdown = ['Body paragraph only.'].join('\n');
+    const titleOnlyLayout = ['Deep Ground Segmentation', 'Jane Doe, John Roe, Ada Lovelace'].join(
+      '\n'
+    );
+
+    expect(applyLayoutHeadings(markdown, titleOnlyLayout)).toBe(
+      ['# Deep Ground Segmentation', '', 'Body paragraph only.'].join('\n')
+    );
+  });
+
+  test('retitles an incomplete first heading and removes the orphaned title remainder paragraph', () => {
+    const markdown = [
+      '## A survey on motion prediction',
+      '',
+      'and risk assessment for intelligent vehicles',
+      '',
+      'Body text starts here.',
+    ].join('\n');
+    const titleLayout = [
+      'A survey on motion prediction and risk',
+      'assessment for intelligent vehicles',
+      'Stephanie Lefevre1,2* , Dizan Vasquez1 and Christian Laugier1',
+    ].join('\n');
+
+    const result = applyLayoutHeadings(markdown, titleLayout);
+
+    expect(result).toContain(
+      '# A survey on motion prediction and risk assessment for intelligent vehicles'
+    );
+    // The orphaned tail is gone as its own paragraph (it survives only as part
+    // of the joined title, which the assertion above already covers).
+    expect(result).not.toMatch(/^and risk assessment for intelligent vehicles$/m);
+    expect(result).toContain('Body text starts here.');
+  });
+
+  test('retitles journal-furniture headings from the layout title', () => {
+    const markdown = ['## REVIEW Open Access', '', 'Body text starts here.'].join('\n');
+    const journalLayout = [
+      'R EVIEW Open Access',
+      'A survey on motion prediction and risk',
+      'assessment for intelligent vehicles',
+      'Stephanie Lefevre1,2* , Dizan Vasquez1 and Christian Laugier1',
+    ].join('\n');
+
+    expect(applyLayoutHeadings(markdown, journalLayout)).toBe(
+      [
+        '# A survey on motion prediction and risk assessment for intelligent vehicles',
+        '',
+        'Body text starts here.',
+      ].join('\n')
+    );
+  });
+
+  test('keeps the existing first heading text when the layout title does not extend it', () => {
+    const markdown = ['## Short Title', '', 'Body text.'].join('\n');
+    const unrelatedLayout = ['Different Long Title', 'Author Name'].join('\n');
+
+    expect(applyLayoutHeadings(markdown, unrelatedLayout)).toBe('# Short Title\n\nBody text.');
+  });
+
+  test('does not rewrite headings embedded in quote or table blocks', () => {
+    const markdown = [
+      '## Deep Ground Segmentation',
+      '',
+      '> I. INTRODUCTION inside a quote',
+      '| A. Problem Definition | Value |',
+      '```',
+      'code sample only',
+      '```',
+    ].join('\n');
+
+    expect(applyLayoutHeadings(markdown, layout)).toBe(
+      [
+        '# Deep Ground Segmentation',
+        '',
+        '> I. INTRODUCTION inside a quote',
+        '| A. Problem Definition | Value |',
+        '```',
+        'code sample only',
+        '```',
+      ].join('\n')
+    );
   });
 });

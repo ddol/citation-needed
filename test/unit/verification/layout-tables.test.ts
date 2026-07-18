@@ -904,6 +904,8 @@ describe('repairMarkdownTablesWithLayout', () => {
     const markdown = [
       'We provide a comparison in Table 1 and details online.',
       '',
+      'nuScenes is a leap forward in data volumes and complexities (Table 1), and is the first.',
+      '',
       'Intro prose that must survive untouched.',
       '',
       'CamVid [8] 2008 4 0.4 18k 0 0 700',
@@ -920,6 +922,9 @@ describe('repairMarkdownTablesWithLayout', () => {
 
     const result = repairMarkdownTablesWithLayout(markdown, layout);
     expect(result).toContain('We provide a comparison in Table 1 and details online.');
+    expect(result).toContain(
+      'nuScenes is a leap forward in data volumes and complexities (Table 1), and is the first.'
+    );
     expect(result).toContain('Intro prose that must survive untouched.');
     // The table sits at the caption, and both collapsed source lines are gone.
     expect(result).not.toContain('CamVid [8] 2008 4 0.4');

@@ -287,12 +287,17 @@ function looksLikeAffiliation(text: string): boolean {
 export function applyLayoutHeadings(markdown: string, layoutText?: string): string {
   if (!layoutText) return markdown;
 
+  // Whether a heading existed *before* promotion decides how the title is
+  // applied: a section heading this pass creates must not be mistaken for the
+  // paper title and retitled.
+  const hadHeading = /^\s*#{1,6}\s+\S/m.test(markdown);
+
   let result = markdown;
   for (const heading of extractLayoutHeadings(layoutText)) {
     result = promoteHeading(result, heading);
   }
 
-  return applyTitleHeading(result, extractLayoutTitle(layoutText));
+  return applyTitleHeading(result, extractLayoutTitle(layoutText), hadHeading);
 }
 
 function promoteHeading(markdown: string, heading: LayoutHeading): string {
@@ -301,16 +306,28 @@ function promoteHeading(markdown: string, heading: LayoutHeading): string {
 
   const marker = '#'.repeat(heading.level);
   let replaced = false;
+  let inFence = false;
+  let inMath = false;
 
   return markdown
     .split('\n')
     .map((line) => {
-      if (replaced) return line;
-      // Never rewrite existing headings, table rows, math, or quoted blocks.
-      // A long line only *looks* like a heading — "# of frames 1 2 4 IoU …" is a
+      const trimmed = line.trim();
+      if (/^(?:```|~~~)/.test(trimmed)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (trimmed === '$$') {
+        inMath = !inMath;
+        return line;
+      }
+      if (replaced || inFence || inMath) return line;
+
+      // Never rewrite existing headings, table rows, or quoted blocks. A long
+      // line only *looks* like a heading — "# of frames 1 2 4 IoU …" is a
       // collapsed table row, and may still carry a real heading inside it.
-      const isExistingHeading = /^\s*#{1,6}\s/.test(line) && line.trim().length <= 120;
-      if (isExistingHeading || /^\s*(?:\||>|\$\$|```|~~~)/.test(line)) return line;
+      const isExistingHeading = /^#{1,6}\s/.test(trimmed) && trimmed.length <= 120;
+      if (isExistingHeading || /^(?:\||>)/.test(trimmed)) return line;
       const match = line.match(pattern);
       if (!match) return line;
 
@@ -336,11 +353,17 @@ function headingPattern(text: string): RegExp | undefined {
  * heading is retitled when the layout offers a fuller version (a title split
  * across lines); otherwise its level is simply corrected.
  */
-function applyTitleHeading(markdown: string, title: string | undefined): string {
+function applyTitleHeading(
+  markdown: string,
+  title: string | undefined,
+  hadHeading: boolean
+): string {
   const lines = markdown.split('\n');
   const firstHeadingIndex = lines.findIndex((line) => /^\s*#{1,6}\s+\S/.test(line));
 
-  if (firstHeadingIndex < 0) {
+  // No pre-existing heading means the title has nothing to correct — prepend it
+  // rather than commandeering a section heading this pass just recovered.
+  if (firstHeadingIndex < 0 || !hadHeading) {
     return title ? `# ${title}\n\n${markdown}` : markdown;
   }
 
@@ -354,7 +377,7 @@ function applyTitleHeading(markdown: string, title: string | undefined): string 
       isTitleNoiseLine(existing));
   lines[firstHeadingIndex] = `# ${useLayoutTitle ? title : existing}`;
 
-  if (useLayoutTitle) removeTitleRemainder(lines, firstHeadingIndex + 1, title, existing);
+  if (useLayoutTitle) removeTitleRemainder(lines, firstHeadingIndex + 1, title);
   return lines.join('\n');
 }
 
@@ -369,22 +392,26 @@ function titleExtends(title: string, existing: string): boolean {
 }
 
 /** Drop the orphaned tail of a title that pdf2md left as its own paragraph. */
-function removeTitleRemainder(
-  lines: string[],
-  startIndex: number,
-  title: string,
-  existing: string
-): void {
-  const remainder = title.slice(existing.length).trim().toLowerCase().replace(/\s+/g, ' ');
-  if (!remainder) return;
+function removeTitleRemainder(lines: string[], startIndex: number, title: string): void {
+  const normalizedTitle = normalizeForTitleMatch(title);
 
   for (let i = startIndex; i < Math.min(lines.length, startIndex + 6); i += 1) {
-    const candidate = lines[i].trim().toLowerCase().replace(/\s+/g, ' ');
+    const candidate = normalizeForTitleMatch(lines[i]);
     if (!candidate) continue;
-    if (remainder.startsWith(candidate) && candidate.length >= 8) {
-      lines.splice(i, 1);
+    // Any following paragraph wholly contained in the title is the orphaned
+    // tail pdf2md split off — whether the title extended the old heading or
+    // replaced it outright.
+    if (candidate.length >= 8 && normalizedTitle.includes(candidate)) {
+      // Drop the trailing blank too, so removing the paragraph does not leave a
+      // double gap behind the title.
+      const extra = !lines[i + 1]?.trim() && !lines[i - 1]?.trim() ? 2 : 1;
+      lines.splice(i, extra);
       return;
     }
     break;
   }
+}
+
+function normalizeForTitleMatch(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }

@@ -95,11 +95,11 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
  * reference continues in lowercase ("Table 1 shows").
  */
 function isTableCaptionPosition(line: string, captionIndex: number): boolean {
-  const wordBefore =
-    line
-      .slice(0, captionIndex)
-      .trim()
-      .match(/([^\s*_(]+)$/)?.[1] ?? '';
+  const before = line.slice(0, captionIndex).trimEnd();
+  // "(Table 1)" is a parenthetical cross-reference, never a caption.
+  if (/[([]$/.test(before)) return false;
+
+  const wordBefore = before.match(/([^\s*_([]+)$/)?.[1] ?? '';
   if (/^(?:in|on|see|from|of|to|and|via|cf\.?|tables?)$/i.test(wordBefore)) return false;
 
   const tail = line
@@ -109,7 +109,9 @@ function isTableCaptionPosition(line: string, captionIndex: number): boolean {
     );
   if (!tail) return false;
   if (tail[2]) return true;
-  return !/[a-z,;]/.test(tail[3] ?? '');
+  // A bare-number caption ("Table 1 An overview") continues in title case; a
+  // reference continues in lowercase ("Table 1 shows") or closes a bracket.
+  return !/[a-z,;)\]]/.test(tail[3] ?? '');
 }
 
 function looksLikeAnyCollapsedTableLine(line: string): boolean {

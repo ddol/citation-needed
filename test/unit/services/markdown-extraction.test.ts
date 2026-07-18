@@ -1,6 +1,8 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import * as dbModule from '../../../src/db/index';
+import * as markdownModule from '../../../src/verification/markdown';
 import { Database } from '../../../src/db/index';
 import {
   reextractMarkdownFromLocalPdfs,
@@ -144,6 +146,70 @@ describe('reextractMarkdownFromLocalPdfs', () => {
     });
   });
 
+  test('returns an empty summary when a DOI filter does not match a citation', async () => {
+    const summary = await reextractMarkdownFromLocalPdfs({
+      db,
+      doi: '10.1/not-found',
+      markdownPath: markdownDir,
+      extractMarkdown: jest.fn(),
+    });
+
+    expect(summary).toMatchObject({ scanned: 0, extracted: 0, missingPdf: 0, failed: 0 });
+  });
+
+  test('uses the default database and extractor when options omit them', async () => {
+    const pdfPath = path.join(pdfDir, 'default2026.pdf');
+    fs.writeFileSync(pdfPath, '%PDF-1.4\ndefault');
+
+    const fakeDb = {
+      getCitation: jest.fn().mockReturnValue({
+        id: 17,
+        doi: '10.1/default',
+        bibtexKey: 'default2026',
+        pdfPath,
+      }),
+      getAllCitations: jest.fn(),
+      getManifestation: jest.fn().mockReturnValue(undefined),
+      upsertManifestation: jest.fn(),
+    };
+
+    const getDatabaseSpy = jest.spyOn(dbModule, 'getDatabase').mockReturnValue(fakeDb as never);
+    const extractSpy = jest
+      .spyOn(markdownModule, 'extractPdfMarkdown')
+      .mockResolvedValue('default markdown');
+
+    try {
+      const summary = await reextractMarkdownFromLocalPdfs({
+        doi: '10.1/default',
+        markdownPath: markdownDir,
+      });
+
+      expect(summary).toMatchObject({ scanned: 1, extracted: 1, missingPdf: 0, failed: 0 });
+      expect(getDatabaseSpy).toHaveBeenCalled();
+      expect(extractSpy).toHaveBeenCalledWith(pdfPath);
+      expect(fakeDb.getAllCitations).not.toHaveBeenCalled();
+      expect(fs.readFileSync(path.join(markdownDir, 'default2026.md'), 'utf-8')).toBe(
+        'default markdown'
+      );
+    } finally {
+      getDatabaseSpy.mockRestore();
+      extractSpy.mockRestore();
+    }
+  });
+
+  test('reports non-Error extractor failures using their string value', async () => {
+    seedPdf('10.1/string-failure', 'stringfailure2026');
+
+    const summary = await reextractMarkdownFromLocalPdfs({
+      db,
+      markdownPath: markdownDir,
+      extractMarkdown: jest.fn().mockRejectedValue('extractor exploded'),
+    });
+
+    expect(summary).toMatchObject({ scanned: 1, extracted: 0, missingPdf: 0, failed: 1 });
+    expect(summary.errors).toEqual([{ doi: '10.1/string-failure', message: 'extractor exploded' }]);
+  });
+
   test('extracts markdown directly from a local PDF folder without DB rows', async () => {
     const nestedPdfDir = path.join(pdfDir, 'nested');
     fs.mkdirSync(nestedPdfDir, { recursive: true });
@@ -174,5 +240,56 @@ describe('reextractMarkdownFromLocalPdfs', () => {
       'markdown for second.pdf'
     );
     expect(onProgress.mock.calls.map(([progress]) => progress.current)).toEqual([0, 1, 2]);
+  });
+
+  test('returns an empty folder summary when the paper path does not exist', async () => {
+    const summary = await reextractMarkdownFromPdfFolder({
+      paperPath: path.join(dir, 'missing-pdf-root'),
+      markdownPath: markdownDir,
+      extractMarkdown: jest.fn(),
+    });
+
+    expect(summary).toMatchObject({ scanned: 0, extracted: 0, missingPdf: 0, failed: 0 });
+  });
+
+  test('uses the default folder extractor and ignores nested PDFs when recursive is false', async () => {
+    const topLevelPdf = path.join(pdfDir, 'alpha.pdf');
+    const nestedDir = path.join(pdfDir, 'nested');
+    const nestedPdf = path.join(nestedDir, 'beta.pdf');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    fs.writeFileSync(topLevelPdf, '%PDF-1.4\nalpha');
+    fs.writeFileSync(nestedPdf, '%PDF-1.4\nbeta');
+
+    const extractSpy = jest
+      .spyOn(markdownModule, 'extractPdfMarkdown')
+      .mockResolvedValue('folder markdown');
+
+    try {
+      const summary = await reextractMarkdownFromPdfFolder({
+        paperPath: pdfDir,
+        markdownPath: markdownDir,
+      });
+
+      expect(summary).toMatchObject({ scanned: 1, extracted: 1, missingPdf: 0, failed: 0 });
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      expect(extractSpy).toHaveBeenCalledWith(topLevelPdf);
+      expect(fs.existsSync(path.join(markdownDir, 'nested', 'beta.md'))).toBe(false);
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  test('reports non-Error folder extraction failures using their string value', async () => {
+    const pdfPath = path.join(pdfDir, 'broken.pdf');
+    fs.writeFileSync(pdfPath, '%PDF-1.4\nbroken');
+
+    const summary = await reextractMarkdownFromPdfFolder({
+      paperPath: pdfDir,
+      markdownPath: markdownDir,
+      extractMarkdown: jest.fn().mockRejectedValue('folder extractor exploded'),
+    });
+
+    expect(summary).toMatchObject({ scanned: 1, extracted: 0, missingPdf: 0, failed: 1 });
+    expect(summary.errors).toEqual([{ doi: 'broken', message: 'folder extractor exploded' }]);
   });
 });
