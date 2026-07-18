@@ -90,6 +90,21 @@ describe('extractLayoutEquations', () => {
     expect(equation?.latex).toContain('L = L_{cls} + \\alpha');
   });
 
+  test('does not build a fraction out of neighbouring prose words', () => {
+    // Li2022HDMap eq (5): the line below carries the next sentence, which must
+    // not become a denominator.
+    const layout = [
+      '                                  6= cB',
+      '                    L = αLvar + βLdist .                        (5)',
+      '                                  Our method uses two losses.',
+    ].join('\n');
+
+    const latex = extractLayoutEquations(layout).get('5')?.latex ?? '';
+    expect(latex).not.toContain('Our');
+    expect(latex).not.toContain('\\frac');
+    expect(latex).toContain('L = \\alpha');
+  });
+
   test('ignores citation-style numbers inside prose', () => {
     const layout = [
       'as shown in previous work (1) and later confirmed by the follow-up study,',

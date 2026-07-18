@@ -68,7 +68,18 @@ function labeledEquationsOnLine(
     // spaces away) or the line end may follow.
     if (after.trim() && !/^\s{2,}/.test(after)) continue;
 
-    const latex = reconstructEquation(lines, lineIndex, labelStart);
+    // A wide equation pushes its label onto its own line, one or two rows below
+    // the relation. Fall back to those rows when the label's own line yields no
+    // relation — otherwise the neighbouring column's prose gets reconstructed.
+    let latex: string | undefined;
+    for (const offset of [0, -1, -2]) {
+      const candidate = reconstructEquation(lines, lineIndex + offset, labelStart);
+      if (candidate?.includes('=')) {
+        latex = candidate;
+        break;
+      }
+      latex ??= candidate;
+    }
     if (latex) results.push({ label: match[1], latex });
   }
 
@@ -278,6 +289,9 @@ function assembleParts(mainTokens: Token[], contextRows: ContextRow[]): PlacedPa
     if (denominatorTokens.length === 0) continue;
 
     const merged = mergeAdjacent(denominatorTokens, belowTokens, claimed);
+    // A capitalized word on either side is the neighbouring sentence bleeding
+    // in ("\frac{...}{Our}"), not a real numerator or denominator.
+    if ([numerator, ...merged].some((token) => isProseWord(token.text))) continue;
     claimed.add(numerator);
     for (const token of merged) claimed.add(token);
     parts.push({
@@ -299,6 +313,11 @@ function assembleParts(mainTokens: Token[], contextRows: ContextRow[]): PlacedPa
   }
 
   return parts;
+}
+
+/** An ordinary English word — never part of a fraction or a sum limit. */
+function isProseWord(text: string): boolean {
+  return /^[A-Z][a-z]{2,}[.,]?$/.test(text) || /^[a-z]{3,}[.,]?$/.test(text);
 }
 
 /** Grow a denominator group with tokens separated by a single space. */
@@ -422,6 +441,15 @@ export function repairSubscripts(text: string): string {
   );
 }
 
+/**
+ * Whether the reconstruction actually recovered 2D structure worth preferring
+ * over the row-serialized fallback. A bare token sequence with no relation is
+ * no better than what pdf2md already produced, so it must not displace it.
+ */
+export function isConfidentReconstruction(latex: string): boolean {
+  return /=|\\frac|\\begin\{cases\}|\\sum_/.test(latex);
+}
+
 function looksLikeEquationLatex(latex: string): boolean {
   if (latex.length < 3 || latex.length > 400) return false;
   const mathSignals = (latex.match(/[=+\-*/^_{}|]|\\(?:frac|sum|in|ne|le|ge|cdot|begin)/g) ?? [])
@@ -442,9 +470,14 @@ export function replaceLabeledEquationsFromLayout(markdown: string, layoutText?:
   const replacedLabels = new Set<string>();
   const replaced = markdown.replace(
     /\$\$\n([\s\S]*?)\\tag\{(\d{1,3})\}\n\$\$/g,
-    (block, _body: string, label: string) => {
+    (block, body: string, label: string) => {
       const recovered = equations.get(label);
       if (!recovered) return block;
+      // Replace when the reconstruction recovered real structure, or when the
+      // block it would replace is itself stacked into rows — there, any valid
+      // single-line rebuild beats the fracture.
+      const stacked = /\\\\/.test(body);
+      if (!stacked && !isConfidentReconstruction(recovered.latex)) return block;
       replacedLabels.add(label);
       return ['$$', recovered.latex, `\\tag{${label}}`, '$$'].join('\n');
     }

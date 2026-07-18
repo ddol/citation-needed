@@ -4,7 +4,11 @@ import pdf2md from '@opendocsg/pdf2md';
 import { createLogger } from '../utils/logger';
 import { extractPdfLayoutText, repairMarkdownTablesWithLayout } from './layout-tables';
 import { applyLayoutHeadings } from './layout-headings';
-import { extractLayoutEquations, replaceLabeledEquationsFromLayout } from './layout-equations';
+import {
+  extractLayoutEquations,
+  isConfidentReconstruction,
+  replaceLabeledEquationsFromLayout,
+} from './layout-equations';
 
 const logger = createLogger('pdf-markdown');
 
@@ -1174,6 +1178,7 @@ function equationsForLayout(layoutText: string): Map<string, { page: number; mar
   // The 2D reconstruction is the primary source — the same one that rewrites
   // the labeled $$ blocks, so a recovered-missing equation matches its siblings.
   for (const [label, equation] of extractLayoutEquations(layoutText)) {
+    if (!isConfidentReconstruction(equation.latex)) continue;
     equations.set(label, {
       page: equation.page,
       markdown: ['$$', equation.latex, `\\tag{${label}}`, '$$'].join('\n'),
