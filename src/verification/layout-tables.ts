@@ -150,16 +150,20 @@ function extractPageLayoutTables(lines: string[]): LayoutTable[] {
     const match = lines[i].match(LAYOUT_CAPTION_RE);
     if (!match) continue;
 
-    const block = collectBlockAboveCaption(lines, i, match.index!);
-    const markdown = layoutBlockToMarkdown(block);
-    if (markdown) {
-      tables.push({ number: match[1], markdown, placement: 'above' });
+    const aboveBlock = collectBlockAboveCaption(lines, i, match.index!);
+    const above = layoutBlockToMarkdown(aboveBlock);
+    if (above) {
+      tables.push({ number: match[1], markdown: above, placement: 'above' });
       continue;
     }
 
-    const belowMarkdown = layoutBlockToMarkdown(collectBlockBelowCaption(lines, i));
-    if (belowMarkdown) {
-      tables.push({ number: match[1], markdown: belowMarkdown, placement: 'below' });
+    // A grouped ablation table's caption always sits above its data, so recover
+    // it only from the below-caption block. Running it on the above block would
+    // wrongly re-parse the preceding table when two share a page.
+    const belowBlock = collectBlockBelowCaption(lines, i);
+    const below = layoutBlockToMarkdown(belowBlock) ?? packedGroupedTableToMarkdown(belowBlock);
+    if (below) {
+      tables.push({ number: match[1], markdown: below, placement: 'below' });
     }
   }
 
@@ -256,6 +260,11 @@ function inferTableStart(lines: string[], captionIndex: number, captionIndent: n
 }
 
 function layoutBlockToMarkdown(lines: string[]): string | undefined {
+  // A header whose columns are separated by single spaces collapses to one
+  // segment (e.g. `ActorNet MapNet L2A … minFDE`), so column anchoring can only
+  // produce a mangled grid. Bail to the preformatted fallback instead.
+  if (hasPackedHeaderRow(lines)) return undefined;
+
   const segmentedRows = lines
     .map((line) => segmentsForLine(line))
     .filter((segments) => segments.length > 0 && !looksLikeProseSegments(segments));
@@ -288,6 +297,164 @@ function layoutBlockToMarkdown(lines: string[]): string | undefined {
     formatMarkdownRow(Array.from({ length: width }, () => '---')),
     ...finalBody.map(formatMarkdownRow),
   ].join('\n');
+}
+
+/**
+ * True when a row packs six or more short column labels with single spaces, so
+ * `segmentsForLine` (which only splits on runs of two-plus spaces) can't see the
+ * columns. Multi-space-separated headers segment cleanly and are not flagged.
+ */
+function hasPackedHeaderRow(lines: string[]): boolean {
+  return lines.some((line) => {
+    const spaceTokens = line.trim().split(/\s+/).filter(Boolean);
+    if (spaceTokens.length < 6 || !spaceTokens.every((token) => token.length <= 12)) {
+      return false;
+    }
+    return segmentsForLine(line).length * 3 <= spaceTokens.length;
+  });
+}
+
+interface PositionedToken {
+  text: string;
+  center: number;
+}
+
+/**
+ * Recover a real Markdown table from an ablation-style block whose leaf header is
+ * packed with single spaces (`ActorNet MapNet L2A … minFDE`) over group labels
+ * (`Backbone FusionNet K=1 K=6`). `pdftotext -layout` compresses the sparse `X`
+ * marks so they no longer sit under their header column, but it preserves their
+ * left-to-right order — so a *monotonic* nearest-column assignment (each token to
+ * the closest column at or after the previous token's) places every cell
+ * correctly. Duplicate leaf headers are disambiguated with their group label
+ * (`minADE (K=1)` vs `minADE (K=6)`).
+ */
+function packedGroupedTableToMarkdown(lines: string[]): string | undefined {
+  const rows = lines.map((line) => line.replace(/\s+$/, '')).filter((line) => line.trim());
+  const bodyStart = rows.findIndex(isPackedBodyRow);
+  if (bodyStart < 1) return undefined;
+
+  const bodyRows = rows.slice(bodyStart).filter(isPackedBodyRow);
+  if (bodyRows.length < 2) return undefined;
+
+  const leafTokens = positionedTokens(rows[bodyStart - 1]);
+  if (leafTokens.length < 4) return undefined;
+  const anchors = leafTokens.map((token) => token.center);
+  const firstAnchor = anchors[0];
+  const labelCut = firstAnchor - 4;
+
+  // A leading label column exists when body rows carry text left of the first
+  // numeric column (row names like `Argoverse Baseline [9]`), which the packed
+  // leaf header does not cover. Those tokens collapse into one label cell.
+  const aboveLeaf = rows.slice(0, bodyStart - 1).map(positionedTokens);
+  const hasLabelColumn = bodyRows.some((row) =>
+    positionedTokens(row).some((token) => token.center < labelCut)
+  );
+
+  const assigned: string[][] = [];
+  for (const row of bodyRows) {
+    const tokens = positionedTokens(row);
+    const dataTokens = hasLabelColumn ? tokens.filter((token) => token.center >= labelCut) : tokens;
+    const cells = assignMonotonic(dataTokens, anchors);
+    if (!cells) return undefined; // more tokens than columns → not this shape
+    const fullRow = hasLabelColumn
+      ? [
+          tokens
+            .filter((token) => token.center < labelCut)
+            .map((token) => token.text)
+            .join(' '),
+          ...cells,
+        ]
+      : cells;
+    if (fullRow.filter(Boolean).length >= 2) assigned.push(fullRow);
+  }
+  if (assigned.length < 2) return undefined;
+
+  const groupRow = aboveLeaf.find(
+    (row) => row.length >= 2 && row.some((token) => token.center >= labelCut)
+  );
+  let header = qualifyPackedHeader(
+    leafTokens.map((token) => token.text),
+    anchors,
+    groupRow
+  );
+  if (hasLabelColumn) {
+    const labelRow = aboveLeaf.find(
+      (row) => row.length >= 1 && row.every((token) => token.center < firstAnchor)
+    );
+    header = [labelRow ? labelRow.map((token) => token.text).join(' ') : 'Column 1', ...header];
+  }
+
+  return [
+    formatMarkdownRow(header),
+    formatMarkdownRow(header.map(() => '---')),
+    ...assigned.map(formatMarkdownRow),
+  ].join('\n');
+}
+
+/** A body row of a packed ablation table ends in a run of three or more numbers. */
+function isPackedBodyRow(line: string): boolean {
+  const tokens = positionedTokens(line);
+  if (tokens.length < 4) return false;
+  let trailing = 0;
+  for (let i = tokens.length - 1; i >= 0; i -= 1) {
+    if (/^\d+(?:\.\d+)?%?$/.test(tokens[i].text)) trailing += 1;
+    else break;
+  }
+  return trailing >= 3;
+}
+
+function positionedTokens(line: string): PositionedToken[] {
+  return Array.from(line.matchAll(/\S+/g), (match) => ({
+    text: match[0],
+    center: match.index! + match[0].length / 2,
+  }));
+}
+
+function assignMonotonic(tokens: PositionedToken[], anchors: number[]): string[] | null {
+  const cells = anchors.map(() => '');
+  let minColumn = 0;
+  for (const token of tokens) {
+    let best = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let column = minColumn; column < anchors.length; column += 1) {
+      const distance = Math.abs(token.center - anchors[column]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = column;
+      }
+    }
+    if (best < 0) return null; // ran out of columns
+    cells[best] = cells[best] ? `${cells[best]} ${token.text}` : token.text;
+    minColumn = best + 1;
+  }
+  return cells;
+}
+
+function qualifyPackedHeader(
+  leafNames: string[],
+  anchors: number[],
+  groupRow: PositionedToken[] | undefined
+): string[] {
+  const duplicated = new Set(leafNames.filter((name, index) => leafNames.indexOf(name) !== index));
+  const groups = groupRow ? groupLabelForColumn(anchors, groupRow) : [];
+
+  return leafNames.map((name, index) => {
+    const group = groups[index];
+    return duplicated.has(name) && group ? `${name} (${group})` : name;
+  });
+}
+
+/** Map each leaf column to the group label whose span (midpoints between labels) contains it. */
+function groupLabelForColumn(anchors: number[], groupRow: PositionedToken[]): string[] {
+  const bounds = groupRow.map((label, index) => {
+    const next = groupRow[index + 1];
+    return next ? (label.center + next.center) / 2 : Number.POSITIVE_INFINITY;
+  });
+  return anchors.map((anchor) => {
+    const groupIndex = bounds.findIndex((upper) => anchor < upper);
+    return groupIndex >= 0 ? groupRow[groupIndex].text : '';
+  });
 }
 
 function hasNumericBody(rows: string[][]): boolean {

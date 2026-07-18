@@ -76,10 +76,16 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
       )
     )
   );
+  // Strip glyph garble now, not on the raw extraction: only after prettier's
+  // proseWrap isolates the substitution-font diagram labels onto their own lines
+  // does the per-line majority test see them; before that they ride on long
+  // lines mixed with real prose. The final format pass then collapses the gaps.
   const finalPass = await formatGeneratedMarkdown(
     removeDuplicateMarkdownTables(
       repairEquationBlocks(
-        repairLooseLineSpacing(repairMarkdownTablesWithLayout(firstPass, layoutText))
+        repairLooseLineSpacing(
+          repairMarkdownTablesWithLayout(stripGlyphGarbleLines(firstPass), layoutText)
+        )
       )
     )
   );
@@ -88,6 +94,56 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
   );
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
+}
+
+/**
+ * Drop lines that are dominated by shifted-font glyph garble — the undecodable
+ * runs pdf2md emits for figure/diagram labels drawn in a subset font (e.g.
+ * `$FWRU1HW 0DS1HW` for "ActorNet MapNet"). These have a font-specific
+ * substitution with no ToUnicode map, so they can't be recovered here; the real
+ * labels are the vision pipeline's job (see docs/plans/visual-extraction.md).
+ * Deliberately strict — three-plus garble tokens forming the majority of a line
+ * — so acronyms (`CNN`, `BEV`), module names (`L2A`), and short math fragments
+ * survive. Never touches fenced code or `$$` math.
+ */
+export function stripGlyphGarbleLines(markdown: string): string {
+  const kept: string[] = [];
+  let inFence = false;
+  let inMath = false;
+
+  for (const line of markdown.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      kept.push(line);
+      continue;
+    }
+    if (line.trim() === '$$') {
+      inMath = !inMath;
+      kept.push(line);
+      continue;
+    }
+    if (!inFence && !inMath && isGlyphGarbleLine(line)) continue;
+    kept.push(line);
+  }
+
+  return kept.join('\n');
+}
+
+function isGlyphGarbleLine(line: string): boolean {
+  const tokens = line
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length >= 2);
+  if (tokens.length < 3) return false;
+  const garble = tokens.filter(isGlyphGarbleToken).length;
+  return garble >= 3 && garble * 2 >= tokens.length;
+}
+
+function isGlyphGarbleToken(token: string): boolean {
+  if (/[a-z]/.test(token)) return false; // real words carry lowercase letters
+  if (!/[A-Z]/.test(token)) return false; // must contain a letter, not pure punctuation
+  if (/[$%'/*+&^]/.test(token)) return true; // symbols the substitution font produces
+  return token.length >= 5 && /\d/.test(token); // long uppercase+digit gibberish
 }
 
 export function normalizeExtractionArtifacts(markdown: string): string {
@@ -320,7 +376,7 @@ export function addFigureSourceLinks(
   for (let i = 0; i < lines.length; i += 1) {
     repaired.push(lines[i]);
     const caption = figureCaptionForLine(lines[i]);
-    if (!caption) continue;
+    if (!caption || !isFigureCaptionLine(lines[i])) continue;
 
     const next = nextNonEmptyLine(lines, i + 1);
     if (/^>\s*Figure source:/i.test(next)) continue;
@@ -346,12 +402,13 @@ export function addMissingSourcePlaceholders(
   const markdownEquations = equationsInMarkdown(markdown);
   const layoutEquations = equationsForLayout(layoutText);
 
-  for (const [figure, page] of figurePagesForLayout(layoutText).entries()) {
+  for (const [figure, { page, caption }] of figureCaptionsForLayout(layoutText)) {
     if (markdownFigures.has(figure)) continue;
+    const captionLine = caption || `Figure ${figure}.`;
     sections = appendToMarkdownPageSection(
       sections,
       page,
-      `Figure ${figure}. Source figure not extracted; see [PDF page ${page}](${pdfLink}#page=${page}).`
+      `${captionLine}\n\n> Figure source: [PDF page ${page}](${pdfLink}#page=${page}) — source image not extracted`
     );
   }
 
@@ -518,6 +575,12 @@ function splitEmbeddedCaption(line: string): string[] {
   const caption = line.slice(match.index!).trimStart();
   if (!/[.!?)]$/.test(prefix) && prefix.length < 80) return [line];
 
+  // A preposition before the marker means this is a cross-reference ("…the
+  // cases in Fig. 5. To account…"), not a caption — leave it in the prose so it
+  // is not mistaken for a real caption and does not suppress the recovered one.
+  const referenceWord = prefix.match(/(\S+)$/)?.[1] ?? '';
+  if (/^(?:in|on|see|from|of|to|and|via|cf\.?|figs?\.?)$/i.test(referenceWord)) return [line];
+
   return [prefix, '', caption];
 }
 
@@ -664,7 +727,33 @@ function trimReferenceEntryCruft(entry: string): { entry: string; terminate: boo
     };
   }
 
+  const trailingCaption = trimTrailingCaptionJunk(entry);
+  if (trailingCaption) return trailingCaption;
+
   return { entry, terminate: false };
+}
+
+/**
+ * A reference ends at its publication year; a running header, bold figure
+ * legend, numbered figure/table caption, or extraction-glyph garble that follows
+ * one was pulled in across a page break (e.g. the last reference absorbing the
+ * appendix figures). Cut back to the terminal `(YEAR)` and stop the list, so the
+ * trailing captions are never emitted as fake entries. Requiring a preceding
+ * year keeps legitimate mid-title Greek letters or emphasis from tripping this.
+ */
+function trimTrailingCaptionJunk(entry: string): { entry: string; terminate: boolean } | undefined {
+  const junk = entry.match(/\s\*\*|\s[εϵ]|\b(?:Fig(?:ure|\.)|Tab(?:le|\.))\s+\d/);
+  if (junk?.index === undefined) return undefined;
+
+  const head = entry.slice(0, junk.index);
+  const years = Array.from(head.matchAll(/\((?:19|20)\d{2}[a-z]?\)/g));
+  const lastYear = years[years.length - 1];
+  if (lastYear?.index === undefined) return undefined;
+
+  return {
+    entry: entry.slice(0, lastYear.index + lastYear[0].length).trim(),
+    terminate: true,
+  };
 }
 
 function equationLinesToMathBlock(lines: string[]): string[] {
@@ -907,6 +996,64 @@ function figurePagesForLayout(layoutText: string): Map<string, number> {
   return pages;
 }
 
+/**
+ * Figure id → its page and the full caption text recovered from the layout.
+ * The page key matches {@link figurePagesForLayout} (first caption occurrence),
+ * so which figures count as missing is unchanged — only the placeholder text
+ * gains the real caption. Caption text is only captured when the layout line
+ * starts with the figure marker, not for in-prose mentions.
+ */
+function figureCaptionsForLayout(
+  layoutText: string
+): Map<string, { page: number; caption: string }> {
+  const captions = new Map<string, { page: number; caption: string }>();
+  for (const [index, page] of layoutText.split('\f').entries()) {
+    const lines = page.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i += 1) {
+      // Only a caption-position line registers a figure. An in-text mention
+      // ("… In Fig. 5, we compare …") must not shadow the real caption on a
+      // later page with an empty entry and the wrong page number.
+      if (!isFigureCaptionLine(lines[i])) continue;
+      const figure = figureCaptionForLine(lines[i]);
+      if (!figure || captions.has(figure)) continue;
+      captions.set(figure, { page: index + 1, caption: collectLayoutCaption(lines, i) });
+    }
+  }
+  return captions;
+}
+
+function collectLayoutCaption(lines: string[], startIndex: number): string {
+  const parts = [lines[startIndex].trim()];
+  for (let i = startIndex + 1; i < lines.length && parts.length < 8; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed || isCaptionContinuationBoundary(trimmed)) break;
+    parts.push(trimmed);
+  }
+  return dehyphenateCaption(parts);
+}
+
+function isCaptionContinuationBoundary(line: string): boolean {
+  return (
+    /^\d{1,4}\s+[A-Z]/.test(line) || // running header, e.g. "18   M. Liang et al."
+    /^(?:Figure|Fig\.?|Table|Tab\.?|Chart)\s+\d/i.test(line) || // next caption
+    /^(?:#{1,6}\s|\d+(?:\.\d+)?\.?\s+[A-Z][a-z])/.test(line) || // section heading
+    /^\[\d{1,3}\]/.test(line) || // reference entry
+    /\(\d{1,3}\)\s*$/.test(line) // a display equation ending in a (N) label
+  );
+}
+
+function dehyphenateCaption(parts: string[]): string {
+  let text = '';
+  for (const part of parts) {
+    if (!text) {
+      text = part;
+      continue;
+    }
+    text = /[A-Za-z]-$/.test(text) ? `${text.slice(0, -1)}${part}` : `${text} ${part}`;
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 function equationPagesForLayout(layoutText: string): Map<string, number> {
   const pages = new Map<string, number>();
   for (const [equation, recovered] of equationsForLayout(layoutText).entries()) {
@@ -967,9 +1114,29 @@ function figuresInMarkdown(markdown: string): Set<string> {
   const figures = new Set<string>();
   for (const line of markdown.split(/\r?\n/)) {
     const caption = figureCaptionForLine(line);
-    if (caption) figures.add(caption);
+    if (caption && isFigureCaptionLine(line)) figures.add(caption);
   }
   return figures;
+}
+
+/**
+ * Whether a line is a genuine figure caption rather than an in-text reference.
+ * A caption's marker either starts the line or follows a short title prefix
+ * ("Overview Figure 7. …"); a reference is preceded by a preposition ("… in
+ * Fig. 5, we compare …"). Only genuine captions count a figure as present, so a
+ * recovered caption is not suppressed — nor a source link misplaced — by a
+ * passing mention.
+ */
+function isFigureCaptionLine(line: string): boolean {
+  if (!figureCaptionForLine(line)) return false;
+  const marker = line.match(/\b(?:Figure|Fig\.?|Chart)\s+(?:S\.\d+|\d+(?:\.\d+)?)/i);
+  if (marker?.index === undefined) return false;
+  const wordBefore =
+    line
+      .slice(0, marker.index)
+      .trim()
+      .match(/(\S+)$/)?.[1] ?? '';
+  return !/^(?:in|on|see|from|of|to|and|via|cf\.?|figs?\.?)$/i.test(wordBefore);
 }
 
 function equationsInMarkdown(markdown: string): Set<string> {

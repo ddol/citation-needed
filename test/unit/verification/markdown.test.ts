@@ -18,6 +18,7 @@ import {
   repairLooseLineSpacing,
   repairMarkdownHeadings,
   repairMarkdownTables,
+  stripGlyphGarbleLines,
 } from '../../../src/verification/markdown';
 import { extractPdfMarkdown as exportedExtractPdfMarkdown } from '../../../src/verification';
 
@@ -160,6 +161,33 @@ describe('normalizeExtractionArtifacts', () => {
   });
 });
 
+describe('stripGlyphGarbleLines', () => {
+  test('drops shifted-font diagram-label garble but keeps prose, acronyms, and math', () => {
+    const markdown = [
+      '4 M. Liang et al. $FWRU1HW 0DS1HW )XVLRQ1HW +HDGHU /DQH*&1 /DQHWR/DQH',
+      'We use a 1D CNN and FPN over BEV features, with L2A and A2A fusion.',
+      '$$',
+      'L = D-1/2 (I + A) D-1/2 \\tag{3}',
+      '$$',
+      '3DVW7UDMHFWRULHVRI$FWRUV $WWHQWLRQ $FWRUWR/DQH',
+    ].join('\n');
+
+    expect(stripGlyphGarbleLines(markdown)).toBe(
+      [
+        'We use a 1D CNN and FPN over BEV features, with L2A and A2A fusion.',
+        '$$',
+        'L = D-1/2 (I + A) D-1/2 \\tag{3}',
+        '$$',
+      ].join('\n')
+    );
+  });
+
+  test('keeps an all-caps heading and short symbol fragments', () => {
+    const markdown = ['EXPERIMENTAL EVALUATION', 'R-GPF [2] vs LineFit [15]'].join('\n');
+    expect(stripGlyphGarbleLines(markdown)).toBe(markdown);
+  });
+});
+
 describe('repairCaptionBoundaries', () => {
   test('leaves empty lines, standalone captions, and weak embedded captions unchanged', () => {
     const markdown = [
@@ -189,6 +217,13 @@ describe('repairCaptionBoundaries', () => {
         'Next paragraph.',
       ].join('\n')
     );
+  });
+
+  test('does not split a long sentence that cross-references a figure', () => {
+    const markdown =
+      'This is well illustrated by the second and third cases in Fig. 5. To account for new map data, our model can be easily extended.';
+
+    expect(repairCaptionBoundaries(markdown)).toBe(markdown);
   });
 
   test('leaves citations and fenced code untouched', () => {
@@ -340,6 +375,26 @@ describe('normalizeReferenceList', () => {
         '',
         '1. First Author. First title. 1',
         '2. Second Author. Second title. 2',
+      ].join('\n')
+    );
+  });
+
+  test('terminates the last numbered reference before running-header and figure-caption junk', () => {
+    const markdown = [
+      '## References',
+      '',
+      '41. First Author. First title. In: ECCV (2020)',
+      '42. Ziegler, J., Bender, P., Stiller, C., et al.: Making bertha drive. IEEE ITS magazine 6 (2), 8–20 (2014) Learning Lane Graph Representations for Motion Forecasting 17 uulm-mrm jean cxx Ours **Trajectories end with a circle. Past trajectory** Fig.',
+      '5. Qualitative results on hard cases. See the text for more information.',
+      '6. Detailed Architecture. Learnable blocks are named in the form of layer type.',
+    ].join('\n');
+
+    expect(normalizeReferenceList(markdown)).toBe(
+      [
+        '## References',
+        '',
+        '41. First Author. First title. In: ECCV (2020)',
+        '42. Ziegler, J., Bender, P., Stiller, C., et al.: Making bertha drive. IEEE ITS magazine 6 (2), 8–20 (2014)',
       ].join('\n')
     );
   });
@@ -934,6 +989,7 @@ describe('addMissingSourcePlaceholders', () => {
       'x = y + z (1)',
       '\f',
       'Fig. 2. Detail.',
+      '',
       'Second page.',
     ].join('\n');
 
@@ -941,7 +997,9 @@ describe('addMissingSourcePlaceholders', () => {
       [
         'Intro text.',
         '',
-        'Figure 1. Source figure not extracted; see [PDF page 1](../pdf/Paper.pdf#page=1).',
+        'Figure 1. Overview.',
+        '',
+        '> Figure source: [PDF page 1](../pdf/Paper.pdf#page=1) — source image not extracted',
         '',
         '$$',
         'x = y + z',
@@ -950,7 +1008,9 @@ describe('addMissingSourcePlaceholders', () => {
         '<!-- PAGE_BREAK -->',
         'Second page text.',
         '',
-        'Figure 2. Source figure not extracted; see [PDF page 2](../pdf/Paper.pdf#page=2).',
+        'Fig. 2. Detail.',
+        '',
+        '> Figure source: [PDF page 2](../pdf/Paper.pdf#page=2) — source image not extracted',
         '',
       ].join('\n')
     );
@@ -1031,7 +1091,9 @@ describe('addMissingSourcePlaceholders', () => {
         '',
         '## Extracted Source Placeholders',
         '',
-        'Figure 6. Source figure not extracted; see [PDF page 1](../pdf/Paper.pdf#page=1).',
+        'Figure 6. Appendix figure.',
+        '',
+        '> Figure source: [PDF page 1](../pdf/Paper.pdf#page=1) — source image not extracted',
         '',
       ].join('\n')
     );
@@ -1047,7 +1109,9 @@ describe('addMissingSourcePlaceholders', () => {
         '<!-- PAGE_BREAK -->',
         'Second page text.',
         '',
-        'Figure 9. Source figure not extracted; see [PDF page 3](../pdf/Paper.pdf#page=3).',
+        'Figure 9. Third page figure.',
+        '',
+        '> Figure source: [PDF page 3](../pdf/Paper.pdf#page=3) — source image not extracted',
         '',
       ].join('\n')
     );

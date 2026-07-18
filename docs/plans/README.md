@@ -56,6 +56,7 @@ until the core loop proves valuable in daily use. Nothing is deleted.
 | [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                         | A              | fts5, indexing-jobs                                       |
 | [citation-graph.md](citation-graph.md)                       | Exploratory                      | C              | domain-model, indexing-jobs                               |
 | [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                      | C              | domain-model, fts5-full-text-search, later citation-graph |
+| [visual-extraction.md](visual-extraction.md)                 | Exploratory                      | Infrastructure | verification/ extraction pipeline                         |
 
 ## Flows
 

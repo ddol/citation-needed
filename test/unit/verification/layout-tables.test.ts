@@ -841,6 +841,61 @@ describe('repairMarkdownTablesWithLayout', () => {
     expect(repairMarkdownTablesWithLayout(markdown, layout)).toBe(markdown);
   });
 
+  test('decomposes a grouped-header ablation table into a real Markdown table', () => {
+    const markdown = [
+      'Importance of each module: In Table 2, we show the results.',
+      '| X X | Backbone | FusionNet | ActorNet MapNet L2A A2L L2L A2A minADE minFDE 1.90 X 1.58 |',
+      '| --- | --- | --- | --- |',
+    ].join('\n');
+    const layout = [
+      '                         Table 2. Ablation study results of modules',
+      '           Backbone       FusionNet           K=1           K=6',
+      '       ActorNet MapNet L2A A2L L2L A2A minADE minFDE minADE minFDE',
+      '          X                              1.90     4.38 0.91     1.66',
+      '          X                         X    1.58     3.61 0.79     1.29',
+      '          X       X     X                1.55     3.52 0.76     1.23',
+      '          X       X     X X X            1.39     3.05 0.72     1.10',
+      '          X       X     X X X X         1.35      2.97 0.71     1.08',
+    ].join('\n');
+
+    const result = repairMarkdownTablesWithLayout(markdown, layout);
+    expect(result).not.toContain('```text');
+    expect(result).not.toContain('| X X | Backbone |');
+    // Group labels disambiguate the duplicated leaf headers.
+    expect(result).toContain(
+      '| ActorNet | MapNet | L2A | A2L | L2L | A2A | minADE (K=1) | minFDE (K=1) | minADE (K=6) | minFDE (K=6) |'
+    );
+    // All six module marks land in the right columns despite layout compression.
+    expect(result).toContain('| X | X | X | X | X | X | 1.35 | 2.97 | 0.71 | 1.08 |');
+    // A sparse row leaves the untouched module columns empty.
+    expect(result).toContain('| X |  |  |  |  | X | 1.58 | 3.61 | 0.79 | 1.29 |');
+  });
+
+  test('decomposes a packed table with a leading multi-word label column', () => {
+    const markdown = [
+      'As shown in Table 1, our model wins.',
+      'Model K=1 K=6 minADE minFDE MR minADE minFDE MR Argoverse Baseline [9] 2.96 6.81 0.81',
+    ].join('\n');
+    const layout = [
+      '        Table 1. Results on Argoverse motion forecasting benchmark (test set)',
+      '                                         K=1              K=6',
+      '      Model',
+      '                                  minADE minFDE MR minADE minFDE MR',
+      '      Argoverse Baseline [9]        2.96   6.81 0.81 2.34   5.44 0.69',
+      '      Holmes (7th) [24]             2.91   6.54 0.82 1.38   2.66 0.42',
+      '      Our Model                     1.71   3.78 0.59 0.87   1.36 0.16',
+    ].join('\n');
+
+    const result = repairMarkdownTablesWithLayout(markdown, layout);
+    expect(result).toContain(
+      '| Model | minADE (K=1) | minFDE (K=1) | MR (K=1) | minADE (K=6) | minFDE (K=6) | MR (K=6) |'
+    );
+    expect(result).toContain(
+      '| Argoverse Baseline [9] | 2.96 | 6.81 | 0.81 | 2.34 | 5.44 | 0.69 |'
+    );
+    expect(result).toContain('| Our Model | 1.71 | 3.78 | 0.59 | 0.87 | 1.36 | 0.16 |');
+  });
+
   test('keeps nonnumeric metric header rows below captions', () => {
     const markdown = [
       'Table 2. Performance of the proposed approach on MOT benchmark sequences [6]. Method Type MOTA↑',
