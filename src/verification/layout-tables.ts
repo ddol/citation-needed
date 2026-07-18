@@ -44,6 +44,10 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
   for (let i = 0; i < lines.length; i += 1) {
     const match = lines[i].match(CAPTION_RE);
     if (!match) continue;
+    // Only a caption anchors a table. An in-text cross-reference ("… shown in
+    // Table 1, our model …") on an earlier page would otherwise claim the
+    // table first and splice it pages away from its caption.
+    if (!isTableCaptionPosition(lines[i], match.index!)) continue;
 
     const table = tables.find(
       (candidate) => candidate.number === match[1] && !usedTables.has(candidate)
@@ -72,12 +76,65 @@ export function repairMarkdownTablesWithLayout(markdown: string, layoutText?: st
 
     const previous = previousNonEmptyLine(lines, i);
     if (previous === undefined || lines[previous].trim().startsWith('|')) continue;
+    // The line being replaced must itself be table debris — replacing a real
+    // paragraph would destroy prose.
+    if (!looksLikeAnyCollapsedTableLine(lines[previous].trim())) continue;
 
     lines[previous] = table.markdown;
+    clearPrecedingCollapsedTableLines(lines, previous - 1);
     usedTables.add(table);
   }
 
   return lines.join('\n');
+}
+
+/**
+ * A caption anchors a table; an in-text cross-reference ("… shown in Table 1,
+ * our model …") must not. The word before the marker separates the two, and a
+ * bare-number caption ("Table 1 An overview") continues in title case where a
+ * reference continues in lowercase ("Table 1 shows").
+ */
+function isTableCaptionPosition(line: string, captionIndex: number): boolean {
+  const wordBefore =
+    line
+      .slice(0, captionIndex)
+      .trim()
+      .match(/([^\s*_(]+)$/)?.[1] ?? '';
+  if (/^(?:in|on|see|from|of|to|and|via|cf\.?|tables?)$/i.test(wordBefore)) return false;
+
+  const tail = line
+    .slice(captionIndex)
+    .match(
+      new RegExp(String.raw`^(?:Table|Tab\.?)\s+${TABLE_ID_RE}\s*([:.]?)\s*[*_]*\s*(.?)`, 'i')
+    );
+  if (!tail) return false;
+  if (tail[2]) return true;
+  return !/[a-z,;]/.test(tail[3] ?? '');
+}
+
+function looksLikeAnyCollapsedTableLine(line: string): boolean {
+  return (
+    looksLikeCollapsedTableLine(line) ||
+    looksLikeCategoricalCollapsedTableLine(line) ||
+    looksLikePackedTableLine(line) ||
+    looksLikePipeTableFragment(line)
+  );
+}
+
+/** The collapsed source rows may span several wrapped lines above the caption. */
+function clearPrecedingCollapsedTableLines(lines: string[], startIndex: number): void {
+  let end = startIndex;
+  while (end >= 0 && !lines[end].trim()) end -= 1;
+
+  let first = end + 1;
+  for (let i = end; i >= 0; i -= 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) break;
+    if (!looksLikeAnyCollapsedTableLine(trimmed)) break;
+    first = i;
+  }
+
+  if (first <= end) lines.splice(first, end - first + 1);
 }
 
 function clearFollowingCollapsedTableLines(lines: string[], startIndex: number): void {

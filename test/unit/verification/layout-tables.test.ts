@@ -844,6 +844,7 @@ describe('repairMarkdownTablesWithLayout', () => {
   test('decomposes a grouped-header ablation table into a real Markdown table', () => {
     const markdown = [
       'Importance of each module: In Table 2, we show the results.',
+      'Table 2. Ablation study results of modules',
       '| X X | Backbone | FusionNet | ActorNet MapNet L2A A2L L2L A2A minADE minFDE 1.90 X 1.58 |',
       '| --- | --- | --- | --- |',
     ].join('\n');
@@ -861,6 +862,8 @@ describe('repairMarkdownTablesWithLayout', () => {
     const result = repairMarkdownTablesWithLayout(markdown, layout);
     expect(result).not.toContain('```text');
     expect(result).not.toContain('| X X | Backbone |');
+    // The cross-reference sentence must not anchor the table.
+    expect(result).toContain('Importance of each module: In Table 2, we show the results.');
     // Group labels disambiguate the duplicated leaf headers.
     expect(result).toContain(
       '| ActorNet | MapNet | L2A | A2L | L2L | A2A | minADE (K=1) | minFDE (K=1) | minADE (K=6) | minFDE (K=6) |'
@@ -874,6 +877,7 @@ describe('repairMarkdownTablesWithLayout', () => {
   test('decomposes a packed table with a leading multi-word label column', () => {
     const markdown = [
       'As shown in Table 1, our model wins.',
+      'Table 1. Results on Argoverse motion forecasting benchmark (test set)',
       'Model K=1 K=6 minADE minFDE MR minADE minFDE MR Argoverse Baseline [9] 2.96 6.81 0.81',
     ].join('\n');
     const layout = [
@@ -894,6 +898,35 @@ describe('repairMarkdownTablesWithLayout', () => {
       '| Argoverse Baseline [9] | 2.96 | 6.81 | 0.81 | 2.34 | 5.44 | 0.69 |'
     );
     expect(result).toContain('| Our Model | 1.71 | 3.78 | 0.59 | 0.87 | 1.36 | 0.16 |');
+  });
+
+  test('an early cross-reference must not steal the table from its caption pages later', () => {
+    const markdown = [
+      'We provide a comparison in Table 1 and details online.',
+      '',
+      'Intro prose that must survive untouched.',
+      '',
+      'CamVid [8] 2008 4 0.4 18k 0 0 700',
+      'nuScenes 2019 1k 5.5 1.4M 400k 1.3M 40k',
+      'Table 1. AV dataset comparison. The top part indicates datasets without range data.',
+    ].join('\n');
+    const layout = [
+      'Dataset          Year      Size',
+      'CamVid [8]       2008      0.4',
+      'nuScenes         2019      5.5',
+      '',
+      'Table 1. AV dataset comparison.',
+    ].join('\n');
+
+    const result = repairMarkdownTablesWithLayout(markdown, layout);
+    expect(result).toContain('We provide a comparison in Table 1 and details online.');
+    expect(result).toContain('Intro prose that must survive untouched.');
+    // The table sits at the caption, and both collapsed source lines are gone.
+    expect(result).not.toContain('CamVid [8] 2008 4 0.4');
+    expect(result).not.toContain('nuScenes 2019 1k 5.5');
+    expect(result.indexOf('| Dataset | Year | Size |')).toBeLessThan(
+      result.indexOf('Table 1. AV dataset comparison. The top part')
+    );
   });
 
   test('keeps nonnumeric metric header rows below captions', () => {

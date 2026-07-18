@@ -4,6 +4,7 @@ import pdf2md from '@opendocsg/pdf2md';
 import { createLogger } from '../utils/logger';
 import { extractPdfLayoutText, repairMarkdownTablesWithLayout } from './layout-tables';
 import { applyLayoutHeadings } from './layout-headings';
+import { extractLayoutEquations, replaceLabeledEquationsFromLayout } from './layout-equations';
 
 const logger = createLogger('pdf-markdown');
 
@@ -100,9 +101,17 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
       )
     )
   );
-  const markdown = removeDuplicateMarkdownTables(
-    normalizeDisplayMathBlocks(repairNestedDisplayMathBlocks(finalPass))
-  );
+  // The layout text is the richer equation source: swap every labeled $$ block
+  // for its 2D-reconstructed LaTeX as the last step, after all pdf2md-side
+  // repairs have settled which blocks exist and where they sit.
+  const markdown = compactExcessBlankLines(
+    replaceLabeledEquationsFromLayout(
+      removeDuplicateMarkdownTables(
+        normalizeDisplayMathBlocks(repairNestedDisplayMathBlocks(finalPass))
+      ),
+      layoutText
+    ).split('\n')
+  ).join('\n');
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
 }
@@ -1161,6 +1170,16 @@ function equationPagesForLayout(layoutText: string): Map<string, number> {
 
 function equationsForLayout(layoutText: string): Map<string, { page: number; markdown: string }> {
   const equations = new Map<string, { page: number; markdown: string }>();
+
+  // The 2D reconstruction is the primary source — the same one that rewrites
+  // the labeled $$ blocks, so a recovered-missing equation matches its siblings.
+  for (const [label, equation] of extractLayoutEquations(layoutText)) {
+    equations.set(label, {
+      page: equation.page,
+      markdown: ['$$', equation.latex, `\\tag{${label}}`, '$$'].join('\n'),
+    });
+  }
+
   for (const [pageIndex, page] of layoutText.split('\f').entries()) {
     const lines = page.split(/\r?\n/);
     for (let i = 0; i < lines.length; i += 1) {
