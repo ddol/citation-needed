@@ -3,6 +3,7 @@ import path from 'path';
 import pdf2md from '@opendocsg/pdf2md';
 import { createLogger } from '../utils/logger';
 import { extractPdfLayoutText, repairMarkdownTablesWithLayout } from './layout-tables';
+import { applyLayoutHeadings } from './layout-headings';
 
 const logger = createLogger('pdf-markdown');
 
@@ -66,8 +67,13 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
             normalizeReferenceList(
               repairEquationBlocks(
                 repairCaptionBoundaries(
-                  repairMarkdownHeadings(
-                    repairMarkdownTablesWithLayout(repairMarkdownTables(extracted), layoutText)
+                  // After repairMarkdownHeadings so recovered section levels win
+                  // over its generic normalization (which flattens `A.` to h2).
+                  applyLayoutHeadings(
+                    repairMarkdownHeadings(
+                      repairMarkdownTablesWithLayout(repairMarkdownTables(extracted), layoutText)
+                    ),
+                    layoutText
                   )
                 )
               )

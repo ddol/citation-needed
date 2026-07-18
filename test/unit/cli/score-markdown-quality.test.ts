@@ -56,6 +56,8 @@ describe('score-markdown-quality command', () => {
         totalEquationRenderIssues: 0,
         totalSourceReferences: 3,
         totalMarkdownReferences: 3,
+        totalSourceHeadings: 4,
+        totalMissingMarkdownHeadings: 0,
       },
       papers: [
         {
@@ -118,6 +120,9 @@ describe('score-markdown-quality command', () => {
             sourceReferenceCount: 3,
             markdownReferenceCount: 3,
             referenceCoverageScore: 1,
+            sourceHeadingCount: 4,
+            markdownHeadingCount: 4,
+            headingCoverageScore: 1,
             headingFlowScore: 1,
             arxivPlacementScore: 0.75,
             completenessScore: 0.9,
@@ -156,7 +161,7 @@ describe('score-markdown-quality command', () => {
     });
     expect(output()).toContain('Scored 1/1 paper(s); average 92.5');
     expect(output()).toContain(
-      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (cov 100%, fmt 100%, body 100%, render 100%); refs 3/3 (100%); headings 100%; agent 100%; pages 2/2'
+      'paper-a: tables 2/2 (100%); charts 1/1 (100%); eqs 1/1 (cov 100%, fmt 100%, body 100%, render 100%); refs 3/3 (100%); headings 4/4 (cov 100%, flow 100%); agent 100%; pages 2/2'
     );
     expect(output()).toContain('source page 1: 1 table(s) (1)');
     expect(output()).toContain('source page 2: 1 table(s)');
@@ -183,6 +188,8 @@ describe('score-markdown-quality command', () => {
         totalEquationRenderIssues: 0,
         totalSourceReferences: 2,
         totalMarkdownReferences: 1,
+        totalSourceHeadings: 4,
+        totalMissingMarkdownHeadings: 2,
       },
       papers: [
         {
@@ -250,6 +257,9 @@ describe('score-markdown-quality command', () => {
             sourceReferenceCount: 2,
             markdownReferenceCount: 1,
             referenceCoverageScore: 0.5,
+            sourceHeadingCount: 4,
+            markdownHeadingCount: 2,
+            headingCoverageScore: 0.5,
             headingFlowScore: 0.7,
             arxivPlacementScore: 1,
             completenessScore: 0.8,

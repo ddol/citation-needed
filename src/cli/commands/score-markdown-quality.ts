@@ -54,6 +54,11 @@ function formatSummary(report: MarkdownQualityReport, failBelow?: number): strin
       `References: ${report.summary.totalMarkdownReferences}/${report.summary.totalSourceReferences} detected.`
     ),
     dim(
+      `Headings: ${report.summary.totalSourceHeadings - report.summary.totalMissingMarkdownHeadings}/` +
+        `${report.summary.totalSourceHeadings} recovered; ` +
+        `${report.summary.totalMissingMarkdownHeadings} missing.`
+    ),
+    dim(
       `Missing Markdown: ${report.summary.missingMarkdown}; missing PDF: ${report.summary.missingPdf}.`
     ),
   ];
@@ -90,7 +95,9 @@ function formatPaperLine(paper: MarkdownQualityPaper): string {
     `eqs ${paper.metrics.markdownEquationCount}/${paper.metrics.sourceEquationCount} ` +
     `(cov ${equationCoverage}%, fmt ${equationFormat}%, body ${equationContent}%, render ${equationRender}%); ` +
     `refs ${paper.metrics.markdownReferenceCount}/${paper.metrics.sourceReferenceCount} (${referenceCoverage}%); ` +
-    `headings ${headingCoverage}%; agent ${readability}%; ` +
+    `headings ${paper.metrics.markdownHeadingCount}/${paper.metrics.sourceHeadingCount} ` +
+    `(cov ${Math.round(paper.metrics.headingCoverageScore * 100)}%, flow ${headingCoverage}%); ` +
+    `agent ${readability}%; ` +
     `pages ${paper.metrics.markdownPages}/${paper.metrics.sourcePages}`
   );
 }

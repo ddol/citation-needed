@@ -6,6 +6,7 @@ import { getDatabase } from '../db/index';
 import { sanitizeFilename } from '../utils/file';
 import { resolveMarkdownPath } from './markdown-locator';
 import { extractPdfLayoutText } from '../verification/layout-tables';
+import { extractLayoutHeadings } from '../verification/layout-headings';
 
 export interface MarkdownQualityOptions {
   db?: Database;
@@ -90,6 +91,9 @@ export interface MarkdownQualityMetrics {
   sourceReferenceCount: number;
   markdownReferenceCount: number;
   referenceCoverageScore: number;
+  sourceHeadingCount: number;
+  markdownHeadingCount: number;
+  headingCoverageScore: number;
   headingFlowScore: number;
   arxivPlacementScore: number;
   completenessScore: number;
@@ -124,6 +128,10 @@ export interface MarkdownQualityPaper {
   equationRenderIssues: EquationRenderIssue[];
   sourceReferenceCount: number;
   markdownReferenceCount: number;
+  sourceHeadingsByPage: SourceNumberedPage[];
+  sourceHeadings: string[];
+  markdownHeadings: string[];
+  missingMarkdownHeadings: string[];
   headingIssues: HeadingIssue[];
   agentReadabilityIssues: AgentReadabilityIssue[];
   parserImprovementSuggestions: string[];
@@ -149,6 +157,8 @@ export interface MarkdownQualitySummary {
   totalEquationRenderIssues: number;
   totalSourceReferences: number;
   totalMarkdownReferences: number;
+  totalSourceHeadings: number;
+  totalMissingMarkdownHeadings: number;
 }
 
 export interface MarkdownQualityReport {
@@ -237,6 +247,14 @@ export async function scoreMarkdownQuality(
     (sum, paper) => sum + paper.metrics.markdownReferenceCount,
     0
   );
+  const totalSourceHeadings = papers.reduce(
+    (sum, paper) => sum + paper.metrics.sourceHeadingCount,
+    0
+  );
+  const totalMissingMarkdownHeadings = papers.reduce(
+    (sum, paper) => sum + paper.missingMarkdownHeadings.length,
+    0
+  );
 
   return {
     summary: {
@@ -257,6 +275,8 @@ export async function scoreMarkdownQuality(
       totalEquationRenderIssues,
       totalSourceReferences,
       totalMarkdownReferences,
+      totalSourceHeadings,
+      totalMissingMarkdownHeadings,
     },
     papers,
   };
@@ -369,6 +389,24 @@ async function scorePaper(
   );
   const sourceEquationNumbers = unique(sourceEquationEvidence.map((equation) => equation.number));
   const sourceReferenceCount = countReferences(layoutText ?? '');
+  const layoutHeadings = layoutText ? extractLayoutHeadings(layoutText) : [];
+  const sourceHeadings = unique(layoutHeadings.map((heading) => heading.text));
+  const sourceHeadingsByPage = sourcePages.map((_pageText, index) => {
+    const numbers = layoutHeadings
+      .filter((heading) => heading.page === index + 1)
+      .map((heading) => heading.text);
+    return { page: index + 1, count: numbers.length, numbers };
+  });
+  const markdownHeadings = markdown ? markdownHeadingTexts(markdown) : [];
+  const markdownHeadingKeys = new Set([
+    ...markdownHeadings.map(headingKey),
+    ...markdownHeadings.map(unnumberedHeadingKey),
+  ]);
+  const missingMarkdownHeadings = sourceHeadings.filter(
+    (heading) =>
+      !markdownHeadingKeys.has(headingKey(heading)) &&
+      !markdownHeadingKeys.has(unnumberedHeadingKey(heading))
+  );
   const markdownTableNumbers = markdown ? unique(markdownTableCaptionsWithTables(markdown)) : [];
   const markdownTables = markdown ? findMarkdownTables(markdown) : [];
   const markdownChartNumbers = markdown
@@ -433,6 +471,9 @@ async function scorePaper(
   if (sourceReferenceCount > 0 && markdownReferenceCount < sourceReferenceCount) {
     issues.push(`missing-references:${sourceReferenceCount - markdownReferenceCount}`);
   }
+  if (missingMarkdownHeadings.length > 0) {
+    issues.push(`missing-markdown-headings:${missingMarkdownHeadings.length}`);
+  }
   if (headingIssues.length > 0) issues.push('heading-flow-issues');
   if (agentReadabilityIssues.length > 0) issues.push('agent-readability-issues');
 
@@ -454,6 +495,9 @@ async function scorePaper(
     missingMarkdownTables,
     missingMarkdownCharts,
     missingMarkdownEquations,
+    sourceHeadings,
+    markdownHeadings,
+    missingMarkdownHeadings,
     headingIssues,
     agentReadabilityIssues,
   });
@@ -481,6 +525,10 @@ async function scorePaper(
     placeholderMarkdownEquations,
     lowSimilarityMarkdownEquations,
     equationRenderIssues,
+    sourceHeadingsByPage,
+    sourceHeadings,
+    markdownHeadings,
+    missingMarkdownHeadings,
     sourceReferenceCount,
     markdownReferenceCount,
     headingIssues,
@@ -1400,6 +1448,42 @@ function previousNonEmptyLine(lines: string[], fromIndex: number): number | unde
   return undefined;
 }
 
+/** Heading texts present in the Markdown, excluding the level-1 paper title. */
+function markdownHeadingTexts(markdown: string): string[] {
+  const headings: string[] = [];
+  let inFence = false;
+  for (const line of markdown.split(/\r?\n/)) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const match = line.match(/^(#{2,6})\s+(.+)$/);
+    if (match) headings.push(match[2].trim());
+  }
+  return headings;
+}
+
+/** Compare headings ignoring case, punctuation, ligatures, and whitespace. */
+function headingKey(text: string): string {
+  return text
+    .replace(/ﬀ/g, 'ff')
+    .replace(/ﬁ/g, 'fi')
+    .replace(/ﬂ/g, 'fl')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .trim();
+}
+
+/**
+ * Same as {@link headingKey} but without the leading section number, so a source
+ * `6. REFERENCES` still matches a Markdown `References` that the reference
+ * normalizer rewrote without its numbering.
+ */
+function unnumberedHeadingKey(text: string): string {
+  return headingKey(text.replace(/^\s*(?:[0-9]+(?:\.[0-9]+)*|[IVXLC]+|[A-Z])\s*\.?\s+/, ''));
+}
+
 function scoreHeadings(markdown: string): { score: number; issues: HeadingIssue[] } {
   const headings = markdown
     .split(/\r?\n/)
@@ -1626,6 +1710,9 @@ function buildMetrics(args: {
   missingMarkdownTables: string[];
   missingMarkdownCharts: string[];
   missingMarkdownEquations: string[];
+  sourceHeadings: string[];
+  markdownHeadings: string[];
+  missingMarkdownHeadings: string[];
   headingIssues: HeadingIssue[];
   agentReadabilityIssues: AgentReadabilityIssue[];
 }): MarkdownQualityMetrics {
@@ -1660,6 +1747,12 @@ function buildMetrics(args: {
       : clamp(1 - args.equationRenderIssues.length / markdownEquationCount);
   const { sourceReferenceCount, markdownReferenceCount } = args;
   const headingFlowScore = scoreHeadings(markdown).score;
+  const sourceHeadingCount = args.sourceHeadings.length;
+  const markdownHeadingCount = args.markdownHeadings.length;
+  const headingCoverageScore =
+    sourceHeadingCount === 0
+      ? 1
+      : clamp((sourceHeadingCount - args.missingMarkdownHeadings.length) / sourceHeadingCount);
   const artifactScore = scoreArtifacts(markdown);
   const agentReadabilityScore = scoreAgentReadability(args.agentReadabilityIssues);
 
@@ -1685,6 +1778,9 @@ function buildMetrics(args: {
       sourceReferenceCount,
       markdownReferenceCount,
       referenceCoverageScore: 0,
+      sourceHeadingCount,
+      markdownHeadingCount: 0,
+      headingCoverageScore: 0,
       headingFlowScore: 0,
       arxivPlacementScore: 0,
       completenessScore: 0,
@@ -1700,7 +1796,8 @@ function buildMetrics(args: {
       score: round(
         100 *
           (0.1 * tableFormattingScore +
-            0.14 * headingFlowScore +
+            0.07 * headingFlowScore +
+            0.07 * headingCoverageScore +
             0.05 * artifactScore +
             0.05 * agentReadabilityScore)
       ),
@@ -1723,6 +1820,9 @@ function buildMetrics(args: {
       sourceReferenceCount,
       markdownReferenceCount,
       referenceCoverageScore: 0,
+      sourceHeadingCount,
+      markdownHeadingCount,
+      headingCoverageScore: round(headingCoverageScore),
       headingFlowScore: round(headingFlowScore),
       arxivPlacementScore: 0,
       completenessScore: 0,
@@ -1773,7 +1873,8 @@ function buildMetrics(args: {
         0.015 * equationContentScore +
         0.005 * equationRenderScore +
         0.08 * referenceCoverageScore +
-        0.14 * headingFlowScore +
+        0.07 * headingFlowScore +
+        0.07 * headingCoverageScore +
         0.08 * arxivPlacementScore +
         0.07 * pageBreakScore +
         0.07 * completenessScore +
@@ -1802,6 +1903,9 @@ function buildMetrics(args: {
     sourceReferenceCount,
     markdownReferenceCount,
     referenceCoverageScore: round(referenceCoverageScore),
+    sourceHeadingCount,
+    markdownHeadingCount,
+    headingCoverageScore: round(headingCoverageScore),
     headingFlowScore: round(headingFlowScore),
     arxivPlacementScore: round(arxivPlacementScore),
     completenessScore: round(completenessScore),
