@@ -52,7 +52,12 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
   }
 
   const layoutText = await extractPdfLayoutText(pdfPath);
-  const extracted = normalizeExtractionArtifacts((await defaultExtractor.extract(pdfPath)).trim());
+  // Strip running headers before any structural repair: they land mid-sentence
+  // at page boundaries, so removing them first lets the split prose rejoin.
+  const extracted = stripRunningHeaders(
+    normalizeExtractionArtifacts((await defaultExtractor.extract(pdfPath)).trim()),
+    layoutText
+  );
   const firstPass = await formatGeneratedMarkdown(
     removeDuplicateMarkdownTables(
       repairLooseLineSpacing(
@@ -94,6 +99,92 @@ export async function extractPdfMarkdown(pdfPath: string): Promise<string> {
   );
   logger.debug('Extracted PDF markdown', { pdfPath, chars: markdown.length });
   return markdown;
+}
+
+/**
+ * Remove the running header/footer that repeats at every page boundary (e.g.
+ * "10  M. Liang et al." / "Learning Lane Graph Representations … 9"), which
+ * pdf2md splices into the body mid-sentence.
+ *
+ * Detection is by repetition, not guesswork: a page's first and last lines are
+ * normalized (page number stripped) and only text recurring on three or more
+ * pages counts. Removal additionally requires an adjacent page number, so the
+ * paper's own title — which appears once, without one — is never touched.
+ */
+export function stripRunningHeaders(markdown: string, layoutText?: string): string {
+  if (!layoutText) return markdown;
+  const headers = runningHeadersForLayout(layoutText);
+  if (headers.length === 0) return markdown;
+
+  const patterns = headers.map((header) => {
+    const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    return new RegExp(`(?:\\d{1,4}\\s+${escaped}|${escaped}\\s+\\d{1,4})`, 'g');
+  });
+
+  const kept: string[] = [];
+  let inFence = false;
+  let inMath = false;
+
+  for (const line of markdown.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      kept.push(line);
+      continue;
+    }
+    if (line.trim() === '$$') {
+      inMath = !inMath;
+      kept.push(line);
+      continue;
+    }
+    // Leave structure alone: fenced code, math, headings, and table rows.
+    if (inFence || inMath || /^\s*(?:#{1,6}\s|\|)/.test(line)) {
+      kept.push(line);
+      continue;
+    }
+
+    let stripped = line;
+    for (const pattern of patterns) stripped = stripped.replace(pattern, ' ');
+    if (stripped === line) {
+      kept.push(line);
+      continue;
+    }
+
+    stripped = stripped.replace(/[ \t]{2,}/g, ' ').trim();
+    // A line that was only the running header disappears entirely.
+    if (stripped) kept.push(stripped);
+  }
+
+  return kept.join('\n');
+}
+
+function runningHeadersForLayout(layoutText: string): string[] {
+  const counts = new Map<string, number>();
+  for (const page of layoutText.split('\f')) {
+    const lines = page
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length === 0) continue;
+    for (const candidate of new Set([lines[0], lines[lines.length - 1]])) {
+      const normalized = normalizeRunningHeader(candidate);
+      if (normalized) counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .filter(([, count]) => count >= 3)
+    .map(([header]) => header);
+}
+
+function normalizeRunningHeader(line: string): string | undefined {
+  const stripped = line
+    .replace(/^\d{1,4}\s+/, '')
+    .replace(/\s+\d{1,4}$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (stripped.length < 8 || stripped.length > 120) return undefined;
+  if (!/[A-Za-z]{3,}/.test(stripped)) return undefined;
+  return stripped;
 }
 
 /**

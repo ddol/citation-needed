@@ -19,6 +19,7 @@ import {
   repairMarkdownHeadings,
   repairMarkdownTables,
   stripGlyphGarbleLines,
+  stripRunningHeaders,
 } from '../../../src/verification/markdown';
 import { extractPdfMarkdown as exportedExtractPdfMarkdown } from '../../../src/verification';
 
@@ -158,6 +159,62 @@ describe('verification exports', () => {
 describe('normalizeExtractionArtifacts', () => {
   test('replaces bad epsilon control glyphs and removes other C0 controls', () => {
     expect(normalizeExtractionArtifacts('∀\u000f > 0\u0001 and text')).toBe('∀ε > 0 and text');
+  });
+});
+
+describe('stripRunningHeaders', () => {
+  const layout = [
+    'Learning Lane Graph Representations',
+    'Title page body.',
+    '\f',
+    '2      M. Liang et al.',
+    'Page two body.',
+    '\f',
+    'Learning Lane Graph Representations for Motion Forecasting      3',
+    'Page three body.',
+    '\f',
+    '4      M. Liang et al.',
+    'Page four body.',
+    '\f',
+    'Learning Lane Graph Representations for Motion Forecasting      5',
+    'Page five body.',
+    '\f',
+    '6      M. Liang et al.',
+    'Page six body.',
+    '\f',
+    'Learning Lane Graph Representations for Motion Forecasting      7',
+    'Page seven body.',
+  ].join('\n');
+
+  test('removes repeated page headers spliced into the prose', () => {
+    const markdown = [
+      'All layers have 128 output feature channels.',
+      'Learning Lane Graph Representations for Motion Forecasting 9 with xi the feature of the node.',
+      '10 M. Liang et al. where p is the ground truth coordinate.',
+    ].join('\n');
+
+    expect(stripRunningHeaders(markdown, layout)).toBe(
+      [
+        'All layers have 128 output feature channels.',
+        'with xi the feature of the node.',
+        'where p is the ground truth coordinate.',
+      ].join('\n')
+    );
+  });
+
+  test('keeps the paper title, headings, and tables untouched', () => {
+    const markdown = [
+      '## Learning Lane Graph Representations for Motion Forecasting',
+      'Learning Lane Graph Representations for Motion Forecasting is our contribution.',
+      '| M. Liang et al. | 2 |',
+    ].join('\n');
+
+    expect(stripRunningHeaders(markdown, layout)).toBe(markdown);
+  });
+
+  test('returns markdown unchanged without layout text or repeated headers', () => {
+    expect(stripRunningHeaders('Body text.', undefined)).toBe('Body text.');
+    expect(stripRunningHeaders('Body text.', 'One page only.')).toBe('Body text.');
   });
 });
 
