@@ -20,6 +20,36 @@ export function visibleWidth(lines: string[]): number {
   return lines.reduce((max, line) => Math.max(max, stripAnsi(line).length), 0);
 }
 
+interface RenderFrames {
+  frames: string[];
+  lastFrame: () => string | undefined;
+}
+
+/**
+ * The last frame a reader would actually see, ANSI stripped — robust to ink's
+ * empty final frame under CI.
+ *
+ * ink 3's `unmount()` writes a trailing `lastOutput + '\n'` frame when it
+ * detects a CI environment (truthy `process.env.CI`), but `lastOutput` is only
+ * populated on ink's non-debug render path. ink-testing-library always renders
+ * with `debug: true`, so that trailing frame is just `'\n'` and clobbers
+ * `lastFrame()`. A component that calls `exit()` when it finishes (as
+ * ImportProgress does) therefore reads as blank in CI yet correct locally —
+ * the same passes-here-fails-there trap as raw-ANSI assertions above. Reading
+ * back to the last non-blank frame describes what the user saw in either
+ * environment.
+ */
+export function lastVisibleFrame(instance: RenderFrames): string {
+  const frames = instance.frames ?? [];
+  for (let index = frames.length - 1; index >= 0; index -= 1) {
+    const stripped = stripAnsi(frames[index] ?? '');
+    if (stripped.trim() !== '') {
+      return stripped;
+    }
+  }
+  return stripAnsi(instance.lastFrame() ?? '');
+}
+
 interface ColorEnv {
   FORCE_COLOR?: string;
   NO_COLOR?: string;

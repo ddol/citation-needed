@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from 'ink-testing-library';
-import { stripAnsi } from '../../helpers/ansi';
+import { lastVisibleFrame } from '../../helpers/ansi';
 import { ImportProgress } from '../../../src/tui/components/ImportProgress';
 import type {
   ProcessBibtexOptions,
@@ -90,7 +90,7 @@ describe('ImportProgress', () => {
     await flush();
     await flush();
 
-    const frame = stripAnsi(instance.lastFrame() ?? '');
+    const frame = lastVisibleFrame(instance);
     expect(mockProcessBibtexFile).toHaveBeenCalledWith(
       'refs.bib',
       expect.objectContaining({ paperPath: 'papers', markdownPath: 'markdown' })
@@ -131,7 +131,7 @@ describe('ImportProgress', () => {
     await flush();
     await flush();
 
-    const occurrences = stripAnsi(instance.lastFrame() ?? '').split('Alpha paper').length - 1;
+    const occurrences = lastVisibleFrame(instance).split('Alpha paper').length - 1;
     expect(occurrences).toBe(1);
     instance.unmount();
   });
@@ -167,7 +167,7 @@ describe('ImportProgress', () => {
     await flush();
     await flush();
 
-    const frame = stripAnsi(instance.lastFrame() ?? '');
+    const frame = lastVisibleFrame(instance);
     for (let i = 0; i < 60; i += 1) {
       expect(frame.split(`Paper${i} `).length - 1).toBe(1);
     }
@@ -179,11 +179,11 @@ describe('ImportProgress', () => {
     mockProcessBibtexFile.mockRejectedValue(new Error('cannot read BibTeX'));
 
     const instance = render(<ImportProgress bibtexPath="missing.bib" options={{}} />);
-    expect(stripAnsi(instance.lastFrame() ?? '')).toContain('Waiting for citations...');
+    expect(lastVisibleFrame(instance)).toContain('Waiting for citations...');
     await flush();
     await flush();
 
-    expect(stripAnsi(instance.lastFrame() ?? '')).toContain('Import failed: cannot read BibTeX');
+    expect(lastVisibleFrame(instance)).toContain('Import failed: cannot read BibTeX');
     expect(process.env.LOG_LEVEL).toBeUndefined();
     instance.unmount();
   });
