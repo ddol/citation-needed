@@ -65,6 +65,8 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 
 ### Flow B — Claims from papers already held
 
+- [verify] S - Claim-grounding eval Phase 0: analytic token-economics — count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval pilot: 3 papers × ~20 human-verified claims, pdf-direct vs markdown-context, one model, manual grading; exit question is whether accuracy deltas are visible and gradable (see docs/plans/claim-grounding-eval.md)
 - [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check — see docs/plans/storage-adapters.md)
 - [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI; needs RetrievalService detail pass before scheduling — see docs/plans/service-layer.md)
 - [cli] XS - `stats` CLI command: citation status summary and database size (needs CitationService detail pass before scheduling — see docs/plans/service-layer.md)

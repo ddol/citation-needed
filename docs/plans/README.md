@@ -57,6 +57,7 @@ until the core loop proves valuable in daily use. Nothing is deleted.
 | [citation-graph.md](citation-graph.md)                       | Exploratory                      | C              | domain-model, indexing-jobs                               |
 | [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                      | C              | domain-model, fts5-full-text-search, later citation-graph |
 | [visual-extraction.md](visual-extraction.md)                 | Exploratory                      | Infrastructure | verification/ extraction pipeline                         |
+| [claim-grounding-eval.md](claim-grounding-eval.md)           | Proposed                         | B              | service-layer, fts5-full-text-search                      |
 
 ## Flows
 
