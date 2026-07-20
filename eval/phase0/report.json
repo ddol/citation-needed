@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-07-20T22:00:10.756Z",
+  "exactCounts": false,
+  "rows": [
+    {
+      "id": "Liang2020",
+      "pages": 18,
+      "mdTokens": 9877,
+      "mdTokensExact": null,
+      "pdfLow": 33277,
+      "pdfMid": 38677,
+      "pdfHigh": 45877,
+      "ratioMid": 3.9158651412372176
+    },
+    {
+      "id": "Caesar2020",
+      "pages": 16,
+      "mdTokens": 13143,
+      "mdTokensExact": null,
+      "pdfLow": 33943,
+      "pdfMid": 38743,
+      "pdfHigh": 45143,
+      "ratioMid": 2.9478049151639656
+    },
+    {
+      "id": "Bewley2016",
+      "pages": 5,
+      "mdTokens": 4667,
+      "mdTokensExact": null,
+      "pdfLow": 11167,
+      "pdfMid": 12667,
+      "pdfHigh": 14667,
+      "ratioMid": 2.7141632740518533
+    }
+  ],
+  "corpus": {
+    "avgPdfTokens": 30029,
+    "avgMdTokens": 9229,
+    "avgPages": 13
+  }
+}
