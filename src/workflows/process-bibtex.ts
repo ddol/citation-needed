@@ -68,9 +68,9 @@ export interface ProcessBibtexOptions {
   email?: string;
   db?: Database;
   /**
-   * Store metadata and stop: no retrieval, no extraction, no files written.
+   * Store metadata and stop: no retrieval, no extraction, no PDF or Markdown written.
    * A caller that only wants citations in the database should not have to pay
-   * for downloads, and should not leave half-finished rows behind if it aborts.
+   * for downloads, and should not create output directories or leave half-finished rows behind.
    */
   metadataOnly?: boolean;
   authConfig?: AuthConfig;
