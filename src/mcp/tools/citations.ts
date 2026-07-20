@@ -2,17 +2,11 @@ import { z, ZodError } from 'zod';
 import type { Database } from '../../db/index';
 import { parseBibtex } from '../../parsers/bibtex';
 import { ArxivResolver } from '../../retrieval/resolvers/arxiv';
-import { ImportService, formatImportSummary } from '../../services/import';
-import type { ProcessBibtexProgress } from '../../workflows/process-bibtex';
+import { ImportService, toImportReport } from '../../services/import';
 
 /** Progress total: how many entries the import will visit, before it starts. */
 function countBibtexEntries(bibtex: string): number {
   return parseBibtex(bibtex).length;
-}
-
-/** One progress notification per entry, when that entry is finally resolved. */
-function isTerminalStage(stage: ProcessBibtexProgress['stage']): boolean {
-  return stage === 'completed' || stage === 'failed' || stage === 'skipped';
 }
 
 const GetCitationArgs = z.object({
@@ -150,7 +144,10 @@ export async function handleCitationTool(
           metadataOnly: parsedArgs.metadataOnly,
           onProgress: (progress) => {
             if (!context.sendProgress) return;
-            if (!isTerminalStage(progress.stage)) return;
+            // `settled`, not a terminal-looking stage: the retry banner also
+            // reads as 'skipped', and a retried entry reaches a terminal stage
+            // twice. Counting either would push `progress` past `total`.
+            if (!progress.settled) return;
             done += 1;
             // Fire and forget: a slow or broken progress channel must not stall
             // the import, and the tool result carries the real outcome.
@@ -164,7 +161,9 @@ export async function handleCitationTool(
           },
         });
 
-        return { content: [{ type: 'text', text: formatImportSummary(summary) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(toImportReport(summary), null, 2) }],
+        };
       }
 
       case 'search-arxiv': {

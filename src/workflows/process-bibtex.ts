@@ -60,6 +60,21 @@ export interface ProcessBibtexProgress {
   message?: string;
   /** Set on the retry pass, so a listener can tell the two attempts apart. */
   pass?: 'retry';
+  /**
+   * True on exactly one event per BibTeX entry: the one carrying that entry's
+   * final outcome. A throttled entry that is about to be retried is not settled
+   * yet, and the synthetic retry banner is never settled because it is a notice
+   * rather than an entry.
+   *
+   * Counting terminal-looking stages instead of this is wrong twice over: the
+   * banner uses stage 'skipped', and the retry pass emits a second terminal
+   * stage for an entry already counted. Only the workflow knows which event is
+   * final, so it says so rather than leaving each consumer to infer it.
+   *
+   * This is not the same question as "should this row stop animating?", which
+   * is what the terminal stages answer for the TUI. Both are now answerable.
+   */
+  settled: boolean;
 }
 
 export interface ProcessBibtexOptions {
@@ -234,7 +249,15 @@ export async function processBibtex(
   async function attemptEntry(prepared: PreparedEntry, pass?: 'retry'): Promise<AttemptOutcome> {
     const { doi, fileStem, label, storedId } = prepared;
 
-    emitProgress({ doi, label, fileStem, pass, stage: 'retrieving', message: 'Downloading PDF' });
+    emitProgress({
+      doi,
+      label,
+      fileStem,
+      pass,
+      stage: 'retrieving',
+      message: 'Downloading PDF',
+      settled: false,
+    });
 
     const startedAt = Date.now();
     const retrieval = await getRetriever().retrievePdf(doi, prepared.entry);
@@ -279,6 +302,9 @@ export async function processBibtex(
         pass,
         stage: 'failed',
         message: queueable ? 'Rate limited — queued for retry' : retrieval.message,
+        // A queued entry has not finished: the retry pass will emit its real
+        // outcome, and counting both would report more work than there is.
+        settled: !queueable,
       });
       return retrieval.throttled ? 'throttled' : 'failed';
     }
@@ -291,6 +317,7 @@ export async function processBibtex(
       pass,
       stage: 'markdown',
       message: 'Generating Markdown',
+      settled: false,
     });
 
     try {
@@ -308,11 +335,12 @@ export async function processBibtex(
         pass,
         stage: 'completed',
         message: 'PDF downloaded and Markdown created',
+        settled: true,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push({ doi, stage: 'markdown', message });
-      emitProgress({ doi, label, fileStem, pass, stage: 'failed', message });
+      emitProgress({ doi, label, fileStem, pass, stage: 'failed', message, settled: true });
     }
 
     return 'ok';
@@ -331,6 +359,7 @@ export async function processBibtex(
         fileStem,
         stage: 'skipped',
         message: `Skipped: ${reason}`,
+        settled: true,
       });
       continue;
     }
@@ -348,6 +377,7 @@ export async function processBibtex(
         fileStem,
         stage: 'skipped',
         message: `Skipped: ${reason}`,
+        settled: true,
       });
       continue;
     }
@@ -363,6 +393,7 @@ export async function processBibtex(
         fileStem,
         stage: 'completed',
         message: inserted ? 'Imported metadata' : 'Metadata already stored',
+        settled: true,
       });
       continue;
     }
@@ -392,6 +423,8 @@ export async function processBibtex(
         retryCooldownMs >= 1000
           ? `Waiting ${Math.round(retryCooldownMs / 1000)}s for the rate limit to clear`
           : 'Waiting for the rate limit to clear',
+      // Notices describe the run, not an entry, so they never settle.
+      settled: false,
     });
     await sleep(retryCooldownMs);
     getRetriever().resetTransientState?.();
@@ -400,6 +433,7 @@ export async function processBibtex(
       fileStem: '__retry',
       stage: 'skipped',
       message: 'Retrying now',
+      settled: false,
     });
 
     for (const prepared of throttledQueue) {

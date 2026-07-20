@@ -3,9 +3,11 @@ import fs from 'fs';
 import type { Database } from '../db/index';
 import {
   processBibtex,
+  type ProcessBibtexFailure,
   type ProcessBibtexOptions,
   type ProcessBibtexProgress,
   type ProcessBibtexResult,
+  type ProcessBibtexSkipped,
 } from '../workflows/process-bibtex';
 
 /**
@@ -85,23 +87,38 @@ function toSummary(result: ProcessBibtexResult, metadataOnly: boolean): ImportSu
 }
 
 /**
- * One-line summary for text surfaces (the MCP tool result, and any future
- * non-TUI caller). Counts a metadata-only run reports would be zeroes, so it
- * says nothing about downloads it never attempted.
+ * The machine-readable shape of an import outcome, for programs rather than
+ * people. Failures and skips carry their reasons as data so a caller can retry
+ * the DOIs that failed without parsing prose, and the download fields are
+ * omitted on a metadata-only run rather than reported as zeroes it never
+ * attempted.
  */
-export function formatImportSummary(summary: ImportSummary): string {
-  const parts = [`Imported ${summary.importedCount} citations from ${summary.source}`];
-  if (!summary.metadataOnly) {
-    parts.push(`downloaded ${summary.downloadedCount} PDFs`);
-    parts.push(`wrote ${summary.markdownCount} Markdown files`);
-  }
-  if (summary.skippedCount > 0) {
-    const reasons = summary.skippedEntries.map((entry) => `${entry.label} (${entry.reason})`);
-    parts.push(`skipped ${summary.skippedCount}: ${reasons.join(', ')}`);
-  }
-  if (summary.failures.length > 0) {
-    const failures = summary.failures.map((failure) => `${failure.doi} (${failure.message})`);
-    parts.push(`failed ${summary.failures.length}: ${failures.join(', ')}`);
-  }
-  return `${parts.join('. ')}.`;
+export interface ImportReport {
+  source: string;
+  metadataOnly: boolean;
+  imported: number;
+  downloaded?: number;
+  extracted?: number;
+  paperPath?: string;
+  markdownPath?: string;
+  skipped: ProcessBibtexSkipped[];
+  failures: ProcessBibtexFailure[];
+}
+
+export function toImportReport(summary: ImportSummary): ImportReport {
+  return {
+    source: summary.source,
+    metadataOnly: summary.metadataOnly,
+    imported: summary.importedCount,
+    ...(summary.metadataOnly
+      ? {}
+      : {
+          downloaded: summary.downloadedCount,
+          extracted: summary.markdownCount,
+          paperPath: summary.paperPath,
+          markdownPath: summary.markdownPath,
+        }),
+    skipped: summary.skippedEntries,
+    failures: summary.failures,
+  };
 }
