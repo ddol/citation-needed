@@ -151,6 +151,20 @@ describe('CLI and MCP import parity', () => {
 
     expect(snapshot(mcp)).toEqual(snapshot(cli));
 
+    // Guard against a vacuous pass: two empty snapshots are also equal. The
+    // downloaded paper must really carry both manifestations, under each
+    // surface's own output directory.
+    const downloaded = snapshot(cli).find((row) => row.doi === '10.1234/parity.one');
+    expect(downloaded?.manifestations).toEqual([
+      expect.objectContaining({ kind: 'pdf', path: path.join('pdf-out', 'parity2024.pdf') }),
+      expect.objectContaining({
+        kind: 'markdown-extracted',
+        path: path.join('md-out', 'parity2024.md'),
+        extractorName: expect.any(String),
+      }),
+    ]);
+    expect(fs.existsSync(path.join(mcp.root, 'md-out', 'parity2024.md'))).toBe(true);
+
     // Counts the two surfaces report must agree too, not just the rows.
     expect(cliSummary.importedCount).toBe(2);
     expect(cliSummary.downloadedCount).toBe(1);
