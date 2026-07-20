@@ -119,6 +119,7 @@ _Deferred (Flow A future): semantic + hybrid search modes, parked in docs/plans/
 - [db] S - Normalize manifestation paths to file:// URIs (migration + write-path change; see docs/plans/storage-adapters.md)
 - [cfg] M - Persistent config file (~/.citation-needed/config.json) for default flags (consumed by HTTP API port/token; see docs/plans/http-api.md)
 - [flow] M - jobs table (kind, payload, status, attempts, last_error) + in-process worker loop; per-entry jobs with batch_id; 3 auto-retries with backoff then manual (see docs/plans/indexing-jobs.md)
+- [mcp] M - Job-backed import over MCP: import-bibtex returns a job id immediately and the agent polls, instead of blocking the tool call for the length of the import. A corpus-sized .bib now runs the full pipeline inside one MCP request and will hit client timeouts (see docs/plans/indexing-jobs.md)
 - [flow] M - Stage-based pipeline (resolve → download → extract → chunk → fts-index) with per-stage provenance on manifestations/chunks (see docs/plans/indexing-jobs.md)
 - [flow] S - Incremental re-index rules: skip unchanged content_hash; extractor/chunker version bump invalidates downstream stages only (see docs/plans/indexing-jobs.md)
 - [flow] L - Concurrent PDF downloads via job worker pool with configurable concurrency limit (see docs/plans/indexing-jobs.md; serves C)
