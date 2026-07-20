@@ -1,3 +1,6 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import type { Database } from '../../../src/db/index';
 import { handleCitationTool } from '../../../src/mcp/tools/citations';
 
@@ -29,8 +32,24 @@ function makeDb(): Database {
 }
 
 describe('MCP citation tool handler', () => {
+  // A full-pipeline import writes real directories. Without an explicit output
+  // root it defaults to the working directory, which for a unit run is the repo
+  // itself: untracked papers/pdf and papers/markdown left behind, and shared
+  // state between tests.
+  let outputRoot: string;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-mcp-import-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(outputRoot, { recursive: true, force: true });
+  });
+
+  const outputPaths = (): { paperPath: string; markdownPath: string } => ({
+    paperPath: path.join(outputRoot, 'pdf'),
+    markdownPath: path.join(outputRoot, 'markdown'),
   });
 
   const bibtex = `
@@ -67,7 +86,7 @@ describe('MCP citation tool handler', () => {
   test('runs the full pipeline by default, reporting downloads and failures', async () => {
     const db = makeDb();
 
-    const result = await handleCitationTool('import-bibtex', { bibtex }, db);
+    const result = await handleCitationTool('import-bibtex', { bibtex, ...outputPaths() }, db);
 
     const report = JSON.parse(result?.content[0].text ?? '{}');
     expect(report.downloaded).toBe(0);
@@ -75,6 +94,31 @@ describe('MCP citation tool handler', () => {
     expect(report.failures).toEqual([
       { doi: '10.1234/VALID', stage: 'download', message: 'no PDF in tests' },
     ]);
+    // Output stayed inside the temp root rather than defaulting to the working
+    // directory, which for a unit run is the repo itself.
+    expect(report.paperPath).toBe(path.join(outputRoot, 'pdf'));
+    expect(report.markdownPath.startsWith(outputRoot)).toBe(true);
+  });
+
+  // Regression: `Promise.resolve(send(...))` evaluates `send` before
+  // `Promise.resolve` runs, so a transport that throws synchronously escaped
+  // into the workflow and aborted the import. Progress is a side channel; it
+  // must never be able to fail the work it is reporting on.
+  test('survives a progress channel that throws synchronously', async () => {
+    const sendProgress = jest.fn(() => {
+      throw new Error('transport closed');
+    });
+
+    const result = await handleCitationTool(
+      'import-bibtex',
+      { bibtex, metadataOnly: true },
+      makeDb(),
+      { sendProgress }
+    );
+
+    expect(sendProgress).toHaveBeenCalledTimes(3);
+    expect(result?.isError).toBeUndefined();
+    expect(JSON.parse(result?.content[0].text ?? '{}').imported).toBe(1);
   });
 
   test('supports arXiv search success and failure responses', async () => {

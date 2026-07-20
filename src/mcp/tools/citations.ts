@@ -149,15 +149,20 @@ export async function handleCitationTool(
             // twice. Counting either would push `progress` past `total`.
             if (!progress.settled) return;
             done += 1;
+            const notification = {
+              progress: done,
+              total,
+              message: `${progress.label}: ${progress.message ?? progress.stage}`,
+            };
             // Fire and forget: a slow or broken progress channel must not stall
-            // the import, and the tool result carries the real outcome.
-            Promise.resolve(
-              context.sendProgress({
-                progress: done,
-                total,
-                message: `${progress.label}: ${progress.message ?? progress.stage}`,
-              })
-            ).catch(() => undefined);
+            // or abort the import, and the tool result carries the real outcome
+            // either way. The call goes inside the `then` so a transport that
+            // throws synchronously becomes a rejection this `catch` can swallow;
+            // `Promise.resolve(send(...))` would evaluate `send` first and let
+            // the throw escape into the workflow.
+            Promise.resolve()
+              .then(() => context.sendProgress?.(notification))
+              .catch(() => undefined);
           },
         });
 
