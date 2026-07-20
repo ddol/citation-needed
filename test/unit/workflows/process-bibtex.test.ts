@@ -14,7 +14,10 @@ jest.mock('../../../src/retrieval/index', () => ({
 // eslint-disable-next-line import/first, import/order
 import * as bibtexParser from '../../../src/parsers/bibtex';
 // eslint-disable-next-line import/first, import/order
-import { processBibtexFile } from '../../../src/workflows/process-bibtex';
+import {
+  processBibtexFile,
+  type ProcessBibtexProgress,
+} from '../../../src/workflows/process-bibtex';
 
 function makeTempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-workflow-test-'));
@@ -459,6 +462,49 @@ describe('processBibtexFile', () => {
         });
 
         expect(passes).toEqual([undefined, 'retry']);
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    // Regression: consumers that count entries by looking for a terminal stage
+    // over-count twice. The retry banner also uses stage 'skipped', and a
+    // retried entry reaches a terminal stage on both passes. `settled` marks
+    // the one event per entry that carries its final outcome.
+    test('settles each entry exactly once, whatever the retry pass does', async () => {
+      const { tempRoot, bibtexPath } = writeTwoEntryBib();
+      const events: ProcessBibtexProgress[] = [];
+
+      try {
+        await processBibtexFile(bibtexPath, {
+          db: { addCitation: jest.fn(() => ({ id: 1 })) } as never,
+          retryCooldownMs: 0,
+          retrievePdf: async (doi) =>
+            doi === '10.1234/alpha'
+              ? { success: false, throttled: true, source: 'oa', message: 'rate limited' }
+              : { success: false, source: 'oa', message: 'No PDF found' },
+          extractMarkdown: async () => '# Paper\n',
+          onProgress: (progress) => events.push(progress),
+        });
+
+        const settled = events.filter((event) => event.settled);
+        expect(settled).toHaveLength(2); // two entries in the .bib, two settlements
+        expect(settled.map((event) => event.doi).sort()).toEqual(['10.1234/alpha', '10.1234/beta']);
+
+        // The throttled entry settles on the retry pass, not on the attempt
+        // that queued it, so the queued failure is never counted as an outcome.
+        const alpha = events.filter((event) => event.doi === '10.1234/alpha');
+        expect(alpha.map((event) => ({ stage: event.stage, settled: event.settled }))).toEqual([
+          { stage: 'retrieving', settled: false },
+          { stage: 'failed', settled: false },
+          { stage: 'retrieving', settled: false },
+          { stage: 'failed', settled: true },
+        ]);
+
+        // The retry banner is a notice about the run, not an entry.
+        const banner = events.filter((event) => event.fileStem === '__retry');
+        expect(banner).not.toHaveLength(0);
+        expect(banner.every((event) => event.settled === false)).toBe(true);
       } finally {
         fs.rmSync(tempRoot, { recursive: true, force: true });
       }

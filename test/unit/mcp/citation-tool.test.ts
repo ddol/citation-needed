@@ -62,36 +62,6 @@ describe('MCP citation tool handler', () => {
     expect(report.markdownPath).toBeUndefined();
   });
 
-  // Regression: `progress` used to be incremented for any terminal-looking
-  // stage, so one throttled entry produced three notifications against a total
-  // of one. The retry banner also reads as 'skipped', and the retry pass emits
-  // a second terminal stage for an entry already counted.
-  test('never reports more progress than there are entries, even across a retry', async () => {
-    const { RetrievalOrchestrator } = jest.requireMock('../../../src/retrieval/index');
-    let attempt = 0;
-    RetrievalOrchestrator.mockImplementation(() => ({
-      resetTransientState: () => undefined,
-      retrievePdf: async () => {
-        attempt += 1;
-        return attempt === 1
-          ? { success: false, throttled: true, source: 'test', message: 'rate limited' }
-          : { success: false, source: 'test', message: 'still nothing' };
-      },
-    }));
-    const sendProgress = jest.fn();
-
-    await handleCitationTool(
-      'import-bibtex',
-      { bibtex: '@article{one2024, title={One}, doi={10.1234/one}}' },
-      makeDb(),
-      { sendProgress }
-    );
-
-    expect(attempt).toBe(2); // the retry really did run
-    expect(sendProgress).toHaveBeenCalledTimes(1);
-    expect(sendProgress).toHaveBeenCalledWith(expect.objectContaining({ progress: 1, total: 1 }));
-  });
-
   // The consolidation this guards: an agent importing a .bib gets the same
   // pipeline the CLI runs, so the corpus it just imported is groundable.
   test('runs the full pipeline by default, reporting downloads and failures', async () => {
