@@ -102,27 +102,68 @@ classes and to the hallucination-mitigation mission:
 | **Absent claims**       | plausible, in-domain, in no corpus paper                              | **the core hallucination probe**: correct answer is `not-found` |
 | Attribution claims      | "X was shown in paper P" (actually paper Q)                           | corpus-wide; where modes 1–2 structurally break                 |
 
-~15 claims per paper + ~10 corpus-level ≈ **130 items**, enough for paired
-per-claim comparisons (McNemar / bootstrap) to detect the ~15 pp differences
-that would change the roadmap; finer resolution is not chased.
+~15 claims per paper + **~30 absent claims** + ~10 attribution claims ≈ **160
+items**, enough for paired per-claim comparisons (McNemar / bootstrap) to
+detect the ~15 pp differences that would change the roadmap; finer resolution
+is not chased. Absent claims get the largest single allocation because they
+carry the headline metric: a false-`supported` rate estimated on 10 items has
+a ±25 pp confidence interval, and they are the cheapest items to author since
+no gold evidence span exists.
+
+Per-category counts are pre-registered alongside the claims before any run.
+Category and paper are otherwise confounded (equation claims would come mostly
+from the equation-dense paper, making the "equation delta" really that paper's
+delta), so each category draws from at least 3 papers where the corpus allows;
+where it cannot, the affected per-category delta is reported as paper-specific
+rather than category-general.
 
 **Authoring:** LLM-drafted with page number and verbatim evidence span,
-human-verified before entering the suite (verification depth decided at
-scheduling, alongside spend). A wrong gold verdict silently corrupts every
-downstream number, so no unverified item counts.
+**from the original PDF only, never from the extracted markdown**. A claim
+authored from mangled markdown inherits the mangling and cannot detect what
+conversion lost; the contamination silently deflates the mode 1 − mode 2 gap
+in extraction's favor. Every item is human-verified against the PDF before
+entering the suite (verification depth decided at scheduling, alongside
+spend). A wrong gold verdict silently corrupts every downstream number, so no
+unverified item counts. Perturbed-number refuted twins are checked for
+collisions: the perturbed value must not coincidentally appear elsewhere in
+the same paper, or a "refuted" claim is accidentally supported.
 
 **Grading is mechanical everywhere.** Models answer through a fixed structured
-output schema `{ verdict, evidence?, confidence }`; grading is verdict
-classification plus an evidence check reusing `normalizeForMatch` /
-`VerifyQuoteService` (`src/services/verify-quote.ts`). No LLM judge in v1.
+output schema `{ verdict, evidence?, confidence }`. The **verdict is the
+primary grade**; the evidence check (reusing `normalizeForMatch` /
+`VerifyQuoteService`, `src/services/verify-quote.ts`) is secondary and never
+flips a verdict grade: gold spans are PDF-sourced while the matcher was built
+for markdown, so an evidence mismatch can be a surface artifact (ligatures,
+hyphenation) rather than a wrong answer. `confidence` is collected for exactly
+one pre-registered analysis, the calibration curve on absent claims (metric
+5); it feeds no decision rule. No LLM judge in v1.
+
+### Mode × category applicability
+
+Modes 1–2 need a paper in context, so every claim pre-registers which paper
+each mode receives; the assignment ships with the claim, never decided at run
+time.
+
+- **Single-paper claims:** modes 1–2 get the containing paper. That is an
+  oracle mode 3 does not get, and the asymmetry is the point: it measures each
+  consumption surface at its best.
+- **Absent claims:** modes 1–2 get a pre-registered decoy, the corpus paper an
+  over-eager model would most plausibly attribute the claim to. The headline
+  false-`supported` rate depends entirely on this protocol, so it is fixed
+  here, not chosen per run.
+- **Attribution / corpus-level claims:** mode 2 gets the full corpus (~160K
+  markdown tokens, fits one context window). Mode 1 cannot: 8 PDFs at 2–4×
+  markdown tokens exceed the window, so those cells are recorded as
+  **structurally unsupported** rather than scored as failures. That boundary
+  is itself a result, not missing data.
 
 ## Harness
 
 Top-level `eval/`, outside `src/` (coverage ratchet) and `test/` (Jest; add
 `/eval/` to `testPathIgnorePatterns` as belt-and-braces). One runner, one
-`ModeAdapter` interface, three adapters: mode is the only variable; claim,
-schema, and grading are identical, so any delta is attributable to the
-consumption surface.
+`ModeAdapter` interface, three mode adapters plus one control arm: mode is the
+only variable; claim, schema, and grading are identical, so any delta is
+attributable to the consumption surface.
 
 - **pdf-direct / markdown-context**: single Anthropic SDK call with the
   document or markdown block plus the claim.
@@ -131,9 +172,21 @@ consumption surface.
   exact production tool handlers), driven by a manual tool loop (~60 lines,
   fully observable token accounting; deliberately not the Agent SDK, which
   brings its own tools and blurs accounting).
+- **retrieval-oracle** (control, not a mode): the mode-2 adapter fed only the
+  gold evidence chunk instead of the whole paper, run on every mode-3 item.
+  The evidence-reached metric separates retrieval failure from reading failure
+  observationally; this arm does it causally, and it bounds what fixing
+  retrieval could ever buy before anyone touches `src/services/chunker.ts`.
+  Also the cheapest arm to run: smallest context of the four.
 - **Models:** two: a cheap model (amplifies input-quality differences) and a
   mid-tier model (shows whether strength papers over conversion damage). Model
-  ids are config strings.
+  ids are config strings. **The cheap model's full-corpus run binds the
+  decision rules;** the mid-tier run is a robustness check. If the two
+  disagree on a rule, the outcome is the dead zone: any action that adds
+  investment needs both models to agree.
+- **Decode settings:** temperature 0, single run per (claim × mode × model),
+  fixed here so variance cannot be shopped after the fact. The replay cache
+  freezes whatever stochasticity remains.
 - **Cost controls:** replay cache keyed on request hash (reruns free), prompt
   caching per (paper, mode) group, and a `maxCostUsd` abort guard. Spend
   approval is decided at scheduling; the pilot is designed to stay under a few
