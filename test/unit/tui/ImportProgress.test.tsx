@@ -58,6 +58,7 @@ describe('ImportProgress', () => {
         label: 'Alpha paper',
         fileStem: 'alpha',
         stage: 'retrieving',
+        settled: false,
       });
       request.onProgress?.({
         doi: '10/alpha',
@@ -65,23 +66,27 @@ describe('ImportProgress', () => {
         fileStem: 'alpha',
         stage: 'markdown',
         message: 'Extracting text',
+        settled: false,
       });
       request.onProgress?.({
         doi: '10/alpha',
         label: 'Alpha paper',
         fileStem: 'alpha',
         stage: 'completed',
+        settled: true,
       });
       request.onProgress?.({
         label: 'No DOI',
         fileStem: 'no-doi',
         stage: 'skipped',
+        settled: true,
       });
       request.onProgress?.({
         doi: '10/fail',
         label: 'Failed paper',
         fileStem: 'failed',
         stage: 'failed',
+        settled: true,
       });
       return result;
     });
@@ -127,6 +132,7 @@ describe('ImportProgress', () => {
         label: 'Alpha paper',
         fileStem: 'alpha',
         stage: 'completed' as const,
+        settled: true,
       };
       request.onProgress?.(row);
       request.onProgress?.(row);
@@ -156,6 +162,7 @@ describe('ImportProgress', () => {
           label: `Paper${i}`,
           fileStem: `f${i}`,
           stage: i % 2 === 0 ? 'completed' : 'failed',
+          settled: true,
         });
       }
       request.onProgress?.({
@@ -163,6 +170,7 @@ describe('ImportProgress', () => {
         label: 'LivePaper',
         fileStem: 'live',
         stage: 'retrieving',
+        settled: false,
       });
       return { ...result, failures: [] };
     });
