@@ -2,18 +2,25 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import { lastVisibleFrame } from '../../helpers/ansi';
 import { ImportProgress } from '../../../src/tui/components/ImportProgress';
-import type {
-  ProcessBibtexOptions,
-  ProcessBibtexResult,
-} from '../../../src/workflows/process-bibtex';
+import type { ImportRequest, ImportSummary } from '../../../src/services/import';
 
-const mockProcessBibtexFile = jest.fn();
+const mockImport = jest.fn();
 
-jest.mock('../../../src/workflows/process-bibtex', () => ({
-  processBibtexFile: (...args: unknown[]) => mockProcessBibtexFile(...args),
+// The view's only collaborator is the service, so that is what gets doubled.
+// The pipeline underneath has its own suite.
+jest.mock('../../../src/services/import', () => ({
+  ImportService: jest.fn().mockImplementation(() => ({
+    import: (...args: unknown[]) => mockImport(...args),
+  })),
 }));
 
-const result: ProcessBibtexResult = {
+jest.mock('../../../src/db/index', () => ({
+  getDatabase: jest.fn(() => ({})),
+}));
+
+const result: ImportSummary = {
+  source: 'refs.bib',
+  metadataOnly: false,
   bibtexPath: 'refs.bib',
   paperPath: 'papers',
   markdownPath: 'markdown',
@@ -45,41 +52,39 @@ describe('ImportProgress', () => {
 
   test('renders progress rows and the final import summary', async () => {
     process.env.LOG_LEVEL = 'debug';
-    mockProcessBibtexFile.mockImplementation(
-      async (bibtexPath: string, options: ProcessBibtexOptions): Promise<ProcessBibtexResult> => {
-        options.onProgress?.({
-          doi: '10/alpha',
-          label: 'Alpha paper',
-          fileStem: 'alpha',
-          stage: 'retrieving',
-        });
-        options.onProgress?.({
-          doi: '10/alpha',
-          label: 'Alpha paper',
-          fileStem: 'alpha',
-          stage: 'markdown',
-          message: 'Extracting text',
-        });
-        options.onProgress?.({
-          doi: '10/alpha',
-          label: 'Alpha paper',
-          fileStem: 'alpha',
-          stage: 'completed',
-        });
-        options.onProgress?.({
-          label: 'No DOI',
-          fileStem: 'no-doi',
-          stage: 'skipped',
-        });
-        options.onProgress?.({
-          doi: '10/fail',
-          label: 'Failed paper',
-          fileStem: 'failed',
-          stage: 'failed',
-        });
-        return { ...result, bibtexPath };
-      }
-    );
+    mockImport.mockImplementation(async (request: ImportRequest): Promise<ImportSummary> => {
+      request.onProgress?.({
+        doi: '10/alpha',
+        label: 'Alpha paper',
+        fileStem: 'alpha',
+        stage: 'retrieving',
+      });
+      request.onProgress?.({
+        doi: '10/alpha',
+        label: 'Alpha paper',
+        fileStem: 'alpha',
+        stage: 'markdown',
+        message: 'Extracting text',
+      });
+      request.onProgress?.({
+        doi: '10/alpha',
+        label: 'Alpha paper',
+        fileStem: 'alpha',
+        stage: 'completed',
+      });
+      request.onProgress?.({
+        label: 'No DOI',
+        fileStem: 'no-doi',
+        stage: 'skipped',
+      });
+      request.onProgress?.({
+        doi: '10/fail',
+        label: 'Failed paper',
+        fileStem: 'failed',
+        stage: 'failed',
+      });
+      return result;
+    });
 
     const instance = render(
       <ImportProgress
@@ -113,19 +118,17 @@ describe('ImportProgress', () => {
   // Finished rows are handed to <Static>, which replays by index — a row that
   // is emitted twice, or mutated after finishing, would print twice.
   test('prints each finished row exactly once, even if progress repeats it', async () => {
-    mockProcessBibtexFile.mockImplementation(
-      async (bibtexPath: string, options: ProcessBibtexOptions): Promise<ProcessBibtexResult> => {
-        const row = {
-          doi: '10/alpha',
-          label: 'Alpha paper',
-          fileStem: 'alpha',
-          stage: 'completed' as const,
-        };
-        options.onProgress?.(row);
-        options.onProgress?.(row);
-        return { ...result, bibtexPath, failures: [] };
-      }
-    );
+    mockImport.mockImplementation(async (request: ImportRequest): Promise<ImportSummary> => {
+      const row = {
+        doi: '10/alpha',
+        label: 'Alpha paper',
+        fileStem: 'alpha',
+        stage: 'completed' as const,
+      };
+      request.onProgress?.(row);
+      request.onProgress?.(row);
+      return { ...result, failures: [] };
+    });
 
     const instance = render(<ImportProgress bibtexPath="refs.bib" options={{}} />);
     await flush();
@@ -143,25 +146,23 @@ describe('ImportProgress', () => {
   // reachable half — every row is accounted for exactly once — while the live
   // region's height is verified by running the real CLI.
   test('keeps every row of a long import, one line each', async () => {
-    mockProcessBibtexFile.mockImplementation(
-      async (bibtexPath: string, options: ProcessBibtexOptions): Promise<ProcessBibtexResult> => {
-        for (let i = 0; i < 60; i += 1) {
-          options.onProgress?.({
-            doi: `10/d${i}`,
-            label: `Paper${i}`,
-            fileStem: `f${i}`,
-            stage: i % 2 === 0 ? 'completed' : 'failed',
-          });
-        }
-        options.onProgress?.({
-          doi: '10/live',
-          label: 'LivePaper',
-          fileStem: 'live',
-          stage: 'retrieving',
+    mockImport.mockImplementation(async (request: ImportRequest): Promise<ImportSummary> => {
+      for (let i = 0; i < 60; i += 1) {
+        request.onProgress?.({
+          doi: `10/d${i}`,
+          label: `Paper${i}`,
+          fileStem: `f${i}`,
+          stage: i % 2 === 0 ? 'completed' : 'failed',
         });
-        return { ...result, bibtexPath, failures: [] };
       }
-    );
+      request.onProgress?.({
+        doi: '10/live',
+        label: 'LivePaper',
+        fileStem: 'live',
+        stage: 'retrieving',
+      });
+      return { ...result, failures: [] };
+    });
 
     const instance = render(<ImportProgress bibtexPath="refs.bib" options={{}} />);
     await flush();
@@ -176,7 +177,7 @@ describe('ImportProgress', () => {
 
   test('renders waiting state, failed imports, and restores an unset log level', async () => {
     delete process.env.LOG_LEVEL;
-    mockProcessBibtexFile.mockRejectedValue(new Error('cannot read BibTeX'));
+    mockImport.mockRejectedValue(new Error('cannot read BibTeX'));
 
     const instance = render(<ImportProgress bibtexPath="missing.bib" options={{}} />);
     expect(lastVisibleFrame(instance)).toContain('Waiting for citations...');
