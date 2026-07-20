@@ -180,7 +180,7 @@ describe('CLI and MCP import parity', () => {
     expect(report.failures).toEqual(cliSummary.failures);
   });
 
-  test('metadata-only imports agree, and neither writes a file', async () => {
+  test('metadata-only imports agree, and neither writes PDF or Markdown output', async () => {
     await new ImportService(cli.db).import({
       source: { bibtexPath },
       paperPath: path.join(cli.root, 'pdf-out'),
@@ -201,7 +201,8 @@ describe('CLI and MCP import parity', () => {
 
     expect(snapshot(mcp)).toEqual(snapshot(cli));
     expect(mockRetrievePdf).not.toHaveBeenCalled();
-    // Metadata-only promises to write nothing, directories included.
+    // Metadata-only promises no PDF or Markdown output, directories included.
+    // The citations themselves are written, and the snapshot above proves it.
     expect(fs.existsSync(path.join(cli.root, 'pdf-out'))).toBe(false);
     expect(fs.existsSync(path.join(mcp.root, 'md-out'))).toBe(false);
   });

@@ -201,7 +201,9 @@ export async function processBibtex(
   );
   const metadataOnly = options.metadataOnly ?? false;
 
-  // Metadata-only writes nothing, so it must not create directories either.
+  // Metadata-only produces no PDF or Markdown, so it must not create the
+  // directories that would hold them. The database is still written: storing
+  // the citations is the point of the run.
   if (!metadataOnly) {
     ensureDir(paperPath);
     ensureDir(markdownPath);
