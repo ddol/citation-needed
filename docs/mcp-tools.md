@@ -45,7 +45,7 @@ Output paths default to `papers/pdf` and `papers/markdown` under the working
 directory, since a BibTeX string has no directory of its own to sit beside.
 
 Set `metadataOnly` to store citations without fetching anything. That variant
-writes no files and creates no directories.
+creates no PDF or Markdown files and creates no output directories.
 
 **Input:**
 
