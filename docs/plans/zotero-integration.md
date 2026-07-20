@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **Exploratory** — Better BibTeX auto-export already covers Zotero → corpus with zero code                                                                               |
+| Status     | **Exploratory**: Better BibTeX auto-export already covers Zotero → corpus with zero code                                                                                |
 | Flow       | A                                                                                                                                                                       |
 | Depends on | [domain-model.md](domain-model.md) phase B (identifiers) for phase 2; [storage-adapters.md](storage-adapters.md) soft (attachment linking works with plain paths first) |
 
@@ -10,7 +10,7 @@
 
 Zotero is the bibliography manager; citation-needed is the search/indexing
 layer. Integration means importing Zotero's metadata and attachment locations,
-and linking back via `zotero://` URLs — **not** replacing Zotero's UI, reader,
+and linking back via `zotero://` URLs, **not** replacing Zotero's UI, reader,
 or citation tooling, and **not** bidirectional sync. The repo is BibTeX-first,
 which makes one integration path free today.
 
@@ -18,7 +18,7 @@ which makes one integration path free today.
 
 - Import is BibTeX-only (`bibtex-parse`; `parseBibtex` in `src/parsers/bibtex.ts`),
   keyed by DOI: `addCitation` is `INSERT OR IGNORE` on `doi`
-  (`src/db/index.ts:209`) — re-importing an existing DOI is a **no-op, never an
+  (`src/db/index.ts:209`): re-importing an existing DOI is a **no-op, never an
   update**. Both import paths hard-skip DOI-less entries.
 - No Zotero code, identifiers table, or attachment linking exists anywhere.
 - Zotero stores attachments under `~/Zotero/storage/<ITEMKEY>/…` (or linked
@@ -34,10 +34,10 @@ which makes one integration path free today.
 | Zotero/CSL JSON export file import          | M             | manual export | none                                       | build (phase 1)      |
 | Zotero 7 local HTTP API (`localhost:23119`) | L             | incremental   | Zotero must run; verify endpoint stability | phase 3              |
 | Zotero Web API                              | M–L           | cloud sync    | network, API keys, sync state              | rejected for v1      |
-| Reading `zotero.sqlite` directly            | —             | —             | fragile, unsupported                       | rejected permanently |
+| Reading `zotero.sqlite` directly            | n/a           | n/a           | fragile, unsupported                       | rejected permanently |
 
 **Better BibTeX** with pinned citation keys already produces a `.bib` the
-existing importer consumes — a zero-code path that only needs documentation
+existing importer consumes, a zero-code path that only needs documentation
 (including the `file` field for attachment paths).
 
 **Zotero JSON import**: parse metadata **plus** item key, library ID, tags,
@@ -49,24 +49,24 @@ phase 2 is a storage change, not a parser change.
 
 - Store `zotero-key` + `zotero-library` in the `identifiers` table
   ([domain-model.md](domain-model.md) phase B).
-- **Link Zotero attachment PDFs as manifestations instead of re-downloading** —
+- **Link Zotero attachment PDFs as manifestations instead of re-downloading**:
   the concrete user win: no duplicate PDFs, instant "has PDF" for papers Zotero
   already has. Linked-file attachments (outside Zotero storage): **record +
-  health-check** — trust the recorded path, create the manifestation, and let
+  health-check**, trust the recorded path, create the manifestation, and let
   availability tracking ([storage-adapters.md](storage-adapters.md)) mark it
   unavailable if missing.
-- **Tags and collections as join tables** — `tags` + `citation_tags` +
+- **Tags and collections as join tables**: `tags` + `citation_tags` +
   `collections` (with nesting) populated from Zotero import, giving
   SearchService and the future `/collections` `/tags` endpoints clean SQL
   filters.
 - Emit `zotero://select/library/items/<KEY>` links in search/MCP/API results
-  when the item key is known — the cheapest frontend integration. Supported URL
+  when the item key is known, the cheapest frontend integration. Supported URL
   forms (including group libraries and `open-pdf?page=`) must be verified
   against current Zotero before results rely on them.
 
 ### Enrichment on re-import
 
-Default semantics stay `INSERT OR IGNORE` — imports never touch existing rows.
+Default semantics stay `INSERT OR IGNORE`: imports never touch existing rows.
 An **opt-in `--update` mode** adds enrichment: fill null fields always,
 overwrite only non-protected fields (Crossref-verified metadata is protected),
 and report every change in the import summary. Conflicts are surfaced, never
@@ -138,18 +138,18 @@ None currently.
 
 ## Relationship to other plans
 
-- [domain-model.md](domain-model.md) — phase 2 needs identifiers (phase B);
+- [domain-model.md](domain-model.md): phase 2 needs identifiers (phase B);
   attachment linking writes manifestations (phase A); DOI-less admission lands
   there.
-- [storage-adapters.md](storage-adapters.md) — Zotero storage paths become
+- [storage-adapters.md](storage-adapters.md): Zotero storage paths become
   `file://` locations; availability checks cover linked files; a dedicated
   zotero adapter is not needed.
-- [http-api.md](http-api.md) — a future plugin/web UI consumes the API;
+- [http-api.md](http-api.md): a future plugin/web UI consumes the API;
   `/collections` and `/tags` endpoints unblock once the join tables exist.
-- [indexing-jobs.md](indexing-jobs.md) — local-API incremental import enqueues
+- [indexing-jobs.md](indexing-jobs.md): local-API incremental import enqueues
   jobs.
-- [service-layer.md](service-layer.md) — the importer should reuse
+- [service-layer.md](service-layer.md): the importer should reuse
   ImportService once core slice 3 lands.
-- [citation-graph.md](citation-graph.md) — complementary: the graph is the
+- [citation-graph.md](citation-graph.md): complementary: the graph is the
   discovery/acquisition channel; Zotero remains the curated-library workflow
   sync.

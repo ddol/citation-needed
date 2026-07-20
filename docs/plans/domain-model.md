@@ -1,10 +1,10 @@
 # Domain model & schema evolution
 
-| Field      | Value                                                         |
-| ---------- | ------------------------------------------------------------- |
-| Status     | **Core — slice 2 shipped · slice 3** (phases B/C exploratory) |
-| Flow       | Infrastructure (serves A, B, C)                               |
-| Depends on | — (schema foundation for fts5, zotero, storage-adapters)      |
+| Field      | Value                                                        |
+| ---------- | ------------------------------------------------------------ |
+| Status     | **Core: slice 2 shipped · slice 3** (phases B/C exploratory) |
+| Flow       | Infrastructure (serves A, B, C)                              |
+| Depends on | None (schema foundation for fts5, zotero, storage-adapters)  |
 
 ## Intent
 
@@ -42,16 +42,16 @@ query, and tool.
     the row (phase B).
 - `retrieval_log` (`src/db/schema.ts:45`) already cleanly separates the
   download-attempt entity.
-- Every SQL read/write goes through the `Database` class — the single
+- Every SQL read/write goes through the `Database` class, the single
   chokepoint that keeps the adapter approach cheap.
 
 ## Design
 
 Adopt the _distinctions_ without renames: `citations` remains the document
-table (renaming to `documents` is rejected — destructive to every query, test,
+table (renaming to `documents` is rejected as destructive to every query, test,
 and tool for zero user-visible gain).
 
-### Phase A — migration runner + manifestations (core)
+### Phase A: migration runner + manifestations (core)
 
 A minimal versioned runner, not a framework (~40 lines):
 
@@ -104,8 +104,8 @@ CREATE INDEX idx_manifestations_citation_id ON manifestations (citation_id);
   transition), so the external MCP contract is unchanged; `updatePdfPath`
   upserts the manifestation row. The legacy `citations.pdf_path` column is
   still **written for one transition release** (downgrade safety), then goes
-  dormant — kept in the schema forever but never read or written by new code.
-- **Backfill**: one-shot walk — existing `pdf_path` values (existence-checked)
+  dormant, kept in the schema forever but never read or written by new code.
+- **Backfill**: one-shot walk over existing `pdf_path` values (existence-checked)
   plus stem-matched `papers/markdown/` files; hash what exists.
 - **Hashing at write time**: streaming sha256 helper (`src/utils/hash.ts`);
   `processBibtexFile` hashes PDFs and Markdown as they are written, backfill
@@ -114,7 +114,7 @@ CREATE INDEX idx_manifestations_citation_id ON manifestations (citation_id);
   ([indexing-jobs.md](indexing-jobs.md),
   [vector-hybrid-search.md](vector-hybrid-search.md)).
 
-### Phase A2 — manifestation-first reads (core, slice 3)
+### Phase A2: manifestation-first reads (core, slice 3)
 
 `resolveMarkdownPath` stays the single content-resolution chokepoint but gains
 the `Database`: resolve `manifestations(kind = 'markdown-extracted')` first
@@ -133,7 +133,7 @@ reads plus the `index` backfill walk, and fallback hits have stopped appearing
 in logs, the stem heuristic is deleted (`getCitationFileStem` remains for
 write-side naming only).
 
-### Phase B — identifiers (exploratory)
+### Phase B: identifiers (exploratory)
 
 ```sql
 CREATE TABLE identifiers (
@@ -145,7 +145,7 @@ CREATE TABLE identifiers (
 );
 ```
 
-DOI deliberately **stays on `citations.doi`** — it is the UPSERT key for every
+DOI deliberately **stays on `citations.doi`**: it is the UPSERT key for every
 lookup and write; moving it is high-risk, low-reward. `bibtex_key` column stays
 for compatibility; `identifiers` adds cross-scheme lookup on top.
 [citation-graph.md](citation-graph.md) extends the scheme CHECK with
@@ -156,7 +156,7 @@ DOI-required import guards; identity for DOI-less items comes from
 `identifiers` (zotero-key / bibtex-key) plus a generated internal ID when no
 external identifier exists at all.
 
-### Phase C — locations as URIs (exploratory)
+### Phase C: locations as URIs (exploratory)
 
 `manifestations.path` migrates to URI form (`file:///…`) when
 [storage-adapters.md](storage-adapters.md) lands. A separate `locations` table
@@ -177,7 +177,7 @@ is rejected until a single manifestation genuinely lives at two places.
 
 ## Phasing
 
-1. **A (core, slice 2 — shipped)**: migration runner → manifestations table →
+1. **A (core, slice 2, shipped)**: migration runner → manifestations table →
    adapter reads + transition write → backfill → write-time hashing.
 2. **A2 (core, slice 3)**: manifestation-first locator with self-healing stem
    fallback → fallback deletion once trusted.
@@ -188,14 +188,14 @@ is rejected until a single manifestation genuinely lives at two places.
 
 ## Backlog items
 
-Core — slice 2 (shipped — see BACKLOG.md § Completed):
+Core slice 2 (shipped; see BACKLOG.md § Completed):
 
 - [db] M - Versioned migration runner (PRAGMA user_version + ordered steps in src/db/migrations.ts); existing ad-hoc migrators become bootstrap (see docs/plans/domain-model.md)
 - [db] M - manifestations table as single source of truth for files; Database class derives Citation.pdfPath; pdf_path dormant after one transition release (see docs/plans/domain-model.md)
 - [db] S - Backfill manifestations from existing pdf_path values and papers/markdown/ stems
 - [util] S - Streaming sha256 content-hash helper; hash PDFs and Markdown at write time (see docs/plans/domain-model.md)
 
-Core — slice 3:
+Core slice 3:
 
 - [storage] S - Manifestation-first content resolution: markdown-locator reads manifestations(kind='markdown-extracted') via Database, existence-checked; legacy stem fallback self-heals a manifestation row on hit (see docs/plans/domain-model.md)
 - [test] S - Locator coverage: custom --markdown-path import readable via MCP, markdown-only manifestation, manifestation row with missing file (see docs/plans/domain-model.md)
@@ -228,15 +228,15 @@ None currently.
 
 ## Relationship to other plans
 
-- [fts5-full-text-search.md](fts5-full-text-search.md) — requires phase A
+- [fts5-full-text-search.md](fts5-full-text-search.md): requires phase A
   (manifestations + hashes) before chunking.
-- [service-layer.md](service-layer.md) — read-content, verify-quote, and the
+- [service-layer.md](service-layer.md): read-content, verify-quote, and the
   indexer all resolve content through the phase-A2 locator.
-- [zotero-integration.md](zotero-integration.md) — needs phase B (identifiers);
+- [zotero-integration.md](zotero-integration.md): needs phase B (identifiers);
   attachment linking writes manifestations.
-- [storage-adapters.md](storage-adapters.md) — drives phase C (URIs,
+- [storage-adapters.md](storage-adapters.md): drives phase C (URIs,
   `last_seen_at` availability).
-- [indexing-jobs.md](indexing-jobs.md) — stores per-stage provenance on
+- [indexing-jobs.md](indexing-jobs.md): stores per-stage provenance on
   manifestations/chunks rows.
-- [citation-graph.md](citation-graph.md) — its edges/corpus_status migration
+- [citation-graph.md](citation-graph.md): its edges/corpus_status migration
   runs on this runner; adds identifier schemes.

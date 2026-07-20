@@ -13,8 +13,8 @@ today, see [architecture.md](../architecture.md) (structure),
 Out of scope, permanently: replacing Zotero's UI, PDF reader, or citation
 tooling; file servers; existing directory structures. The search core stays
 deterministic (LLM features live outside it), SQLite stays until benchmarks
-object, and there is **one operation vocabulary in a single service layer** —
-bound to MCP first, with CLI/HTTP as thin gateways — never per-surface APIs.
+object, and there is **one operation vocabulary in a single service layer**,
+bound to MCP first, with CLI/HTTP as thin gateways, never per-surface APIs.
 
 ## Target boundary
 
@@ -33,7 +33,7 @@ bound to MCP first, with CLI/HTTP as thin gateways — never per-surface APIs.
 
 ## Scope: Core vs Exploratory
 
-**Core** is one workflow — **grounded answers from your own library**: import →
+**Core** is one workflow, **grounded answers from your own library**: import →
 download/extract → index → find (`search-citations`) → read (`read-content`) →
 check (`verify-quote`), all over MCP. Slices 1–2 are shipped; slice 3
 consolidates what they left split.
@@ -43,37 +43,37 @@ until the core loop proves valuable in daily use. Nothing is deleted.
 
 ## Plan status
 
-| Plan                                                         | Status                           | Flow           | Depends on                                                |
-| ------------------------------------------------------------ | -------------------------------- | -------------- | --------------------------------------------------------- |
-| [service-layer.md](service-layer.md)                         | Core — slice 1 shipped · slice 3 | A              | —                                                         |
-| [domain-model.md](domain-model.md)                           | Core — slice 2 shipped · slice 3 | Infrastructure | —                                                         |
-| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core — slices 1–2 shipped        | A              | service-layer, domain-model                               |
-| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core — slice 3 (trims)           | C              | —                                                         |
-| [indexing-jobs.md](indexing-jobs.md)                         | Exploratory                      | Infrastructure | domain-model, fts5                                        |
-| [http-api.md](http-api.md)                                   | Exploratory                      | Infrastructure | service-layer                                             |
-| [zotero-integration.md](zotero-integration.md)               | Exploratory                      | A              | domain-model                                              |
-| [storage-adapters.md](storage-adapters.md)                   | Exploratory                      | Infrastructure | domain-model                                              |
-| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                         | A              | fts5, indexing-jobs                                       |
-| [citation-graph.md](citation-graph.md)                       | Exploratory                      | C              | domain-model, indexing-jobs                               |
-| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                      | C              | domain-model, fts5-full-text-search, later citation-graph |
-| [visual-extraction.md](visual-extraction.md)                 | Exploratory                      | Infrastructure | verification/ extraction pipeline                         |
-| [claim-grounding-eval.md](claim-grounding-eval.md)           | Proposed                         | B              | service-layer, fts5-full-text-search                      |
+| Plan                                                         | Status                          | Flow           | Depends on                                                |
+| ------------------------------------------------------------ | ------------------------------- | -------------- | --------------------------------------------------------- |
+| [service-layer.md](service-layer.md)                         | Core: slice 1 shipped · slice 3 | A              | none                                                      |
+| [domain-model.md](domain-model.md)                           | Core: slice 2 shipped · slice 3 | Infrastructure | none                                                      |
+| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core: slices 1–2 shipped        | A              | service-layer, domain-model                               |
+| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core: slice 3 (trims)           | C              | none                                                      |
+| [indexing-jobs.md](indexing-jobs.md)                         | Exploratory                     | Infrastructure | domain-model, fts5                                        |
+| [http-api.md](http-api.md)                                   | Exploratory                     | Infrastructure | service-layer                                             |
+| [zotero-integration.md](zotero-integration.md)               | Exploratory                     | A              | domain-model                                              |
+| [storage-adapters.md](storage-adapters.md)                   | Exploratory                     | Infrastructure | domain-model                                              |
+| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                        | A              | fts5, indexing-jobs                                       |
+| [citation-graph.md](citation-graph.md)                       | Exploratory                     | C              | domain-model, indexing-jobs                               |
+| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                     | C              | domain-model, fts5-full-text-search, later citation-graph |
+| [visual-extraction.md](visual-extraction.md)                 | Exploratory                     | Infrastructure | verification/ extraction pipeline                         |
+| [claim-grounding-eval.md](claim-grounding-eval.md)           | Proposed                        | B              | service-layer, fts5-full-text-search                      |
 
 ## Flows
 
 One rubric, shared with [BACKLOG.md](../../BACKLOG.md), describing which user
 journey a piece of work serves:
 
-- **Flow A — Own-library authoring**: a researcher uses their own paper library in their own work.
-- **Flow B — Claims from papers already held**: checking others' claims when the papers are present.
-- **Flow C — Claims from papers not yet held**: checking others' claims when papers may be missing.
+- **Flow A, own-library authoring**: a researcher uses their own paper library in their own work.
+- **Flow B, claims from papers already held**: checking others' claims when the papers are present.
+- **Flow C, claims from papers not yet held**: checking others' claims when papers may be missing.
 - **Infrastructure**: foundations, secondary surfaces, scale, packaging, deployment.
 
 ## Architecture principles
 
 The research assistant is **core + satellites**: the agent is the shell,
 composing small tools (MCP servers, CLIs, cron). citation-needed owns the
-grounded corpus and — when that work graduates from exploratory — its citation
+grounded corpus and (when that work graduates from exploratory) its citation
 graph, because graph value is joins against corpus state. Satellites handle
 scheduling (cron/launchd), trend digests (files), and third-party scouts,
 composing through the pipe contract: BibTeX/JSONL in via `citation-needed
@@ -103,7 +103,7 @@ Where two plans could each claim a piece of work:
 
 ## Landing order
 
-1. **Core slice 3 — one pipeline, one locator**: manifestation-first locator with
+1. **Core slice 3, one pipeline, one locator**: manifestation-first locator with
    self-healing fallback (domain-model) → ImportService consolidation with
    full-pipeline MCP default (service-layer) → test-harness guardrails → cascade
    trims (retrieval-pipeline).
@@ -112,11 +112,11 @@ Where two plans could each claim a piece of work:
 ## Needs a plan before scheduling
 
 - Small CLI/MCP maintenance commands (`stats`, `update`, `get-retrieval-log`,
-  `update-citation`, `delete-citation`) — need a CitationService/RetrievalService
+  `update-citation`, `delete-citation`) need a CitationService/RetrievalService
   detail pass when a second surface is scheduled.
-- Import/export formats (`RIS`, `CSV`, `export`) — need a format-interop plan.
+- Import/export formats (`RIS`, `CSV`, `export`) need a format-interop plan.
 - TUI expansion, npm/Docker/systemd packaging, SAML/Shibboleth, database
-  backup/restore, webhook notifications — backlog-only by intent.
+  backup/restore, and webhook notifications are backlog-only by intent.
 
 ## Review protocol
 

@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                                                                                                                              |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **Exploratory** — interim: compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed                                                                                      |
+| Status     | **Exploratory**: interim, compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed                                                                                       |
 | Flow       | C (discovery MCP tools: A; reference cross-check: B)                                                                                                                                               |
 | Depends on | [domain-model.md](domain-model.md) (migration runner; identifiers for dedupe), [indexing-jobs.md](indexing-jobs.md) (expansion job kinds), [service-layer.md](service-layer.md) (contract pattern) |
 
@@ -11,10 +11,10 @@
 Populate and maintain a citation graph so the MCP server becomes an informed
 research assistant: read a paper's references, follow who cites it, surface
 significant follow-on work and newer ideas, and expand the corpus by bounded
-snowballing — with downloads flowing through the existing retrieval cascade.
+snowballing, with downloads flowing through the existing retrieval cascade.
 
-The system is **core + satellites** — the agent is the shell composing small
-tools — and the graph belongs **in the core** when built, because its value is
+The system is **core + satellites** (the agent is the shell composing small
+tools), and the graph belongs **in the core** when built, because its value is
 joins against corpus state (which papers are members, frontier promotion,
 verification cross-checks). What stays outside: scheduling (cron/launchd),
 trend digests (files a cron'd command writes), and any third-party scout tools
@@ -29,10 +29,10 @@ trend digests (files a cron'd command writes), and any third-party scout tools
   planned jobs pipeline, and the planned identifiers table for cross-source
   dedupe. The reference-list-extraction item pairs with this plan as a
   cross-check source, not the primary edge source.
-- External landscape (verified 2026-07): **Semantic Scholar** Academic Graph +
-  Recommendations APIs — references/citations with `isInfluential`, recs from
+- External landscape: **Semantic Scholar** Academic Graph +
+  Recommendations APIs: references/citations with `isInfluential`, recs from
   seed papers; free key ≈ 1 req/s, unauthenticated pool 5k req/5 min.
-  **OpenAlex** — `referenced_works`, `cites:` filter, `related_works`, topics
+  **OpenAlex**: `referenced_works`, `cites:` filter, `related_works`, topics
   with per-year counts; **API keys required since Feb 2026** (polite pool
   retired), 100k calls/day free. Python snowballing tools (LitStudy,
   Paperfetcher, paperscraper) wrap these same APIs; Google Scholar scrapers are
@@ -83,15 +83,15 @@ schemes for cross-source dedupe.
 
 ### Agent-facing MCP tools (Flow A)
 
-- `get-references {doi}` — what this paper cites (backward).
-- `get-citing-papers {doi, sort: influence | recency}` — follow-on work; the
+- `get-references {doi}`: what this paper cites (backward).
+- `get-citing-papers {doi, sort: influence | recency}`: follow-on work; the
   "significant papers since the one we're discussing" query.
-- `related-papers {seeds[], limit}` — recommendations from the paper(s) under
+- `related-papers {seeds[], limit}`: recommendations from the paper(s) under
   discussion.
-- `check-corpus {dois[]}` — batch membership join: which of these do I already
+- `check-corpus {dois[]}`: batch membership join for which of these I already
   have (member / frontier / absent). The tool that makes external discovery
   results actionable against the local corpus.
-- `expand-corpus {seeds?, direction, depth, budget, filters}` — enqueues
+- `expand-corpus {seeds?, direction, depth, budget, filters}`: enqueues
   bounded snowball jobs.
 
 ### Expansion & trends (Flow C)
@@ -103,7 +103,7 @@ schemes for cross-source dedupe.
   cascade as an additional OA source (coverage win independent of the graph).
 - **`trends` CLI command**: new works citing corpus members since the last run
   → writes a Markdown/JSON digest file for the agent (the webhook item can
-  announce it). **Scheduling stays external** — a cron/launchd recipe in the
+  announce it). **Scheduling stays external**: a cron/launchd recipe in the
   composition docs, no scheduler inside citation-needed.
 
 ### Satellites & interop (pipe contract)
@@ -111,14 +111,14 @@ schemes for cross-source dedupe.
 Any external scout (Paperfetcher, LitStudy, a shell script, a community
 Semantic Scholar MCP server the agent also has mounted) composes with the core
 through `citation-needed import` (BibTeX/JSONL in) and digest files out. The
-SQLite DB is **not** a public API for siblings — read-only at most (rule
+SQLite DB is **not** a public API for siblings, read-only at most (rule
 documented in the composition docs item).
 
 ### Rejected / deferred alternatives
 
 - **External tool sidecar as the first GraphSource** (Python
   LitStudy/Paperfetcher bridge, Inciteful API): superseded by the
-  core+satellites decomposition — the graph joins corpus state, and the clients
+  core+satellites decomposition: the graph joins corpus state, and the clients
   are ~2 thin REST wrappers; an additional GraphSource backed by such a tool
   remains possible later.
 - **A separate graph MCP server of our own**: joins against corpus state are
@@ -148,8 +148,8 @@ Phase 1:
 - [fetch] M - GraphSource interface + Semantic Scholar client (references/citations with isInfluential, recommendations; rate-limited, cached) (see docs/plans/citation-graph.md)
 - [db] M - citation_edges table + corpus_status (member|frontier) on citations via migration runner (see docs/plans/citation-graph.md)
 - [mcp] M - MCP tools: get-references + get-citing-papers (sort by influence|recency); edges cached on lookup (see docs/plans/citation-graph.md)
-- [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
-- [mcp] S - MCP tool: check-corpus — batch DOI membership join: member|frontier|absent (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool related-papers: recommendations from seed paper(s) (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool check-corpus: batch DOI membership join (member|frontier|absent) (see docs/plans/citation-graph.md)
 - [test] S - GraphSource fixture tests: recorded API responses, edge idempotency, rate-limit respect
 
 Phases 2–3:
@@ -159,7 +159,7 @@ Phases 2–3:
 - [fetch] S - Graph-source open-access PDF URLs as an additional retrieval-cascade source
 - [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler
 - [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps
-- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends
+- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API, read-only at most) + cron recipes for trends
 
 ## Testing
 
@@ -193,20 +193,20 @@ Phases 2–3:
 
 ## Relationship to other plans
 
-- [domain-model.md](domain-model.md) — migration runner hosts the edges/status
+- [domain-model.md](domain-model.md): migration runner hosts the edges/status
   migration; identifiers gains graph-source schemes; DOI-less admission lifts
   the stub-requires-DOI constraint.
-- [local-bibliography-spider.md](local-bibliography-spider.md) — provides
+- [local-bibliography-spider.md](local-bibliography-spider.md): provides
   local extracted-reference evidence and accepted local citation edges for
   cross-checking.
-- [indexing-jobs.md](indexing-jobs.md) — snowball/trends run as job kinds;
+- [indexing-jobs.md](indexing-jobs.md): snowball/trends run as job kinds;
   scheduling stays external.
-- [service-layer.md](service-layer.md) — graph tools follow the shared
+- [service-layer.md](service-layer.md): graph tools follow the shared
   zod-contract pattern and appear in the operation mapping table.
-- [zotero-integration.md](zotero-integration.md) — complementary: the graph is
+- [zotero-integration.md](zotero-integration.md): complementary: the graph is
   the discovery/acquisition channel; Zotero remains the curated-library
   workflow sync.
-- [fts5-full-text-search.md](fts5-full-text-search.md) — independent; the
+- [fts5-full-text-search.md](fts5-full-text-search.md): independent; the
   extractor-filter evaluation recorded there pairs with the OCR/coverage story.
-- [http-api.md](http-api.md) — graph endpoints are deferred HTTP bindings of
+- [http-api.md](http-api.md): graph endpoints are deferred HTTP bindings of
   the same services if a non-MCP client ever needs them.

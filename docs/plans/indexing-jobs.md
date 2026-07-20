@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                                                            |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **Exploratory** — revisit when core-loop usage demands concurrency/resume                                                        |
+| Status     | **Exploratory**: revisit when core-loop usage demands concurrency/resume                                                         |
 | Flow       | Infrastructure                                                                                                                   |
 | Depends on | [domain-model.md](domain-model.md) phase A (hashes); [fts5-full-text-search.md](fts5-full-text-search.md) for chunk/index stages |
 
@@ -48,7 +48,7 @@ An in-process worker loop claims `queued` jobs (single `UPDATE … WHERE id IN
 (SELECT …) RETURNING`), runs them through a simple promise pool with a
 configurable concurrency limit, and marks `done`/`failed` with `attempts`
 incremented. Granularity: **one job per entry** with a `batch_id` payload field
-grouping them for reporting — fine-grained resume, natural concurrency unit.
+grouping them for reporting: fine-grained resume, natural concurrency unit.
 Retry: up to **3 automatic attempts with exponential backoff** for transient
 failures, then `failed` until an explicit `jobs retry`. Startup recovery:
 `running` jobs older than a threshold reset to `queued`.
@@ -63,12 +63,12 @@ resolve → download → extract → chunk → fts-index
 
 `embed` joins via [vector-hybrid-search.md](vector-hybrid-search.md);
 `classify` / `summarize` have no plan and stay out of scope. The stage list is
-data, so it extends without migration — snowball expansion and trend runs from
+data, so it extends without migration: snowball expansion and trend runs from
 [citation-graph.md](citation-graph.md) arrive as additional job kinds, while
 _scheduling_ of trends stays external (cron; no scheduler in the core).
 
 Per-stage provenance (input hash, processor name + version, timestamps, error)
-lives on the `manifestations`/`chunks` rows the stage produces — not duplicated
+lives on the `manifestations`/`chunks` rows the stage produces, not duplicated
 into job payloads. Jobs are the _coordination_ record; artifacts are the
 _provenance_ record.
 
@@ -85,7 +85,7 @@ _provenance_ record.
 ### Progress display
 
 Once imports run as jobs, the Ink `ImportProgress` TUI reads the jobs table
-(polling) instead of in-memory callbacks — one source of truth, progress
+(polling) instead of in-memory callbacks: one source of truth, progress
 survives restarts, and externally-enqueued work (watch mode) is visible too.
 
 ### Related backlog items expressed through this model
@@ -97,7 +97,7 @@ survives restarts, and externally-enqueued work (watch mode) is visible too.
 | `watch` mode for new .bib files   | filesystem watcher that _enqueues_ import jobs |
 
 The OCR item becomes a future `extract`-stage variant (different extractor
-name/version — the provenance model already accommodates it).
+name/version; the provenance model already accommodates it).
 
 ### Rejected / deferred alternatives
 
@@ -153,14 +153,14 @@ None currently.
 
 ## Relationship to other plans
 
-- [domain-model.md](domain-model.md) — provides the hashes and manifestation
+- [domain-model.md](domain-model.md): provides the hashes and manifestation
   rows the incremental rules key on.
-- [fts5-full-text-search.md](fts5-full-text-search.md) — its one-shot `index`
+- [fts5-full-text-search.md](fts5-full-text-search.md): its one-shot `index`
   command ships first and is deliberately absorbed here later.
-- [vector-hybrid-search.md](vector-hybrid-search.md) — adds the `embed` stage.
-- [zotero-integration.md](zotero-integration.md) — local-API incremental import
+- [vector-hybrid-search.md](vector-hybrid-search.md): adds the `embed` stage.
+- [zotero-integration.md](zotero-integration.md): local-API incremental import
   would enqueue jobs rather than run inline.
-- [citation-graph.md](citation-graph.md) — snowball expansion and trend runs
+- [citation-graph.md](citation-graph.md): snowball expansion and trend runs
   execute as job kinds on this loop; scheduling stays external.
-- [service-layer.md](service-layer.md) — orthogonal; a future JobService could
+- [service-layer.md](service-layer.md): orthogonal; a future JobService could
   expose job status through MCP/HTTP if needed.

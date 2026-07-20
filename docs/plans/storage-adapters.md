@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                          |
 | ---------- | ------------------------------------------------------------------------------ |
-| Status     | **Exploratory** — mounted paths keep working today                             |
+| Status     | **Exploratory**: mounted paths keep working today                              |
 | Flow       | Infrastructure (availability item: B)                                          |
 | Depends on | [domain-model.md](domain-model.md) phase A (manifestations) and phase C (URIs) |
 
@@ -21,12 +21,12 @@ protocol backends.
   (`src/db/index.ts:322`), `OpenAccessDownloader` writes into a local `storageDir`,
   `extractPdfMarkdown` reads the local filesystem directly
   (`src/verification/markdown.ts:20`).
-- No URI scheme, no availability tracking, no read indirection — a moved or
+- No URI scheme, no availability tracking, no read indirection: a moved or
   unplugged volume silently breaks `pdf_path` with no marker.
 - Mounted network shares and USB volumes **already work** (`/Volumes/...` is
   just a path); what's missing is graceful behavior when they vanish.
 - The `url` column on citations already records the original remote source for
-  many rows — a free input for the HTTPS adapter later.
+  many rows, a free input for the HTTPS adapter later.
 
 ## Design
 
@@ -43,11 +43,11 @@ interface StorageAdapter {
 ```
 
 `resolveAccessLink` / access-context concepts are **out of the interface**
-until a remote HTTP client actually exists — for loopback clients, returning
+until a remote HTTP client actually exists: for loopback clients, returning
 the local path is fine (raw server paths are never exposed to non-loopback API
 clients).
 
-### Phase 1 — the indirection
+### Phase 1: the indirection
 
 - `LocalFileAdapter`; all PDF/Markdown reads route through it.
 - Manifestation paths normalize to `file://` URIs
@@ -56,12 +56,12 @@ clients).
   surface as `unavailable` in search results instead of crashing reads, and the
   `verify` CLI doubles as the location health check.
 
-### Phase 2 — HTTPS adapter
+### Phase 2: HTTPS adapter
 
 Re-fetch by the recorded `url` when the local manifestation is missing; cache
 into the standard storage dir. No credentials framework.
 
-### Phase 3 — S3 adapter
+### Phase 3: S3 adapter
 
 `@aws-sdk/client-s3` as an **optionalDependency** (mirroring the playwright
 pattern, `package.json:45`), signed short-lived links for API clients; the API
@@ -109,7 +109,7 @@ Phases 2–3:
 ## Open questions
 
 1. URI normalization details for existing absolute paths (percent-encoding,
-   `/Volumes` case sensitivity) — worth a tiny spike before the migration.
+   `/Volumes` case sensitivity), worth a tiny spike before the migration.
 2. Does availability checking run inline in search (cost per result) or only
    via `verify` / background jobs, with search reading the cached status?
 3. Is phase 2 (HTTPS re-fetch) actually wanted, or does the retrieval
@@ -118,13 +118,13 @@ Phases 2–3:
 
 ## Relationship to other plans
 
-- [domain-model.md](domain-model.md) — provides manifestations (phase A) and
+- [domain-model.md](domain-model.md): provides manifestations (phase A) and
   the URI migration slot (phase C).
-- [http-api.md](http-api.md) — consumes the link union for
+- [http-api.md](http-api.md): consumes the link union for
   `/citations/{doi}/links`; enforces the no-raw-paths-to-remote-clients rule.
-- [zotero-integration.md](zotero-integration.md) — attachment linking produces
+- [zotero-integration.md](zotero-integration.md): attachment linking produces
   `file://` locations this plan then health-checks.
-- [indexing-jobs.md](indexing-jobs.md) — availability refresh is a natural
+- [indexing-jobs.md](indexing-jobs.md): availability refresh is a natural
   background job kind.
-- [fts5-full-text-search.md](fts5-full-text-search.md) — unaffected; chunks
+- [fts5-full-text-search.md](fts5-full-text-search.md): unaffected; chunks
   persist even when the source file is offline (never silently deleted).

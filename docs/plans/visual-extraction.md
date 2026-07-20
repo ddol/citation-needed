@@ -5,8 +5,8 @@
 
 Three parts of a PDF resist the deterministic text pipeline: **display
 equations**, **figures**, and **grouped-header tables**. They fail for the same
-reason — their meaning lives in _layout and pixels_, not in a linear character
-stream — so they are grouped into one plan with one shared pipeline rather than
+reason: their meaning lives in _layout and pixels_, not in a linear character
+stream, so they are grouped into one plan with one shared pipeline rather than
 three ad-hoc fixes.
 
 This is the honest ceiling of the heuristic passes in
@@ -20,14 +20,14 @@ what the extractor already discarded.
 
 Scored against `Liang2020.pdf` (LaneGCN), the current pipeline produces:
 
-- **Equations** — `pdf2md` mangles display math (e.g. Eq. 10's piecewise
+- **Equations**: `pdf2md` mangles display math (e.g. Eq. 10's piecewise
   `d(x_i)` becomes `( 0.5x2i if kxi k < 1 d(xi ) =`). `pdftotext -layout` keeps
   the same equation nearly intact on one line but still has **no LaTeX
-  structure** — subscripts, superscripts, and stacked limits are lost in both.
-- **Figures** — captions survive for in-body figures (Fig. 1–4) but never a
+  structure**: subscripts, superscripts, and stacked limits are lost in both.
+- **Figures**: captions survive for in-body figures (Fig. 1–4) but never a
   description of _what the figure shows_; end-of-paper figures (Fig. 5–6) are
   dropped or land as placeholders.
-- **Grouped tables** — Markdown has no colspan, so a two-row header
+- **Grouped tables**: Markdown has no colspan, so a two-row header
   (`Backbone | FusionNet | K=1 | K=6` over `ActorNet | MapNet | … | minFDE`)
   is flattened deterministically by `layout-tables.ts`
   (`packedGroupedTableToMarkdown`): it anchors on the single-space-packed leaf
@@ -62,7 +62,7 @@ content is additive and clearly attributed (see Output contract below).
   from `pdftotext -layout`, so we rasterize only that region and ask Nougat for
   its markup. This sidesteps Nougat's ~1/500-page whole-page repetition failure
   and keeps runs cheap. **The CC-BY-NC license means this stays an opt-in dev
-  tool, not a bundled default** — noted loudly so a commercial deployment does
+  tool, not a bundled default**, noted loudly so a commercial deployment does
   not inherit an NC dependency unaware.
 - **Figures → transformers.js + BLIP** locally (zero key, zero network, pure
   Node). Upgrade path to SmolVLM for descriptions richer than a one-line caption.
@@ -93,7 +93,7 @@ splice fragment into Markdown, attributed, deterministic order
 
 Region rasterization reuses the page numbers already computed by
 `figurePagesForLayout` / `equationPagesForLayout` in `markdown.ts`, so no new
-PDF-geometry code is needed on the locating side — only a region→PNG step
+PDF-geometry code is needed on the locating side, only a region→PNG step
 (`pdftoppm -f N -l N` crop, already have `pdftotext` from poppler).
 
 ## Output contract
@@ -111,19 +111,19 @@ model-generated:
 
 ## Phasing
 
-1. **Region rasterizer** — `pdf region → PNG` helper in `verification/`, pure and
+1. **Region rasterizer**: `pdf region → PNG` helper in `verification/`, pure and
    tested against a fixture PDF. No model yet.
-2. **Figures (BLIP, local)** — lowest risk, no Python, no NC license. Wire an
+2. **Figures (BLIP, local)**: lowest risk, no Python, no NC license. Wire an
    optional `describe-figures` pass; gate behind a flag + missing-dependency
    guard like the extractor-version resolver already does.
-3. **Equations/tables (Nougat)** — opt-in dev pass, CC-BY-NC guard, region-scoped
+3. **Equations/tables (Nougat)**: opt-in dev pass, CC-BY-NC guard, region-scoped
    calls. Feed the `score-markdown-quality` equation metrics to measure lift.
-4. **Score integration** — extend `score-markdown-quality` to report
+4. **Score integration**: extend `score-markdown-quality` to report
    before/after equation-`$$` coverage and figure-description coverage so the
    enrichment loop is measurable, not vibes.
 
 ## Non-goals
 
-- Not a general OCR replacement — the deterministic path stays primary.
+- Not a general OCR replacement; the deterministic path stays primary.
 - No hosted paid APIs (Mathpix) and no always-on network calls.
 - No bundling of a CC-BY-NC model into the default install path.

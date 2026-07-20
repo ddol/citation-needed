@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                                                                  |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **Exploratory** - local-first Flow C metadata spidering before external graph expansion                                                |
+| Status     | **Exploratory**: local-first Flow C metadata spidering before external graph expansion                                                 |
 | Flow       | C                                                                                                                                      |
 | Depends on | [domain-model.md](domain-model.md), [fts5-full-text-search.md](fts5-full-text-search.md), later [citation-graph.md](citation-graph.md) |
 
@@ -19,7 +19,7 @@ yet held. It should make the corpus able to say "this paper appears to cite
 something we do not hold yet" and "this reference probably matches one of your
 local papers, but needs review" before relying on external graph sources.
 
-## Current State
+## Current state
 
 - There is no local bibliography parser.
 - Extracted Markdown is not scanned for reference sections.
@@ -50,7 +50,7 @@ The workflow is intentionally metadata-only and local-first.
 10. Conflicts, low-confidence matches, and unresolved references remain visible
     as alignment issues.
 
-### Storage Shape
+### Storage shape
 
 - `reference_mentions`: one row per extracted bibliography entry, including
   source citation, raw reference text, parser output, enrichment provenance, and
@@ -60,7 +60,7 @@ The workflow is intentionally metadata-only and local-first.
 - Existing or planned citation/citation-edge tables should receive only verified
   identities: exact DOI matches or accepted review candidates.
 
-### Alignment Rules
+### Alignment rules
 
 - Exact DOI match: link to the existing local citation and emit an extracted
   citation edge.
@@ -108,7 +108,7 @@ local candidate."
   after acceptance.
 - Metadata-only no-download assertion for the full spider workflow.
 
-## Backlog Items
+## Backlog items
 
 - [verify] M - Local bibliography parser: detect reference sections in extracted Markdown and parse raw reference entries into structured metadata (see docs/plans/local-bibliography-spider.md)
 - [db] M - reference_mentions + reference_match_candidates tables for extracted bibliography evidence and local alignment review (see docs/plans/local-bibliography-spider.md)
@@ -138,11 +138,11 @@ local candidate."
 
 ## Relationship to other plans
 
-- [fts5-full-text-search.md](fts5-full-text-search.md) — provides extracted
+- [fts5-full-text-search.md](fts5-full-text-search.md): provides extracted
   Markdown and quality/post-processing work that improves bibliography parsing.
-- [domain-model.md](domain-model.md) — identifiers and DOI-less admission
+- [domain-model.md](domain-model.md): identifiers and DOI-less admission
   determine how weakly identified frontier references are represented.
-- [citation-graph.md](citation-graph.md) — consumes exact DOI links and accepted
+- [citation-graph.md](citation-graph.md): consumes exact DOI links and accepted
   review matches as extracted citation edges; does not duplicate the parser.
-- [retrieval-pipeline.md](retrieval-pipeline.md) — owns the shared Crossref
+- [retrieval-pipeline.md](retrieval-pipeline.md): owns the shared Crossref
   enrichment and retrieval-cascade boundary.

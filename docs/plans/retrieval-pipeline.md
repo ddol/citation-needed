@@ -1,16 +1,16 @@
 # Retrieval pipeline & cascade hygiene
 
-| Field      | Value                                                                   |
-| ---------- | ----------------------------------------------------------------------- |
-| Status     | **Core — slice 3** (cascade trims; adapter implementations exploratory) |
-| Flow       | C                                                                       |
-| Depends on | —                                                                       |
+| Field      | Value                                                                  |
+| ---------- | ---------------------------------------------------------------------- |
+| Status     | **Core: slice 3** (cascade trims; adapter implementations exploratory) |
+| Flow       | C                                                                      |
+| Depends on | None                                                                   |
 
 ## Intent
 
 Every stage in the retrieval cascade either resolves real PDFs or is not in
 the loop. Capability that exists in code but cannot yet succeed is **parked**
-— unexported, unwired, covered by its unit tests — instead of being exercised
+(unexported, unwired, covered by its unit tests) instead of being exercised
 on every miss. This doc owns the cascade's shape and hosts the parked
 acquisition work until each piece earns its slot back.
 
@@ -27,13 +27,13 @@ acquisition work until each piece earns its slot back.
 - Lookups retry through `src/retrieval/http-retry.ts` (`Retry-After`, else
   exponential; 429 and 5xx). Per-host limits live in `src/retrieval/config.ts`.
 - The publisher stage can never succeed: `getAdapter` matches DOI prefixes
-  (10.1007 Springer, 10.1016 Elsevier, 10.1145 ACM —
+  (10.1007 Springer, 10.1016 Elsevier, 10.1145 ACM, in
   `src/retrieval/publishers/`) but no adapter implements `getPdfUrl`, so every
-  cache-miss appends `publisher(<name>: no direct PDF URL)` and moves on —
+  cache-miss appends `publisher(<name>: no direct PDF URL)` and moves on:
   noise in every failure message, no capability.
 - `DoiResolver` (Crossref metadata lookup, `src/retrieval/resolvers/doi.ts`)
   is re-exported from both barrel files (`src/retrieval/index.ts`,
-  `src/retrieval/resolvers/index.ts`) but wired into nothing — only its tests
+  `src/retrieval/resolvers/index.ts`) but wired into nothing; only its tests
   call it. Exported, it reads as supported functionality; it is a helper
   awaiting the Crossref metadata-enrichment item.
 - Retry/backoff covers _lookups_, not the PDF `GET` itself; only `proxies[0]` of
@@ -41,7 +41,7 @@ acquisition work until each piece earns its slot back.
 - A resolved URL is not always a fetchable one. Publisher-hosted PDFs answer 403
   (MDPI, ACM) and some repository hosts serve incomplete certificate chains
   (`unable to verify the first certificate`). The 403 is **not** a User-Agent
-  block — a browser UA and no UA are refused identically — so there is nothing to
+  block (a browser UA and no UA are refused identically), so there is nothing to
   fix here without misrepresenting who we are, which
   [TENETS.md](../../TENETS.md) § Legitimate access only forbids.
 - Semantic Scholar's unauthenticated pool throttles in streaks.
@@ -71,7 +71,7 @@ joins the cascade only when its resolver produces real, test-backed PDF URLs
 
 `DoiResolver` drops out of both public barrel exports; the class and its tests
 stay in place. It returns as the engine of the Crossref metadata-enrichment
-item (abstract, keywords, licence, ISSN — which also populates the
+item (abstract, keywords, licence, ISSN, which also populates the
 currently-always-undefined `isOpenAccess`).
 
 ### Coverage ceiling
@@ -80,7 +80,7 @@ Open-access sources are complementary, not redundant, and they run out. Measured
 against a 56-entry robotics/LiDAR bibliography: Unpaywall and arXiv together
 reach 21; adding Semantic Scholar reaches 26. The remaining ~30 are paywalled
 IEEE/Elsevier/ACM papers with no free copy anywhere, so **~46% is the ceiling
-without institutional access** — past that is the `authenticated` stage, not
+without institutional access**: past that is the `authenticated` stage, not
 another aggregator.
 
 ### Future cascade entries (exploratory)
@@ -97,12 +97,12 @@ one cascade integration test per re-entered stage.
   56-entry bibliography it resolved 13 papers and added **zero** the existing
   sources did not already cover. It is a third upstream to maintain for no new
   PDFs. Revisit only as redundancy if Semantic Scholar's throttling proves
-  intolerable — and note OpenAlex has required API keys since Feb 2026.
+  intolerable; and note OpenAlex has required API keys since Feb 2026.
 - **Experimental flag for the publisher stage**: there is nothing to
   experiment with until an adapter returns URLs; a flag hides the dead branch
   instead of removing it.
 - **Deleting the adapter code and tests**: the prefix matching and URL helpers
-  are the scaffolding the three L implementation items build on — cheap to
+  are the scaffolding the three L implementation items build on: cheap to
   keep, already tested.
 - **A resolver plugin registry**: a handful of call sites read better than a
   registry; revisit if the cascade grows past ~6 stages.
@@ -117,7 +117,7 @@ one cascade integration test per re-entered stage.
 
 ## Backlog items
 
-Core — slice 3:
+Core slice 3:
 
 - [fetch] S - Drop tryPublisher from the active retrieval cascade; adapters and their tests stay as parked scaffolding (see docs/plans/retrieval-pipeline.md)
 - [fetch] XS - Unexport DoiResolver from the retrieval barrels until Crossref enrichment schedules it (see docs/plans/retrieval-pipeline.md)
@@ -148,7 +148,7 @@ Exploratory (Flow C, parked here):
   whose title is merely abbreviated is accepted.
 - Throttling is covered as its own failure mode: a 429 retries and can still
   succeed, and an exhausted budget surfaces an error rather than an empty result.
-- `attempts` message shape stays covered — a readable failure trail is a
+- `attempts` message shape stays covered: a readable failure trail is a
   feature, not incidental output.
 - Network is mocked; per-host pacing is collapsed via the config module so retry
   tests do not sleep.
@@ -168,15 +168,15 @@ Exploratory (Flow C, parked here):
 
 ## Relationship to other plans
 
-- [citation-graph.md](citation-graph.md) — graph-source open-access PDF URLs
+- [citation-graph.md](citation-graph.md): graph-source open-access PDF URLs
   join the cascade behind the same re-entry gate. Its exploratory `GraphSource`
   Semantic Scholar client must reuse the retrieval resolver this doc owns
   (`src/retrieval/resolvers/semantic-scholar.ts`) rather than add a second S2
   client and a second rate limiter against the same shared pool.
-- [local-bibliography-spider.md](local-bibliography-spider.md) — uses the
+- [local-bibliography-spider.md](local-bibliography-spider.md): uses the
   shared Crossref enrichment path for parsed references but remains
   metadata-only and never downloads PDFs.
-- [service-layer.md](service-layer.md) — its RetrievalService phase wraps the
+- [service-layer.md](service-layer.md): its RetrievalService phase wraps the
   orchestrator; this doc owns the cascade shape it wraps.
-- [storage-adapters.md](storage-adapters.md) — its HTTPS re-fetch open
+- [storage-adapters.md](storage-adapters.md): its HTTPS re-fetch open
   question defers to this cascade for re-downloads.
