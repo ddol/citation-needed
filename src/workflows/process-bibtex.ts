@@ -67,6 +67,12 @@ export interface ProcessBibtexOptions {
   markdownPath?: string;
   email?: string;
   db?: Database;
+  /**
+   * Store metadata and stop: no retrieval, no extraction, no files written.
+   * A caller that only wants citations in the database should not have to pay
+   * for downloads, and should not leave half-finished rows behind if it aborts.
+   */
+  metadataOnly?: boolean;
   authConfig?: AuthConfig;
   retrievePdf?: (doi: string, entry: ParsedEntry) => Promise<RetrievalResult>;
   extractMarkdown?: (pdfPath: string) => Promise<string>;
@@ -142,19 +148,49 @@ function addCitationForImport(
   return { stored: db.addCitation(citation), inserted: true };
 }
 
+/**
+ * Where the BibTeX came from. A file import defaults its output directories
+ * beside the .bib; content handed over in memory (the MCP tool) has no such
+ * anchor and falls back to the working directory.
+ */
+export interface BibtexSource {
+  content: string;
+  /** Absolute path when the source was a file, a display label otherwise. */
+  label: string;
+  baseDir: string;
+}
+
 export async function processBibtexFile(
   bibtexPath: string,
   options: ProcessBibtexOptions = {}
 ): Promise<ProcessBibtexResult> {
   const resolvedBibtexPath = path.resolve(bibtexPath);
-  const bibtexDir = path.dirname(resolvedBibtexPath);
-  const paperPath = path.resolve(options.paperPath || path.join(bibtexDir, 'papers', 'pdf'));
-  const markdownPath = path.resolve(
-    options.markdownPath || path.join(bibtexDir, 'papers', 'markdown')
+  return processBibtex(
+    {
+      content: fs.readFileSync(resolvedBibtexPath, 'utf-8'),
+      label: resolvedBibtexPath,
+      baseDir: path.dirname(resolvedBibtexPath),
+    },
+    options
   );
+}
 
-  ensureDir(paperPath);
-  ensureDir(markdownPath);
+export async function processBibtex(
+  source: BibtexSource,
+  options: ProcessBibtexOptions = {}
+): Promise<ProcessBibtexResult> {
+  const resolvedBibtexPath = source.label;
+  const paperPath = path.resolve(options.paperPath || path.join(source.baseDir, 'papers', 'pdf'));
+  const markdownPath = path.resolve(
+    options.markdownPath || path.join(source.baseDir, 'papers', 'markdown')
+  );
+  const metadataOnly = options.metadataOnly ?? false;
+
+  // Metadata-only writes nothing, so it must not create directories either.
+  if (!metadataOnly) {
+    ensureDir(paperPath);
+    ensureDir(markdownPath);
+  }
 
   const db = options.db ?? getDatabase();
   const authConfig = {
@@ -162,18 +198,23 @@ export async function processBibtexFile(
     ...(options.authConfig || {}),
     ...(options.email ? { email: options.email } : {}),
   };
-  const retriever: Retriever = options.retrievePdf
-    ? { retrievePdf: options.retrievePdf }
-    : new RetrievalOrchestrator(db, authConfig, paperPath);
+  // Built on demand: constructing the orchestrator creates the PDF directory,
+  // and a metadata-only run has no business leaving directories behind.
+  let retrieverInstance: Retriever | undefined;
+  const getRetriever = (): Retriever => {
+    retrieverInstance ??= options.retrievePdf
+      ? { retrievePdf: options.retrievePdf }
+      : new RetrievalOrchestrator(db, authConfig, paperPath);
+    return retrieverInstance;
+  };
   const extractMarkdown = options.extractMarkdown ?? extractPdfMarkdown;
   const emitProgress = options.onProgress ?? (() => undefined);
 
-  const content = fs.readFileSync(resolvedBibtexPath, 'utf-8');
-  const parsed = parseBibtex(content);
+  const parsed = parseBibtex(source.content);
 
   const retryCooldownMs = options.retryCooldownMs ?? THROTTLE_COOLDOWN_MS;
   const retryThrottled = options.retryThrottled ?? true;
-  retriever.resetTransientState?.();
+  if (!metadataOnly) getRetriever().resetTransientState?.();
 
   let importedCount = 0;
   let downloadedCount = 0;
@@ -196,7 +237,7 @@ export async function processBibtexFile(
     emitProgress({ doi, label, fileStem, pass, stage: 'retrieving', message: 'Downloading PDF' });
 
     const startedAt = Date.now();
-    const retrieval = await retriever.retrievePdf(doi, prepared.entry);
+    const retrieval = await getRetriever().retrievePdf(doi, prepared.entry);
     const durationMs = Date.now() - startedAt;
 
     // Audit log: one retrieval_log row per attempt (success or failure) so the
@@ -314,6 +355,18 @@ export async function processBibtexFile(
     const { stored, inserted } = addCitationForImport(db, normalizedEntry);
     if (inserted) importedCount += 1;
 
+    if (metadataOnly) {
+      // 'completed' is honest here: storing the metadata was the whole job.
+      emitProgress({
+        doi: normalizedDoi,
+        label,
+        fileStem,
+        stage: 'completed',
+        message: inserted ? 'Imported metadata' : 'Metadata already stored',
+      });
+      continue;
+    }
+
     const prepared: PreparedEntry = {
       entry: normalizedEntry,
       doi: normalizedDoi,
@@ -341,7 +394,7 @@ export async function processBibtexFile(
           : 'Waiting for the rate limit to clear',
     });
     await sleep(retryCooldownMs);
-    retriever.resetTransientState?.();
+    getRetriever().resetTransientState?.();
     emitProgress({
       label: `${throttledQueue.length} rate-limited citation(s)`,
       fileStem: '__retry',

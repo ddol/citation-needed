@@ -11,12 +11,10 @@ import { AuthenticatedDownloader } from './downloaders/authenticated';
 import { createLogger } from '../utils/logger';
 import type { CitationFileIdentity } from '../utils/file';
 import { getCitationFileStem } from '../utils/file';
-import { getAdapter } from './publishers/index';
 
 export { ArxivResolver } from './resolvers/arxiv';
 export { UnpaywallResolver } from './resolvers/unpaywall';
 export { SemanticScholarResolver } from './resolvers/semantic-scholar';
-export { DoiResolver } from './resolvers/doi';
 export { OpenAccessDownloader } from './downloaders/open-access';
 export { AuthenticatedDownloader } from './downloaders/authenticated';
 export { publishers, getAdapter } from './publishers/index';
@@ -99,9 +97,11 @@ export class RetrievalOrchestrator {
     const oaResult = await this.tryOpenAccess(doi, fileStem, ctx);
     if (oaResult.success) return oaResult;
 
-    const publisherResult = await this.tryPublisher(doi, fileStem, ctx);
-    if (publisherResult.success) return publisherResult;
-
+    // No publisher stage. Every adapter returns a landing page rather than a
+    // PDF URL, so the stage could only ever fail, and a stage that cannot
+    // succeed costs a request and buries the real reason in `attempts`. The
+    // adapters stay parked until one of them resolves a PDF
+    // (see docs/plans/retrieval-pipeline.md).
     if (this.authConfig.proxies?.length) {
       const authResult = await this.tryAuthenticated(doi, fileStem, ctx);
       if (authResult.success) return authResult;
@@ -294,55 +294,6 @@ export class RetrievalOrchestrator {
       logger.warn('arXiv download failed', { doi, err: message });
       ctx.attempts.push(`arxiv(download failed: ${message})`);
       return undefined;
-    }
-  }
-
-  private async tryPublisher(
-    doi: string,
-    fileStem: string,
-    ctx: CascadeContext
-  ): Promise<RetrievalResult> {
-    const adapter = getAdapter(doi);
-    if (!adapter) {
-      ctx.attempts.push('publisher(no adapter for DOI prefix)');
-      return { success: false, source: 'publisher', message: 'No publisher adapter' };
-    }
-
-    const pdfUrl = adapter.getPdfUrl?.(doi);
-    if (!pdfUrl) {
-      // Adapters exist for the prefix but can't yet resolve a direct PDF URL.
-      // Stubbed in M1, real resolution lands in M2 (Restricted Paywall Access).
-      ctx.attempts.push(`publisher(${adapter.name}: no direct PDF URL)`);
-      return {
-        success: false,
-        source: 'publisher',
-        message: `${adapter.name} has no direct PDF URL`,
-      };
-    }
-
-    try {
-      const localPath = await this.downloader.download(doi, pdfUrl, fileStem);
-      this.db.transaction(() => {
-        this.db.updatePdfPath(doi, localPath);
-        this.db.updateVerificationStatus(doi, 'downloaded');
-        this.db.updateAccessType(doi, 'open-access');
-      });
-      return {
-        success: true,
-        pdfUrl,
-        localPath,
-        source: `publisher:${adapter.name}`,
-        message: `Downloaded via ${adapter.name}`,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.warn('Publisher download failed', { doi, adapter: adapter.name, err: message });
-      ctx.attempts.push(`publisher(${adapter.name}: ${message})`);
-      return {
-        success: false,
-        source: `publisher:${adapter.name}`,
-        message: `${adapter.name} download failed: ${message}`,
-      };
     }
   }
 
