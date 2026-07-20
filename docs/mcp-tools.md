@@ -1,8 +1,8 @@
-# MCP Tools Reference
+# MCP tools reference
 
 All tools are available via the MCP server started with `citation-needed server`.
 
-## Citation Tools
+## Citation tools
 
 ### `get-citation`
 
@@ -64,7 +64,7 @@ Search arXiv for a paper by title.
 
 ---
 
-## Retrieval Tools
+## Retrieval tools
 
 ### `download-pdf`
 
@@ -73,9 +73,9 @@ Download a PDF for a citation from a direct `pdfUrl`, or from Unpaywall when
 
 This is a narrow tool, not the retrieval cascade: it does not try Semantic
 Scholar or arXiv, and it does not use the institutional-proxy authenticated
-downloader. The full cascade — and the identity check that refuses a wrong
-paper — runs in the CLI `import-bibtex` workflow
-([architecture.md](architecture.md) § Retrieval cascade).
+downloader. The full cascade (and the identity check that refuses a wrong paper)
+runs in the CLI `import-bibtex` workflow ([architecture.md](architecture.md)
+§ Retrieval cascade).
 
 **Input:**
 
@@ -93,7 +93,7 @@ the database, the citation's PDF path and verification status are updated.
 
 ---
 
-## Grounding Tools
+## Grounding tools
 
 ### `search-citations`
 

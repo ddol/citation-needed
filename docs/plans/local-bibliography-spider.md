@@ -1,11 +1,10 @@
-# Local Bibliography Spider
+# Local bibliography spider
 
-| Field         | Value                                                                                                                                  |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** - local-first Flow C metadata spidering before external graph expansion                                                |
-| Flow          | C                                                                                                                                      |
-| Depends on    | [domain-model.md](domain-model.md), [fts5-full-text-search.md](fts5-full-text-search.md), later [citation-graph.md](citation-graph.md) |
-| Last reviewed | 2026-07-14                                                                                                                             |
+| Field      | Value                                                                                                                                  |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | **Exploratory** - local-first Flow C metadata spidering before external graph expansion                                                |
+| Flow       | C                                                                                                                                      |
+| Depends on | [domain-model.md](domain-model.md), [fts5-full-text-search.md](fts5-full-text-search.md), later [citation-graph.md](citation-graph.md) |
 
 ## Intent
 

@@ -1,11 +1,10 @@
-# Storage Adapters & External Files
+# Storage adapters & external files
 
-| Field         | Value                                                                          |
-| ------------- | ------------------------------------------------------------------------------ |
-| Status        | **Exploratory** — mounted paths keep working today                             |
-| Flow          | Infrastructure (availability item: B)                                          |
-| Depends on    | [domain-model.md](domain-model.md) phase A (manifestations) and phase C (URIs) |
-| Last reviewed | 2026-07-12                                                                     |
+| Field      | Value                                                                          |
+| ---------- | ------------------------------------------------------------------------------ |
+| Status     | **Exploratory** — mounted paths keep working today                             |
+| Flow       | Infrastructure (availability item: B)                                          |
+| Depends on | [domain-model.md](domain-model.md) phase A (manifestations) and phase C (URIs) |
 
 ## Intent
 

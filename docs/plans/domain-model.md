@@ -1,11 +1,10 @@
-# Domain Model & Schema Evolution
+# Domain model & schema evolution
 
-| Field         | Value                                                         |
-| ------------- | ------------------------------------------------------------- |
-| Status        | **Core — slice 2 shipped · slice 3** (phases B/C exploratory) |
-| Flow          | Infrastructure (serves A, B, C)                               |
-| Depends on    | — (schema foundation for fts5, zotero, storage-adapters)      |
-| Last reviewed | 2026-07-14                                                    |
+| Field      | Value                                                         |
+| ---------- | ------------------------------------------------------------- |
+| Status     | **Core — slice 2 shipped · slice 3** (phases B/C exploratory) |
+| Flow       | Infrastructure (serves A, B, C)                               |
+| Depends on | — (schema foundation for fts5, zotero, storage-adapters)      |
 
 ## Intent
 

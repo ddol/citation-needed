@@ -1,11 +1,10 @@
-# Retrieval Pipeline & Cascade Hygiene
+# Retrieval pipeline & cascade hygiene
 
-| Field         | Value                                                                   |
-| ------------- | ----------------------------------------------------------------------- |
-| Status        | **Core — slice 3** (cascade trims; adapter implementations exploratory) |
-| Flow          | C                                                                       |
-| Depends on    | —                                                                       |
-| Last reviewed | 2026-07-15                                                              |
+| Field      | Value                                                                   |
+| ---------- | ----------------------------------------------------------------------- |
+| Status     | **Core — slice 3** (cascade trims; adapter implementations exploratory) |
+| Flow       | C                                                                       |
+| Depends on | —                                                                       |
 
 ## Intent
 

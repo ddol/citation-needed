@@ -1,4 +1,4 @@
-# Contact Email & Institutional Proxy Setup
+# Contact email & institutional proxy setup
 
 Two independent things live in `~/.citation-needed/auth.json`: a **contact
 email**, which enables Unpaywall and is the one setting nearly everyone needs,
@@ -23,7 +23,7 @@ also sent as the contact in the downloader's `User-Agent`.
 
 Use a real one. Unpaywall rejects placeholder domains with HTTP 422 (_"Please use
 your own email address in API calls"_), so `@example.com` and friends are treated
-as no address at all — the stage is skipped with a hint rather than spending a
+as no address at all. The stage is skipped with a hint rather than spending a
 request on a guaranteed rejection.
 
 The standalone `download` command can take an address per-invocation instead:

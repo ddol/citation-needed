@@ -1,11 +1,10 @@
-# Citation Graph, Corpus Expansion & Discovery
+# Citation graph, corpus expansion & discovery
 
-| Field         | Value                                                                                                                                                                                              |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** — interim: compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed                                                                                      |
-| Flow          | C (discovery MCP tools: A; reference cross-check: B)                                                                                                                                               |
-| Depends on    | [domain-model.md](domain-model.md) (migration runner; identifiers for dedupe), [indexing-jobs.md](indexing-jobs.md) (expansion job kinds), [service-layer.md](service-layer.md) (contract pattern) |
-| Last reviewed | 2026-07-12                                                                                                                                                                                         |
+| Field      | Value                                                                                                                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | **Exploratory** — interim: compose a community Semantic Scholar/OpenAlex MCP server alongside citation-needed                                                                                      |
+| Flow       | C (discovery MCP tools: A; reference cross-check: B)                                                                                                                                               |
+| Depends on | [domain-model.md](domain-model.md) (migration runner; identifiers for dedupe), [indexing-jobs.md](indexing-jobs.md) (expansion job kinds), [service-layer.md](service-layer.md) (contract pattern) |
 
 ## Intent
 

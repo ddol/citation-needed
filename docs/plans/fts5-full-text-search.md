@@ -1,11 +1,10 @@
-# FTS5 Full-Text Search
+# FTS5 full-text search
 
-| Field         | Value                                                                            |
-| ------------- | -------------------------------------------------------------------------------- |
-| Status        | **Core — slices 1–2 shipped** (benchmark + extractor-filter items exploratory)   |
-| Flow          | A (verify-quote: B)                                                              |
-| Depends on    | [service-layer.md](service-layer.md), [domain-model.md](domain-model.md) phase A |
-| Last reviewed | 2026-07-14                                                                       |
+| Field      | Value                                                                            |
+| ---------- | -------------------------------------------------------------------------------- |
+| Status     | **Core — slices 1–2 shipped** (benchmark + extractor-filter items exploratory)   |
+| Flow       | A (verify-quote: B)                                                              |
+| Depends on | [service-layer.md](service-layer.md), [domain-model.md](domain-model.md) phase A |
 
 ## Intent
 

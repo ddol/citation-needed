@@ -1,11 +1,10 @@
-# HTTP Search API & OpenAPI
+# HTTP search API & OpenAPI
 
-| Field         | Value                                                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** — build when a real non-MCP client appears                                                                                  |
-| Flow          | Infrastructure (frontend enabler)                                                                                                           |
-| Depends on    | [service-layer.md](service-layer.md) (hard); [fts5-full-text-search.md](fts5-full-text-search.md) (soft — more valuable after, not blocked) |
-| Last reviewed | 2026-07-12                                                                                                                                  |
+| Field      | Value                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | **Exploratory** — build when a real non-MCP client appears                                                                                  |
+| Flow       | Infrastructure (frontend enabler)                                                                                                           |
+| Depends on | [service-layer.md](service-layer.md) (hard); [fts5-full-text-search.md](fts5-full-text-search.md) (soft — more valuable after, not blocked) |
 
 ## Intent
 
