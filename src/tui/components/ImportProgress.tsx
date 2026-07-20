@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Static, Text, useApp } from 'ink';
-import {
-  processBibtexFile,
-  type ProcessBibtexOptions,
-  type ProcessBibtexProgress,
-  type ProcessBibtexResult,
-} from '../../workflows/process-bibtex';
+import { getDatabase } from '../../db/index';
+import { ImportService, type ImportSummary } from '../../services/import';
+import type { ProcessBibtexProgress } from '../../workflows/process-bibtex';
+
+/** The CLI flags this view accepts, mapped straight onto an ImportRequest. */
+export interface ImportProgressOptions {
+  paperPath?: string;
+  markdownPath?: string;
+  email?: string;
+  metadataOnly?: boolean;
+}
 
 const SPINNER_FRAMES = ['⡿', '⣟', '⣯', '⣷', '⣾', '⣽', '⣻', '⢿'];
 
@@ -27,7 +32,7 @@ export function ImportProgress({
   options,
 }: {
   bibtexPath: string;
-  options: Omit<ProcessBibtexOptions, 'onProgress'>;
+  options: ImportProgressOptions;
 }): React.ReactElement {
   const { exit } = useApp();
   const [frameIndex, setFrameIndex] = useState(0);
@@ -38,7 +43,7 @@ export function ImportProgress({
   // prints each one once and never touches it again.
   const [finished, setFinished] = useState<ImportRow[]>([]);
   const [active, setActive] = useState<ImportRow[]>([]);
-  const [result, setResult] = useState<ProcessBibtexResult | null>(null);
+  const [result, setResult] = useState<ImportSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -90,10 +95,15 @@ export function ImportProgress({
       });
     };
 
-    processBibtexFile(bibtexPath, {
-      ...options,
-      onProgress: handleProgress,
-    })
+    new ImportService(getDatabase())
+      .import({
+        source: { bibtexPath },
+        paperPath: options.paperPath,
+        markdownPath: options.markdownPath,
+        email: options.email,
+        metadataOnly: options.metadataOnly,
+        onProgress: handleProgress,
+      })
       .then((nextResult) => {
         if (isMounted) {
           setResult(nextResult);
@@ -171,16 +181,24 @@ export function ImportProgress({
 
       {result ? (
         <Box flexDirection="column" marginTop={1}>
-          <Text color="green">Processed BibTeX file: {result.bibtexPath}</Text>
+          <Text color="green">Processed BibTeX file: {result.source}</Text>
           <Text>Imported citations: {result.importedCount}</Text>
-          <Text>Downloaded PDFs: {result.downloadedCount}</Text>
-          <Text>Generated Markdown files: {result.markdownCount}</Text>
+          {result.metadataOnly ? null : (
+            <>
+              <Text>Downloaded PDFs: {result.downloadedCount}</Text>
+              <Text>Generated Markdown files: {result.markdownCount}</Text>
+            </>
+          )}
           <Text>Skipped entries without DOI: {result.skippedCount}</Text>
           {result.failures.length > 0 ? (
             <Text color="yellow">Failed to retrieve: {result.failures.length} (listed above)</Text>
           ) : null}
-          <Text>PDF output: {result.paperPath}</Text>
-          <Text>Markdown output: {result.markdownPath}</Text>
+          {result.metadataOnly ? null : (
+            <>
+              <Text>PDF output: {result.paperPath}</Text>
+              <Text>Markdown output: {result.markdownPath}</Text>
+            </>
+          )}
         </Box>
       ) : null}
 

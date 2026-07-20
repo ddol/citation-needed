@@ -35,29 +35,30 @@ bound to MCP first, with CLI/HTTP as thin gateways, never per-surface APIs.
 
 **Core** is one workflow, **grounded answers from your own library**: import →
 download/extract → index → find (`search-citations`) → read (`read-content`) →
-check (`verify-quote`), all over MCP. Slices 1–2 are shipped; slice 3
-consolidates what they left split.
+check (`verify-quote`), all over MCP. Slices 1–3 are shipped; slice 4 measures
+whether the extraction the pipeline invests in actually helps an agent answer
+claim-verification questions.
 
 **Exploratory** is everything else: designed, parked in these docs, unscheduled
 until the core loop proves valuable in daily use. Nothing is deleted.
 
 ## Plan status
 
-| Plan                                                         | Status                          | Flow           | Depends on                                                |
-| ------------------------------------------------------------ | ------------------------------- | -------------- | --------------------------------------------------------- |
-| [service-layer.md](service-layer.md)                         | Core: slice 1 shipped · slice 3 | A              | none                                                      |
-| [domain-model.md](domain-model.md)                           | Core: slice 2 shipped · slice 3 | Infrastructure | none                                                      |
-| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core: slices 1–2 shipped        | A              | service-layer, domain-model                               |
-| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core: slice 3 (trims)           | C              | none                                                      |
-| [indexing-jobs.md](indexing-jobs.md)                         | Exploratory                     | Infrastructure | domain-model, fts5                                        |
-| [http-api.md](http-api.md)                                   | Exploratory                     | Infrastructure | service-layer                                             |
-| [zotero-integration.md](zotero-integration.md)               | Exploratory                     | A              | domain-model                                              |
-| [storage-adapters.md](storage-adapters.md)                   | Exploratory                     | Infrastructure | domain-model                                              |
-| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                        | A              | fts5, indexing-jobs                                       |
-| [citation-graph.md](citation-graph.md)                       | Exploratory                     | C              | domain-model, indexing-jobs                               |
-| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                     | C              | domain-model, fts5-full-text-search, later citation-graph |
-| [visual-extraction.md](visual-extraction.md)                 | Exploratory                     | Infrastructure | verification/ extraction pipeline                         |
-| [claim-grounding-eval.md](claim-grounding-eval.md)           | Proposed                        | B              | service-layer, fts5-full-text-search                      |
+| Plan                                                         | Status                    | Flow           | Depends on                                                |
+| ------------------------------------------------------------ | ------------------------- | -------------- | --------------------------------------------------------- |
+| [service-layer.md](service-layer.md)                         | Core: slices 1, 3 shipped | A              | none                                                      |
+| [domain-model.md](domain-model.md)                           | Core: slices 2, 3 shipped | Infrastructure | none                                                      |
+| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core: slices 1–2 shipped  | A              | service-layer, domain-model                               |
+| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core: slice 3 shipped     | C              | none                                                      |
+| [indexing-jobs.md](indexing-jobs.md)                         | Exploratory               | Infrastructure | domain-model, fts5                                        |
+| [http-api.md](http-api.md)                                   | Exploratory               | Infrastructure | service-layer                                             |
+| [zotero-integration.md](zotero-integration.md)               | Exploratory               | A              | domain-model                                              |
+| [storage-adapters.md](storage-adapters.md)                   | Exploratory               | Infrastructure | domain-model                                              |
+| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                  | A              | fts5, indexing-jobs                                       |
+| [citation-graph.md](citation-graph.md)                       | Exploratory               | C              | domain-model, indexing-jobs                               |
+| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory               | C              | domain-model, fts5-full-text-search, later citation-graph |
+| [visual-extraction.md](visual-extraction.md)                 | Exploratory               | Infrastructure | verification/ extraction pipeline                         |
+| [claim-grounding-eval.md](claim-grounding-eval.md)           | Core (slice 4)            | B              | service-layer, fts5-full-text-search                      |
 
 ## Flows
 
@@ -103,11 +104,15 @@ Where two plans could each claim a piece of work:
 
 ## Landing order
 
-1. **Core slice 3, one pipeline, one locator**: manifestation-first locator with
-   self-healing fallback (domain-model) → ImportService consolidation with
-   full-pipeline MCP default (service-layer) → test-harness guardrails → cascade
-   trims (retrieval-pipeline).
-2. **Re-triage Exploratory** against real usage of the core loop.
+1. ~~**Core slice 3, one pipeline, one locator**~~: shipped. Manifestation-first
+   locator with self-healing fallback (domain-model), ImportService
+   consolidation with full-pipeline MCP default (service-layer), test-harness
+   guardrails, cascade trims (retrieval-pipeline).
+2. **Core slice 4, is the pipeline worth its own code?**: token economics, then
+   the claim-grounding eval and its decision memo
+   ([claim-grounding-eval.md](claim-grounding-eval.md)). The result decides
+   whether the parser expands, shrinks, or stays.
+3. **Re-triage Exploratory** against real usage of the core loop.
 
 ## Needs a plan before scheduling
 

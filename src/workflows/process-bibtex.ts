@@ -60,6 +60,21 @@ export interface ProcessBibtexProgress {
   message?: string;
   /** Set on the retry pass, so a listener can tell the two attempts apart. */
   pass?: 'retry';
+  /**
+   * True on exactly one event per BibTeX entry: the one carrying that entry's
+   * final outcome. A throttled entry that is about to be retried is not settled
+   * yet, and the synthetic retry banner is never settled because it is a notice
+   * rather than an entry.
+   *
+   * Counting terminal-looking stages instead of this is wrong twice over: the
+   * banner uses stage 'skipped', and the retry pass emits a second terminal
+   * stage for an entry already counted. Only the workflow knows which event is
+   * final, so it says so rather than leaving each consumer to infer it.
+   *
+   * This is not the same question as "should this row stop animating?", which
+   * is what the terminal stages answer for the TUI. Both are now answerable.
+   */
+  settled: boolean;
 }
 
 export interface ProcessBibtexOptions {
@@ -67,6 +82,12 @@ export interface ProcessBibtexOptions {
   markdownPath?: string;
   email?: string;
   db?: Database;
+  /**
+   * Store metadata and stop: no retrieval, no extraction, no PDF or Markdown written.
+   * A caller that only wants citations in the database should not have to pay
+   * for downloads, and should not create output directories or leave half-finished rows behind.
+   */
+  metadataOnly?: boolean;
   authConfig?: AuthConfig;
   retrievePdf?: (doi: string, entry: ParsedEntry) => Promise<RetrievalResult>;
   extractMarkdown?: (pdfPath: string) => Promise<string>;
@@ -142,19 +163,51 @@ function addCitationForImport(
   return { stored: db.addCitation(citation), inserted: true };
 }
 
+/**
+ * Where the BibTeX came from. A file import defaults its output directories
+ * beside the .bib; content handed over in memory (the MCP tool) has no such
+ * anchor and falls back to the working directory.
+ */
+export interface BibtexSource {
+  content: string;
+  /** Absolute path when the source was a file, a display label otherwise. */
+  label: string;
+  baseDir: string;
+}
+
 export async function processBibtexFile(
   bibtexPath: string,
   options: ProcessBibtexOptions = {}
 ): Promise<ProcessBibtexResult> {
   const resolvedBibtexPath = path.resolve(bibtexPath);
-  const bibtexDir = path.dirname(resolvedBibtexPath);
-  const paperPath = path.resolve(options.paperPath || path.join(bibtexDir, 'papers', 'pdf'));
-  const markdownPath = path.resolve(
-    options.markdownPath || path.join(bibtexDir, 'papers', 'markdown')
+  return processBibtex(
+    {
+      content: fs.readFileSync(resolvedBibtexPath, 'utf-8'),
+      label: resolvedBibtexPath,
+      baseDir: path.dirname(resolvedBibtexPath),
+    },
+    options
   );
+}
 
-  ensureDir(paperPath);
-  ensureDir(markdownPath);
+export async function processBibtex(
+  source: BibtexSource,
+  options: ProcessBibtexOptions = {}
+): Promise<ProcessBibtexResult> {
+  const resolvedBibtexPath = source.label;
+  const paperPath = path.resolve(options.paperPath || path.join(source.baseDir, 'papers', 'pdf'));
+  const markdownPath = path.resolve(
+    options.markdownPath || path.join(source.baseDir, 'papers', 'markdown')
+  );
+  const metadataOnly = options.metadataOnly ?? false;
+
+  // Metadata-only produces no PDF or Markdown, so it must not create the
+  // directories that would hold them. The database is still written: storing
+  // the citations is the point of the run.
+  if (!metadataOnly) {
+    ensureDir(paperPath);
+    ensureDir(markdownPath);
+  }
 
   const db = options.db ?? getDatabase();
   const authConfig = {
@@ -162,18 +215,23 @@ export async function processBibtexFile(
     ...(options.authConfig || {}),
     ...(options.email ? { email: options.email } : {}),
   };
-  const retriever: Retriever = options.retrievePdf
-    ? { retrievePdf: options.retrievePdf }
-    : new RetrievalOrchestrator(db, authConfig, paperPath);
+  // Built on demand: constructing the orchestrator creates the PDF directory,
+  // and a metadata-only run has no business leaving directories behind.
+  let retrieverInstance: Retriever | undefined;
+  const getRetriever = (): Retriever => {
+    retrieverInstance ??= options.retrievePdf
+      ? { retrievePdf: options.retrievePdf }
+      : new RetrievalOrchestrator(db, authConfig, paperPath);
+    return retrieverInstance;
+  };
   const extractMarkdown = options.extractMarkdown ?? extractPdfMarkdown;
   const emitProgress = options.onProgress ?? (() => undefined);
 
-  const content = fs.readFileSync(resolvedBibtexPath, 'utf-8');
-  const parsed = parseBibtex(content);
+  const parsed = parseBibtex(source.content);
 
   const retryCooldownMs = options.retryCooldownMs ?? THROTTLE_COOLDOWN_MS;
   const retryThrottled = options.retryThrottled ?? true;
-  retriever.resetTransientState?.();
+  if (!metadataOnly) getRetriever().resetTransientState?.();
 
   let importedCount = 0;
   let downloadedCount = 0;
@@ -193,10 +251,18 @@ export async function processBibtexFile(
   async function attemptEntry(prepared: PreparedEntry, pass?: 'retry'): Promise<AttemptOutcome> {
     const { doi, fileStem, label, storedId } = prepared;
 
-    emitProgress({ doi, label, fileStem, pass, stage: 'retrieving', message: 'Downloading PDF' });
+    emitProgress({
+      doi,
+      label,
+      fileStem,
+      pass,
+      stage: 'retrieving',
+      message: 'Downloading PDF',
+      settled: false,
+    });
 
     const startedAt = Date.now();
-    const retrieval = await retriever.retrievePdf(doi, prepared.entry);
+    const retrieval = await getRetriever().retrievePdf(doi, prepared.entry);
     const durationMs = Date.now() - startedAt;
 
     // Audit log: one retrieval_log row per attempt (success or failure) so the
@@ -238,6 +304,9 @@ export async function processBibtexFile(
         pass,
         stage: 'failed',
         message: queueable ? 'Rate limited — queued for retry' : retrieval.message,
+        // A queued entry has not finished: the retry pass will emit its real
+        // outcome, and counting both would report more work than there is.
+        settled: !queueable,
       });
       return retrieval.throttled ? 'throttled' : 'failed';
     }
@@ -250,6 +319,7 @@ export async function processBibtexFile(
       pass,
       stage: 'markdown',
       message: 'Generating Markdown',
+      settled: false,
     });
 
     try {
@@ -267,11 +337,12 @@ export async function processBibtexFile(
         pass,
         stage: 'completed',
         message: 'PDF downloaded and Markdown created',
+        settled: true,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push({ doi, stage: 'markdown', message });
-      emitProgress({ doi, label, fileStem, pass, stage: 'failed', message });
+      emitProgress({ doi, label, fileStem, pass, stage: 'failed', message, settled: true });
     }
 
     return 'ok';
@@ -290,6 +361,7 @@ export async function processBibtexFile(
         fileStem,
         stage: 'skipped',
         message: `Skipped: ${reason}`,
+        settled: true,
       });
       continue;
     }
@@ -307,12 +379,26 @@ export async function processBibtexFile(
         fileStem,
         stage: 'skipped',
         message: `Skipped: ${reason}`,
+        settled: true,
       });
       continue;
     }
 
     const { stored, inserted } = addCitationForImport(db, normalizedEntry);
     if (inserted) importedCount += 1;
+
+    if (metadataOnly) {
+      // 'completed' is honest here: storing the metadata was the whole job.
+      emitProgress({
+        doi: normalizedDoi,
+        label,
+        fileStem,
+        stage: 'completed',
+        message: inserted ? 'Imported metadata' : 'Metadata already stored',
+        settled: true,
+      });
+      continue;
+    }
 
     const prepared: PreparedEntry = {
       entry: normalizedEntry,
@@ -339,14 +425,17 @@ export async function processBibtexFile(
         retryCooldownMs >= 1000
           ? `Waiting ${Math.round(retryCooldownMs / 1000)}s for the rate limit to clear`
           : 'Waiting for the rate limit to clear',
+      // Notices describe the run, not an entry, so they never settle.
+      settled: false,
     });
     await sleep(retryCooldownMs);
-    retriever.resetTransientState?.();
+    getRetriever().resetTransientState?.();
     emitProgress({
       label: `${throttledQueue.length} rate-limited citation(s)`,
       fileStem: '__retry',
       stage: 'skipped',
       message: 'Retrying now',
+      settled: false,
     });
 
     for (const prepared of throttledQueue) {

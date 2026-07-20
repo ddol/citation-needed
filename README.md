@@ -105,7 +105,7 @@ The standalone `download` command only downloads a PDF and updates an existing c
 citation-needed auth set-email you@university.edu   # or export CITATION_NEEDED_EMAIL
 ```
 
-Retrieval tries each source in turn (`cache → Unpaywall → Semantic Scholar → arXiv → publisher → authenticated`) and stops at the first that yields a PDF. Every candidate's title is checked against the citation before download, so a source that returns the wrong paper is refused rather than saved under the right name. When nothing works, the failure message lists each stage and why it declined.
+Retrieval tries each source in turn (`cache → Unpaywall → Semantic Scholar → arXiv → authenticated`) and stops at the first that yields a PDF. Every candidate's title is checked against the citation before download, so a source that returns the wrong paper is refused rather than saved under the right name. When nothing works, the failure message lists each stage and why it declined.
 
 ---
 
@@ -159,7 +159,7 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 | `read-content`     | Read extracted Markdown by DOI                      | `doi`           |
 | `verify-quote`     | Check a quote against one paper or the whole corpus | `quote`         |
 
-`import-bibtex` over MCP currently imports metadata only. Use the CLI `import-bibtex` command for the full download and Markdown extraction pipeline, then run `citation-needed index` before relying on body-text search and section-provenance quote checks.
+`import-bibtex` runs the same pipeline over MCP and over the CLI: metadata, PDF download, and Markdown extraction. Pass `metadataOnly` to store citations without fetching. Either way, run `citation-needed index` before relying on body-text search and section-provenance quote checks.
 
 ---
 

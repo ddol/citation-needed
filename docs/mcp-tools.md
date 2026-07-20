@@ -36,17 +36,54 @@ paginated object.
 
 ### `import-bibtex`
 
-Import citation metadata from a BibTeX string into the database. This MCP tool
-does not download PDFs or extract Markdown; use the CLI `import-bibtex` command
-for the full pipeline.
+Import citations from a BibTeX string. Runs the same pipeline as the CLI
+`import-bibtex` command: stores metadata, downloads open-access PDFs through the
+retrieval cascade, and extracts Markdown, so the imported papers are immediately
+groundable through `search-citations`, `read-content`, and `verify-quote`.
+
+Output paths default to `papers/pdf` and `papers/markdown` under the working
+directory, since a BibTeX string has no directory of its own to sit beside.
+
+Set `metadataOnly` to store citations without fetching anything. That variant
+creates no PDF or Markdown files and creates no output directories.
 
 **Input:**
 
 ```json
-{ "bibtex": "@article{...}" }
+{
+  "bibtex": "@article{...}",
+  "paperPath": "papers/pdf",
+  "markdownPath": "papers/markdown",
+  "metadataOnly": false
+}
 ```
 
-**Output:** Confirmation message with import count.
+Only `bibtex` is required.
+
+**Output:**
+
+```json
+{
+  "source": "(inline BibTeX)",
+  "metadataOnly": false,
+  "imported": 12,
+  "downloaded": 9,
+  "extracted": 9,
+  "paperPath": "…/papers/pdf",
+  "markdownPath": "…/papers/markdown",
+  "skipped": [{ "bibtexKey": "smith21", "label": "smith21", "reason": "no DOI" }],
+  "failures": [{ "doi": "10.1234/x", "stage": "download", "message": "No PDF found. attempts: …" }]
+}
+```
+
+Failures and skips carry their reasons as data, so a caller can retry exactly
+the DOIs that failed without parsing prose. `downloaded`, `extracted`,
+`paperPath`, and `markdownPath` are omitted on a `metadataOnly` run rather than
+reported as zeroes it never attempted.
+
+Progress notifications are sent one per BibTeX entry, when that entry reaches
+its final outcome. An entry that is rate-limited and retried still counts once,
+so `progress` never exceeds `total`.
 
 ---
 

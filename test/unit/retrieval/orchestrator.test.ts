@@ -365,30 +365,29 @@ describe('RetrievalOrchestrator', () => {
     expect(downloadFailure.message).toContain('arxiv(download failed: network lost)');
   });
 
-  test('routes Springer DOIs through the publisher adapter step (currently no-op)', async () => {
+  // The publisher adapters only ever produced a landing page, so the stage
+  // could not succeed. It is out of the cascade and `attempts` no longer
+  // mentions it, for a Springer DOI an adapter exists for or any other.
+  test.each([
+    ['a DOI with a parked adapter', '10.1007/s00146-021-01196-y'],
+    ['a DOI with no adapter', '10.9999/unknown'],
+  ])('runs no publisher stage for %s', async (_label, doi) => {
     mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
     mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
-    const db = makeFakeDb({ doi: '10.1007/s00146-021-01196-y' });
 
-    const orch = new RetrievalOrchestrator(db, { email: 'me@me.com' }, tempStorage);
-    const result = await orch.retrievePdf('10.1007/s00146-021-01196-y');
+    const orch = new RetrievalOrchestrator(
+      makeFakeDb({ doi }),
+      { email: 'me@me.com' },
+      tempStorage
+    );
+    const result = await orch.retrievePdf(doi);
 
     expect(result.success).toBe(false);
-    expect(result.message).toContain('publisher(Springer');
+    expect(result.message).not.toContain('publisher');
+    expect(result.message).toContain('authenticated(no proxy configured)');
   });
 
-  test('marks publisher step as no-adapter for unknown DOI prefixes', async () => {
-    mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
-    mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
-    const db = makeFakeDb({ doi: '10.9999/unknown' });
-
-    const orch = new RetrievalOrchestrator(db, { email: 'me@me.com' }, tempStorage);
-    const result = await orch.retrievePdf('10.9999/unknown');
-
-    expect(result.message).toContain('publisher(no adapter for DOI prefix)');
-  });
-
-  test('uses authenticated proxy fallback when open access and publisher steps fail', async () => {
+  test('uses authenticated proxy fallback when the open-access cascade fails', async () => {
     process.env.PROXY_PASSWORD = 'secret';
     mockGetOpenAccessPdf.mockResolvedValueOnce({ ok: true, value: null });
     mockArxivSearch.mockResolvedValueOnce({ ok: true, value: [] });
@@ -439,7 +438,7 @@ describe('RetrievalOrchestrator', () => {
     expect(result.success).toBe(false);
     expect(result.source).toBe('authenticated');
     expect(result.message).toContain('login failed');
-    expect(result.message).toContain('publisher(no adapter for DOI prefix)');
+    expect(result.message).toContain('unpaywall');
   });
 
   test('skips Unpaywall entirely when no email is configured, and says how to fix it', async () => {

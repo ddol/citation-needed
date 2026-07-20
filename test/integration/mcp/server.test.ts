@@ -125,11 +125,13 @@ describe('MCP Server', () => {
       }
     )._requestHandlers.get('tools/call')!({
       method: 'tools/call',
-      params: { name: 'import-bibtex', arguments: { bibtex } },
+      // metadataOnly keeps this test about routing and storage. The default
+      // path downloads PDFs, which belongs in the workflow's own suite.
+      params: { name: 'import-bibtex', arguments: { bibtex, metadataOnly: true } },
     });
 
     const { content } = result as { content: Array<{ type: string; text: string }> };
-    expect(content[0].text).toContain('Imported');
+    expect(JSON.parse(content[0].text).imported).toBe(1);
     expect(db.addCitation).toHaveBeenCalled();
   });
 

@@ -1,6 +1,6 @@
 # Claim-grounding consumption eval: PDF vs Markdown vs MCP
 
-**Status:** Proposed · **Flow:** B · **Depends on:**
+**Status:** Core (slice 4) · **Flow:** B · **Depends on:**
 [service-layer.md](service-layer.md), [fts5-full-text-search.md](fts5-full-text-search.md)
 (shipped slices, the tools under test). Decision input for
 [visual-extraction.md](visual-extraction.md) and

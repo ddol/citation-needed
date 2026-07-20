@@ -1,10 +1,10 @@
 # Service layer & unified API surface
 
-| Field      | Value                                                        |
-| ---------- | ------------------------------------------------------------ |
-| Status     | **Core: slice 1 shipped · slice 3** (phases 3–5 exploratory) |
-| Flow       | A (also serves B)                                            |
-| Depends on | None (foundation; no schema change, no new dependencies)     |
+| Field      | Value                                                    |
+| ---------- | -------------------------------------------------------- |
+| Status     | **Core: slices 1, 3 shipped** (phases 3–5 exploratory)   |
+| Flow       | A (also serves B)                                        |
+| Depends on | None (foundation; no schema change, no new dependencies) |
 
 ## Intent
 
@@ -147,7 +147,7 @@ paginated whole-document text; section addressing arrives with the chunks
 table ([fts5-full-text-search.md](fts5-full-text-search.md)). Exposed as a
 `read-content` MCP tool.
 
-### ImportService (slice 3)
+### ImportService (shipped, slice 3)
 
 One import pipeline, defined once, called by every surface. `processBibtexFile`
 becomes the service's implementation; the CLI command and the MCP tool become

@@ -15,7 +15,7 @@ src/
   db/           – SQLite database layer (better-sqlite3) + versioned migrations
   retrieval/    – PDF retrieval: cascade, resolvers, downloaders, publisher adapters,
                   shared title matching and throttle-aware HTTP
-  services/     – SearchService, ContentService, indexer, zod contracts
+  services/     – ImportService, SearchService, ContentService, indexer, zod contracts
   auth/         – Authentication config (contact email, institutional proxies)
   verification/ – PDF-to-Markdown extraction helpers
   workflows/    – BibTeX batch processing orchestration
@@ -53,14 +53,17 @@ papers/markdown/*.md output
 `RetrievalOrchestrator.retrievePdf` tries each stage in order and stops at the
 first PDF:
 
-| Stage            | Keyed by | Notes                                                         |
-| ---------------- | -------- | ------------------------------------------------------------- |
-| cache            | DOI      | Existing `pdf_path` on disk, or a matching file stem          |
-| Unpaywall        | DOI      | Needs a contact email; skipped (and said so) without one      |
-| Semantic Scholar | DOI      | Aggregates arXiv, publisher OA, and repositories              |
-| arXiv            | title    | Quoted phrase search; strictest identity check                |
-| publisher        | DOI      | Wired but resolves no URLs; removal tracked in the plan below |
-| authenticated    | DOI      | Institutional proxy; only when one is configured              |
+| Stage            | Keyed by | Notes                                                    |
+| ---------------- | -------- | -------------------------------------------------------- |
+| cache            | DOI      | Existing `pdf_path` on disk, or a matching file stem     |
+| Unpaywall        | DOI      | Needs a contact email; skipped (and said so) without one |
+| Semantic Scholar | DOI      | Aggregates arXiv, publisher OA, and repositories         |
+| arXiv            | title    | Quoted phrase search; strictest identity check           |
+| authenticated    | DOI      | Institutional proxy; only when one is configured         |
+
+The publisher adapters in `src/retrieval/publishers/` are not a cascade stage.
+None resolves a direct PDF URL, so the stage could only ever fail; it is out of
+the cascade until one of them does.
 
 DOI-keyed sources run before the title search because a DOI names exactly one
 paper while a search is a guess. Every candidate's title is checked before
@@ -125,13 +128,15 @@ The MCP server (`src/mcp/server.ts`) exposes these tool groups:
 | `tools/retrieval.ts` | download-pdf                                              |
 | `tools/grounding.ts` | search-citations, read-content, verify-quote              |
 
-`import-bibtex` over MCP is metadata-only today. The full download, extraction,
-manifestation recording, and Markdown-output pipeline is the CLI
-`import-bibtex` workflow.
+Both surfaces import through one service (`src/services/import.ts`), which
+resolves the BibTeX source (a file for the CLI, a string over MCP) and hands it
+to the workflow. Download, extraction, manifestation recording, and Markdown
+output are therefore identical whichever surface is used, and `metadataOnly`
+stops the pipeline after the metadata on both.
 
 ## Planned evolution
 
-Forward-looking plans (import-service consolidation, indexing jobs, HTTP API,
+Forward-looking plans (indexing jobs, HTTP API,
 citation graph, storage adapters, vector search, and Zotero work) live in
 [docs/plans/](plans/README.md). Scheduled work is the Core section of
 [BACKLOG.md](../BACKLOG.md); everything else there is Exploratory.

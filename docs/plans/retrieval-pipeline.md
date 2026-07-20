@@ -1,10 +1,10 @@
 # Retrieval pipeline & cascade hygiene
 
-| Field      | Value                                                                  |
-| ---------- | ---------------------------------------------------------------------- |
-| Status     | **Core: slice 3** (cascade trims; adapter implementations exploratory) |
-| Flow       | C                                                                      |
-| Depends on | None                                                                   |
+| Field      | Value                                                                          |
+| ---------- | ------------------------------------------------------------------------------ |
+| Status     | **Core: slice 3 shipped** (cascade trims; adapter implementations exploratory) |
+| Flow       | C                                                                              |
+| Depends on | None                                                                           |
 
 ## Intent
 
@@ -17,7 +17,7 @@ acquisition work until each piece earns its slot back.
 ## Current state
 
 - `RetrievalOrchestrator.retrievePdf` (`src/retrieval/index.ts`) runs
-  cache → Unpaywall → Semantic Scholar → arXiv → publisher → authenticated,
+  cache → Unpaywall → Semantic Scholar → arXiv → authenticated,
   accumulating a one-line `attempts` summary into `RetrievalResult.message`.
   DOI-keyed sources run before the arXiv title search.
 - Identity is checked before every download via `src/retrieval/title-match.ts`,
@@ -26,16 +26,15 @@ acquisition work until each piece earns its slot back.
   upstream metadata.
 - Lookups retry through `src/retrieval/http-retry.ts` (`Retry-After`, else
   exponential; 429 and 5xx). Per-host limits live in `src/retrieval/config.ts`.
-- The publisher stage can never succeed: `getAdapter` matches DOI prefixes
+- There is no publisher stage. `getAdapter` still matches DOI prefixes
   (10.1007 Springer, 10.1016 Elsevier, 10.1145 ACM, in
-  `src/retrieval/publishers/`) but no adapter implements `getPdfUrl`, so every
-  cache-miss appends `publisher(<name>: no direct PDF URL)` and moves on:
-  noise in every failure message, no capability.
-- `DoiResolver` (Crossref metadata lookup, `src/retrieval/resolvers/doi.ts`)
-  is re-exported from both barrel files (`src/retrieval/index.ts`,
-  `src/retrieval/resolvers/index.ts`) but wired into nothing; only its tests
-  call it. Exported, it reads as supported functionality; it is a helper
-  awaiting the Crossref metadata-enrichment item.
+  `src/retrieval/publishers/`), but no adapter implements `getPdfUrl`, so the
+  stage could only ever append `publisher(<name>: no direct PDF URL)` to a
+  failure message. The adapters and their URL-helper tests stay as parked
+  scaffolding.
+- `DoiResolver` (Crossref metadata lookup, `src/retrieval/resolvers/doi.ts`) is
+  no longer re-exported from either barrel file. It is imported from
+  `./doi` directly when the Crossref metadata-enrichment item schedules it.
 - Retry/backoff covers _lookups_, not the PDF `GET` itself; only `proxies[0]` of
   the configured institutional proxies is used.
 - A resolved URL is not always a fetchable one. Publisher-hosted PDFs answer 403
@@ -57,19 +56,19 @@ acquisition work until each piece earns its slot back.
 
 ## Design
 
-### Cascade trim (core, slice 3)
+### Cascade trim (shipped, slice 3)
 
-The cascade should be **cache → Unpaywall → Semantic Scholar → arXiv →
-authenticated**. `tryPublisher` and its orchestrator call site are deleted; the
+The cascade is **cache → Unpaywall → Semantic Scholar → arXiv →
+authenticated**. `tryPublisher` and its orchestrator call site are gone; the
 adapter files and their URL-helper tests stay as scaffolding for the Flow C
 implementation items. The existing "Wire publisher adapters into
 RetrievalOrchestrator fallback chain" item is the explicit re-entry gate: a stage
 joins the cascade only when its resolver produces real, test-backed PDF URLs
 (behind auth config where required).
 
-### DoiResolver parking (core, slice 3)
+### DoiResolver parking (shipped, slice 3)
 
-`DoiResolver` drops out of both public barrel exports; the class and its tests
+`DoiResolver` is out of both public barrel exports; the class and its tests
 stay in place. It returns as the engine of the Crossref metadata-enrichment
 item (abstract, keywords, licence, ISSN, which also populates the
 currently-always-undefined `isOpenAccess`).

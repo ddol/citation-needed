@@ -1,8 +1,13 @@
 import { z, ZodError } from 'zod';
 import type { Database } from '../../db/index';
 import { parseBibtex } from '../../parsers/bibtex';
-import { isValidDoi, normalizeDoi } from '../../parsers/doi';
 import { ArxivResolver } from '../../retrieval/resolvers/arxiv';
+import { ImportService, toImportReport } from '../../services/import';
+
+/** Progress total: how many entries the import will visit, before it starts. */
+function countBibtexEntries(bibtex: string): number {
+  return parseBibtex(bibtex).length;
+}
 
 const GetCitationArgs = z.object({
   doi: z.string().min(1, 'doi is required'),
@@ -15,6 +20,9 @@ const ListCitationsArgs = z.object({
 
 const ImportBibtexArgs = z.object({
   bibtex: z.string().min(1, 'bibtex is required'),
+  paperPath: z.string().optional(),
+  markdownPath: z.string().optional(),
+  metadataOnly: z.boolean().optional(),
 });
 
 const SearchArxivArgs = z.object({
@@ -53,11 +61,20 @@ export const citationToolDefinitions = [
   },
   {
     name: 'import-bibtex',
-    description: 'Import citations from a BibTeX string',
+    description:
+      'Import citations from a BibTeX string. Runs the full pipeline by default: ' +
+      'stores metadata, downloads open-access PDFs, and extracts Markdown for grounding. ' +
+      'Set metadataOnly to store metadata without fetching anything.',
     inputSchema: {
       type: 'object',
       properties: {
         bibtex: { type: 'string', description: 'BibTeX formatted string' },
+        paperPath: { type: 'string', description: 'Directory for downloaded PDFs' },
+        markdownPath: { type: 'string', description: 'Directory for extracted Markdown' },
+        metadataOnly: {
+          type: 'boolean',
+          description: 'Store citation metadata only, skipping downloads and extraction',
+        },
       },
       required: ['bibtex'],
     },
@@ -114,50 +131,43 @@ export async function handleCitationTool(
       }
 
       case 'import-bibtex': {
-        const { bibtex } = ImportBibtexArgs.parse(args);
-        const parsed = parseBibtex(bibtex);
-        const imported: string[] = [];
-        const skipped: string[] = [];
-        const total = parsed.length;
-        for (let i = 0; i < parsed.length; i += 1) {
-          const entry = parsed[i];
-          // Normalize and validate the DOI before it reaches the database — the
-          // same guard the BibTeX workflow applies. Entries with a missing or
-          // malformed DOI are skipped rather than inserted.
-          const normalizedDoi = entry.doi ? normalizeDoi(entry.doi) : '';
-          const accepted = normalizedDoi !== '' && isValidDoi(normalizedDoi);
-          // parseBibtex yields '' (not undefined) for a missing key/DOI, so use
-          // `||` — `??` would stop at the empty string and produce blank labels.
-          const label = entry.bibtexKey || entry.doi || '(no DOI)';
-
-          if (accepted) {
-            db.addCitation({ ...entry, doi: normalizedDoi });
-            imported.push(normalizedDoi);
-          } else {
-            skipped.push(label);
-          }
-
-          if (context.sendProgress) {
-            await context.sendProgress({
-              progress: i + 1,
+        const parsedArgs = ImportBibtexArgs.parse(args);
+        // One pipeline, shared with the CLI: an agent that imports a .bib gets
+        // the PDFs and extracted Markdown that make the corpus groundable, not
+        // metadata rows it then has to fetch a second way.
+        const total = countBibtexEntries(parsedArgs.bibtex);
+        let done = 0;
+        const summary = await new ImportService(db).import({
+          source: { bibtex: parsedArgs.bibtex },
+          paperPath: parsedArgs.paperPath,
+          markdownPath: parsedArgs.markdownPath,
+          metadataOnly: parsedArgs.metadataOnly,
+          onProgress: (progress) => {
+            if (!context.sendProgress) return;
+            // `settled`, not a terminal-looking stage: the retry banner also
+            // reads as 'skipped', and a retried entry reaches a terminal stage
+            // twice. Counting either would push `progress` past `total`.
+            if (!progress.settled) return;
+            done += 1;
+            const notification = {
+              progress: done,
               total,
-              message: accepted ? `imported ${normalizedDoi}` : `skipped ${label}`,
-            });
-          }
-        }
+              message: `${progress.label}: ${progress.message ?? progress.stage}`,
+            };
+            // Fire and forget: a slow or broken progress channel must not stall
+            // or abort the import, and the tool result carries the real outcome
+            // either way. The call goes inside the `then` so a transport that
+            // throws synchronously becomes a rejection this `catch` can swallow;
+            // `Promise.resolve(send(...))` would evaluate `send` first and let
+            // the throw escape into the workflow.
+            Promise.resolve()
+              .then(() => context.sendProgress?.(notification))
+              .catch(() => undefined);
+          },
+        });
+
         return {
-          content: [
-            {
-              type: 'text',
-              text: `Imported ${imported.length} citations${
-                imported.length ? `: ${imported.join(', ')}` : ''
-              }${
-                skipped.length
-                  ? `. Skipped ${skipped.length} (missing or invalid DOI): ${skipped.join(', ')}`
-                  : ''
-              }`,
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(toImportReport(summary), null, 2) }],
         };
       }
 

@@ -1,10 +1,10 @@
 # Domain model & schema evolution
 
-| Field      | Value                                                        |
-| ---------- | ------------------------------------------------------------ |
-| Status     | **Core: slice 2 shipped · slice 3** (phases B/C exploratory) |
-| Flow       | Infrastructure (serves A, B, C)                              |
-| Depends on | None (schema foundation for fts5, zotero, storage-adapters)  |
+| Field      | Value                                                       |
+| ---------- | ----------------------------------------------------------- |
+| Status     | **Core: slices 2, 3 shipped** (phases B/C exploratory)      |
+| Flow       | Infrastructure (serves A, B, C)                             |
+| Depends on | None (schema foundation for fts5, zotero, storage-adapters) |
 
 ## Intent
 
@@ -114,7 +114,7 @@ CREATE INDEX idx_manifestations_citation_id ON manifestations (citation_id);
   ([indexing-jobs.md](indexing-jobs.md),
   [vector-hybrid-search.md](vector-hybrid-search.md)).
 
-### Phase A2: manifestation-first reads (core, slice 3)
+### Phase A2: manifestation-first reads (shipped, slice 3)
 
 `resolveMarkdownPath` stays the single content-resolution chokepoint but gains
 the `Database`: resolve `manifestations(kind = 'markdown-extracted')` first
@@ -179,7 +179,7 @@ is rejected until a single manifestation genuinely lives at two places.
 
 1. **A (core, slice 2, shipped)**: migration runner → manifestations table →
    adapter reads + transition write → backfill → write-time hashing.
-2. **A2 (core, slice 3)**: manifestation-first locator with self-healing stem
+2. **A2 (shipped, slice 3)**: manifestation-first locator with self-healing stem
    fallback → fallback deletion once trusted.
 3. **B (exploratory)**: identifiers table + DOI-less admission, populated by
    [zotero-integration.md](zotero-integration.md) and arXiv IDs known at

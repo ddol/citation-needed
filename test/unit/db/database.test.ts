@@ -5,32 +5,27 @@ import { Database, getDatabase } from '../../../src/db/index';
 
 const BetterSqlite3 = require('better-sqlite3');
 
-function makeTestDb(): { db: Database; dbPath: string } {
-  const dbPath = path.join(
-    os.tmpdir(),
-    'citation-needed-test',
-    `db-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-  );
-  const db = new Database(dbPath);
-  return { db, dbPath };
+// mkdtemp, never a fixed name under tmpdir: Jest runs suites in parallel
+// workers, and a shared directory means one suite's teardown can delete a
+// directory another suite is still writing to.
+function makeTestDb(): { db: Database; dbDir: string } {
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-database-'));
+  const db = new Database(path.join(dbDir, 'citations.db'));
+  return { db, dbDir };
 }
 
 describe('Database', () => {
   let db: Database;
-  let dbPath: string;
+  let dbDir: string;
+  const dbFile = (): string => path.join(dbDir, 'citations.db');
 
   beforeEach(() => {
-    ({ db, dbPath } = makeTestDb());
+    ({ db, dbDir } = makeTestDb());
   });
 
   afterEach(() => {
     db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-  });
-
-  afterAll(() => {
-    const dir = path.join(os.tmpdir(), 'citation-needed-test');
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dbDir, { recursive: true, force: true });
   });
 
   test('addCitation inserts a new citation', () => {
@@ -117,7 +112,7 @@ describe('Database', () => {
   });
 
   test('does not create a redundant explicit DOI index', () => {
-    const sqlite = new BetterSqlite3(dbPath);
+    const sqlite = new BetterSqlite3(dbFile());
 
     try {
       const indexes = sqlite.prepare('PRAGMA index_list(citations)').all() as Array<{
@@ -132,9 +127,9 @@ describe('Database', () => {
 
   test('migrates legacy citation tables with unexpected columns', () => {
     db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    fs.unlinkSync(dbFile());
 
-    const legacyDb = new BetterSqlite3(dbPath);
+    const legacyDb = new BetterSqlite3(dbFile());
     legacyDb.exec(`
       CREATE TABLE citations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,7 +169,7 @@ describe('Database', () => {
     `);
     legacyDb.close();
 
-    db = new Database(dbPath);
+    db = new Database(dbFile());
 
     const citation = db.getCitation('10.1234/legacy');
     expect(citation?.title).toBe('Legacy Paper');
