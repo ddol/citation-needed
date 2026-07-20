@@ -1,0 +1,35 @@
+{
+  "note": "Pilot corpus for the claim-grounding eval (docs/plans/claim-grounding-eval.md). Three papers: the documented worst case, a table-dense paper, and a short clean-prose control. PDFs are not checked in; they are sourced from the sibling velocity.report set and pinned by sha256, so a pinned PDF yields pinned markdown yields stable eval input. arxivId records the intended canonical source; sha256 pins the exact bytes actually used.",
+  "papers": [
+    {
+      "id": "Liang2020",
+      "arxivId": "2007.13732",
+      "doi": "10.1007/978-3-030-58536-5_32",
+      "title": "Learning Lane Graph Representations for Motion Forecasting (LaneGCN)",
+      "pages": 18,
+      "sha256": "c982ea27a7cbb2cad434c8d50aa8c540474276e01d1f14fb655885991128f9a3",
+      "localSource": "../velocity.report/docs/papers/pdf/Liang2020.pdf",
+      "tags": ["worst-case", "equation-dense", "table-grouped-headers", "figure-dependent"]
+    },
+    {
+      "id": "Caesar2020",
+      "arxivId": "1903.11027",
+      "doi": "10.1109/CVPR42600.2020.01164",
+      "title": "nuScenes: A Multimodal Dataset for Autonomous Driving",
+      "pages": 16,
+      "sha256": "cdf855535bea58498c92e2bdf2e6a2274bf9840655b7af12b44c2b1982587367",
+      "localSource": "../velocity.report/docs/papers/pdf/Caesar2020.pdf",
+      "tags": ["table-dense", "numeric", "dataset-statistics"]
+    },
+    {
+      "id": "Bewley2016",
+      "arxivId": "1602.00763",
+      "doi": "10.1109/ICIP.2016.7533003",
+      "title": "Simple Online and Realtime Tracking (SORT)",
+      "pages": 5,
+      "sha256": "2c6b0845f8eeabac5a5b1279949e302a181d7d6c8078a10cc4560fba06717d3b",
+      "localSource": "../velocity.report/docs/papers/pdf/Bewley2016.pdf",
+      "tags": ["clean-prose", "mode-invariance-control", "short"]
+    }
+  ]
+}
