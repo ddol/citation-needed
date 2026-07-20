@@ -18,20 +18,21 @@ Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown
 
 The workflow the product must nail before anything else: import a `.bib` → PDFs download and extract (**already works**) → index → an agent over MCP can **find** (`search-citations`), **read** (`read-content`), and **check** (`verify-quote`): grounded, checkable answers from the researcher's own corpus. Interim discovery: mount a community Semantic Scholar/OpenAlex MCP server alongside; the agent composes.
 
-### Slice 3: one pipeline, one locator
+### Slice 4: is the pipeline worth its own code?
 
-Consolidates what slices 1–2 left split: content resolution reads the
-manifestations source of truth, CLI and MCP import become one pipeline, the
-retrieval cascade stops exercising stages that cannot succeed, and the test
-harness stops depending on machine-specific flags.
+The core loop now runs end to end, which makes its central bet testable for the
+first time: extraction to Markdown is a large investment that provably loses
+information. Slice 4 measures whether an agent answers claim-verification
+questions better from raw PDFs, from extracted Markdown, or through this
+service, and the answer decides whether the parser expands, shrinks, or stays.
+Nothing here ships product surface; the deliverable is a decision backed by
+pre-registered rules (see docs/plans/claim-grounding-eval.md).
 
-- [storage] S - Manifestation-first content resolution: markdown-locator reads manifestations(kind='markdown-extracted') via Database, existence-checked; legacy stem fallback self-heals a manifestation row on hit (see docs/plans/domain-model.md)
-- [test] S - Locator coverage: custom --markdown-path import readable via MCP, markdown-only manifestation, manifestation row with missing file (see docs/plans/domain-model.md)
-- [flow] M - ImportService consolidation: CLI and MCP import-bibtex delegate to one service; MCP runs the full pipeline by default with a metadata-only option (see docs/plans/service-layer.md)
-- [test] S - Import parity: the same fixture .bib through CLI and MCP yields identical citations, manifestations, retrieval-log rows, and summary counts (see docs/plans/service-layer.md)
-- [test] S - Test harness guardrails: Jest ignores .claude/ worktrees, watchman off, DB test dirs via mkdtemp under os.tmpdir() (see docs/plans/README.md)
-- [fetch] S - Drop tryPublisher from the active retrieval cascade; adapters and their tests stay as parked scaffolding (see docs/plans/retrieval-pipeline.md)
-- [fetch] XS - Unexport DoiResolver from the retrieval barrels until Crossref enrichment schedules it (see docs/plans/retrieval-pipeline.md)
+- [verify] S - Claim-grounding eval Phase 0: analytic token-economics via count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval pilot: 3 papers × ~20 human-verified claims, pdf-direct vs markdown-context, one model, manual grading; exit question is whether accuracy deltas are visible and gradable (see docs/plans/claim-grounding-eval.md)
+- [verify] L - Claim-grounding eval Phase 1: full harness under eval/, outside Jest and the coverage ratchet; one runner, one ModeAdapter per consumption mode, replay cache, cost guard (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval Phase 2: mcp-agent mode over InMemoryTransport against createMcpServer(db), plus corpus-wide and absent-claim categories (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding decision memo: apply the pre-registered rules to the results, record the parser-scope decision, and wire the Markdown mode in as the extractor regression gate (see docs/plans/claim-grounding-eval.md)
 
 ---
 
@@ -65,8 +66,6 @@ _Deferred (Flow A future): semantic + hybrid search modes, parked in docs/plans/
 
 ### Flow B: claims from papers already held
 
-- [verify] S - Claim-grounding eval Phase 0: analytic token-economics via count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
-- [verify] M - Claim-grounding eval pilot: 3 papers × ~20 human-verified claims, pdf-direct vs markdown-context, one model, manual grading; exit question is whether accuracy deltas are visible and gradable (see docs/plans/claim-grounding-eval.md)
 - [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check; see docs/plans/storage-adapters.md)
 - [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI; needs RetrievalService detail pass before scheduling; see docs/plans/service-layer.md)
 - [cli] XS - `stats` CLI command: citation status summary and database size (needs CitationService detail pass before scheduling; see docs/plans/service-layer.md)
@@ -149,6 +148,16 @@ _Deferred (Flow A future): semantic + hybrid search modes, parked in docs/plans/
 ---
 
 ## Completed
+
+Slice 3, one pipeline and one locator:
+
+- [storage] S - Manifestation-first content resolution: markdown-locator reads manifestations(kind='markdown-extracted') via Database, existence-checked; legacy stem fallback self-heals a manifestation row on hit (see docs/plans/domain-model.md)
+- [test] S - Locator coverage: custom --markdown-path import readable via MCP, markdown-only manifestation, manifestation row with missing file (see docs/plans/domain-model.md)
+- [flow] M - ImportService consolidation: CLI and MCP import-bibtex delegate to one service; MCP runs the full pipeline by default with a metadata-only option (see docs/plans/service-layer.md)
+- [test] S - Import parity: the same fixture .bib through CLI and MCP yields identical citations, manifestations, retrieval-log rows, and summary counts (see docs/plans/service-layer.md)
+- [test] S - Test harness guardrails: Jest ignores .claude/ worktrees, watchman off, DB test dirs via mkdtemp under os.tmpdir()
+- [fetch] S - Drop tryPublisher from the active retrieval cascade; adapters and their tests stay as parked scaffolding (see docs/plans/retrieval-pipeline.md)
+- [fetch] XS - Unexport DoiResolver from the retrieval barrels until Crossref enrichment schedules it (see docs/plans/retrieval-pipeline.md)
 
 - [tui] S - Plain output for static commands; Ink isolated to ImportProgress; list/download/auth/index/reset print plain stdout/stderr via src/cli/output.ts (see DESIGN.md § Terminal output)
 - [cli] S - `reset` maintenance command: wipe citations + dependents, optional --files to delete tracked PDFs/Markdown, dry run unless --yes

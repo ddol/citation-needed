@@ -36,17 +36,32 @@ paginated object.
 
 ### `import-bibtex`
 
-Import citation metadata from a BibTeX string into the database. This MCP tool
-does not download PDFs or extract Markdown; use the CLI `import-bibtex` command
-for the full pipeline.
+Import citations from a BibTeX string. Runs the same pipeline as the CLI
+`import-bibtex` command: stores metadata, downloads open-access PDFs through the
+retrieval cascade, and extracts Markdown, so the imported papers are immediately
+groundable through `search-citations`, `read-content`, and `verify-quote`.
+
+Output paths default to `papers/pdf` and `papers/markdown` under the working
+directory, since a BibTeX string has no directory of its own to sit beside.
+
+Set `metadataOnly` to store citations without fetching anything. That variant
+writes no files and creates no directories.
 
 **Input:**
 
 ```json
-{ "bibtex": "@article{...}" }
+{
+  "bibtex": "@article{...}",
+  "paperPath": "papers/pdf",
+  "markdownPath": "papers/markdown",
+  "metadataOnly": false
+}
 ```
 
-**Output:** Confirmation message with import count.
+Only `bibtex` is required.
+
+**Output:** One-line summary: imported, downloaded, and extracted counts, plus
+skipped entries and failures with their reasons.
 
 ---
 
