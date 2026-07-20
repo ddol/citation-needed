@@ -60,8 +60,30 @@ creates no PDF or Markdown files and creates no output directories.
 
 Only `bibtex` is required.
 
-**Output:** One-line summary: imported, downloaded, and extracted counts, plus
-skipped entries and failures with their reasons.
+**Output:**
+
+```json
+{
+  "source": "(inline BibTeX)",
+  "metadataOnly": false,
+  "imported": 12,
+  "downloaded": 9,
+  "extracted": 9,
+  "paperPath": "…/papers/pdf",
+  "markdownPath": "…/papers/markdown",
+  "skipped": [{ "bibtexKey": "smith21", "label": "smith21", "reason": "no DOI" }],
+  "failures": [{ "doi": "10.1234/x", "stage": "download", "message": "No PDF found. attempts: …" }]
+}
+```
+
+Failures and skips carry their reasons as data, so a caller can retry exactly
+the DOIs that failed without parsing prose. `downloaded`, `extracted`,
+`paperPath`, and `markdownPath` are omitted on a `metadataOnly` run rather than
+reported as zeroes it never attempted.
+
+Progress notifications are sent one per BibTeX entry, when that entry reaches
+its final outcome. An entry that is rate-limited and retried still counts once,
+so `progress` never exceeds `total`.
 
 ---
 
