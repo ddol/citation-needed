@@ -2,6 +2,9 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  // Watchman off: it indexes the whole tree, including .claude/worktrees, and
+  // a stale crawl there has surfaced as tests that pass or fail depending on
+  // which checkouts happen to exist. Jest's own crawler is fast enough here.
   watchman: false,
   testMatch: [
     '**/test/**/*.test.ts',
@@ -9,7 +12,13 @@ module.exports = {
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
   ],
+  // .claude/worktrees holds full checkouts of this repo. Without these, Jest
+  // collects every worktree's copy of every test (running the suite N times,
+  // against N versions of the source) and jest-haste-map reports duplicate
+  // package.json manifests. modulePathIgnorePatterns is the one that silences
+  // haste; testPathIgnorePatterns alone only stops the tests from running.
   testPathIgnorePatterns: ['/node_modules/', '/.claude/'],
+  modulePathIgnorePatterns: ['/.claude/'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
