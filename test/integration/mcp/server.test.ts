@@ -131,7 +131,7 @@ describe('MCP Server', () => {
     });
 
     const { content } = result as { content: Array<{ type: string; text: string }> };
-    expect(content[0].text).toContain('Imported');
+    expect(JSON.parse(content[0].text).imported).toBe(1);
     expect(db.addCitation).toHaveBeenCalled();
   });
 

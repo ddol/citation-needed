@@ -172,12 +172,12 @@ describe('CLI and MCP import parity', () => {
     expect(cliSummary.skippedCount).toBe(1);
     expect(cliSummary.failures).toHaveLength(1);
 
-    const text = toolResult?.content[0].text ?? '';
-    expect(text).toContain('Imported 2 citations');
-    expect(text).toContain('downloaded 1 PDFs');
-    expect(text).toContain('wrote 1 Markdown files');
-    expect(text).toContain('skipped 1');
-    expect(text).toContain('failed 1');
+    const report = JSON.parse(toolResult?.content[0].text ?? '{}');
+    expect(report.imported).toBe(cliSummary.importedCount);
+    expect(report.downloaded).toBe(cliSummary.downloadedCount);
+    expect(report.extracted).toBe(cliSummary.markdownCount);
+    expect(report.skipped).toEqual(cliSummary.skippedEntries);
+    expect(report.failures).toEqual(cliSummary.failures);
   });
 
   test('metadata-only imports agree, and neither writes a file', async () => {

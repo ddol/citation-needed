@@ -48,13 +48,18 @@ describe('MCP citation tool handler', () => {
     });
 
     expect(db.addCitation).toHaveBeenCalledWith(expect.objectContaining({ doi: '10.1234/VALID' }));
-    // One notification per entry, sent when that entry reaches a terminal
-    // stage, so the count matches the entries rather than the stage changes.
+    // One notification per entry, never per stage change.
     expect(sendProgress).toHaveBeenCalledTimes(3);
-    expect(result?.content[0].text).toContain('Imported 1 citations');
-    expect(result?.content[0].text).toContain('skipped 2');
+    // Structured, not prose: a caller acts on these fields without parsing English.
+    const report = JSON.parse(result?.content[0].text ?? '{}');
+    expect(report.imported).toBe(1);
+    expect(report.skipped.map((entry: { reason: string }) => entry.reason)).toEqual([
+      'invalid DOI format: not-a-doi',
+      'no DOI',
+    ]);
     // Metadata-only says nothing about downloads it never attempted.
-    expect(result?.content[0].text).not.toContain('downloaded');
+    expect(report.downloaded).toBeUndefined();
+    expect(report.markdownPath).toBeUndefined();
   });
 
   // The consolidation this guards: an agent importing a .bib gets the same
@@ -64,9 +69,12 @@ describe('MCP citation tool handler', () => {
 
     const result = await handleCitationTool('import-bibtex', { bibtex }, db);
 
-    expect(result?.content[0].text).toContain('downloaded 0 PDFs');
-    expect(result?.content[0].text).toContain('wrote 0 Markdown files');
-    expect(result?.content[0].text).toContain('failed 1: 10.1234/VALID (no PDF in tests)');
+    const report = JSON.parse(result?.content[0].text ?? '{}');
+    expect(report.downloaded).toBe(0);
+    expect(report.extracted).toBe(0);
+    expect(report.failures).toEqual([
+      { doi: '10.1234/VALID', stage: 'download', message: 'no PDF in tests' },
+    ]);
   });
 
   test('supports arXiv search success and failure responses', async () => {
