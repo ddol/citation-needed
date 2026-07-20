@@ -28,11 +28,15 @@ const CODES: Record<Style, [number, number]> = {
 /**
  * Colour is decided from stdout for every stream: when output is redirected,
  * stdout and stderr are normally redirected together, and one rule keeps the
- * styling predictable. Honours the NO_COLOR convention.
+ * styling predictable. Honours the NO_COLOR convention, and FORCE_COLOR in
+ * both directions: `FORCE_COLOR=0` is how most tools turn colour off, so
+ * treating any set value as "on" would ignore the user asking for none.
+ * NO_COLOR still wins.
  */
 export function supportsColor(): boolean {
   if (process.env.NO_COLOR) return false;
-  if (process.env.FORCE_COLOR) return true;
+  const forced = process.env.FORCE_COLOR;
+  if (forced !== undefined && forced !== '') return forced !== '0';
   return Boolean(process.stdout.isTTY);
 }
 

@@ -1,7 +1,7 @@
 import { createLogger } from '../../utils/logger';
 import { RateLimiter } from '../../utils/rate-limiter';
 import type { ResolverResult } from '../../models/retrieval';
-import { getWithRetry, isThrottled } from '../http-retry';
+import { getWithRetry, isNotFound, isThrottled } from '../http-retry';
 import {
   SEMANTIC_SCHOLAR_BREAKER_COOLDOWN_MS,
   SEMANTIC_SCHOLAR_MAX_ATTEMPTS,
@@ -124,8 +124,17 @@ export class SemanticScholarResolver {
           });
         }
       } else {
-        // A 404 is just an unknown DOI, not evidence the API is refusing us.
+        // The pool answered, even if the answer was an error: the streak is over.
         consecutiveThrottles = 0;
+      }
+
+      // An unknown DOI is a miss, not a failure. Reporting it as one keeps the
+      // cascade's `attempts` line about the paper rather than a status code,
+      // and spares every caller a 404 special case. The 404 also proves the
+      // pool is answering, so the breaker closes with it.
+      if (isNotFound(err)) {
+        openedAt = undefined;
+        return { ok: true, value: null };
       }
 
       const message = err instanceof Error ? err.message : String(err);

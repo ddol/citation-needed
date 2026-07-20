@@ -132,6 +132,9 @@ export function registerResetCommand(program: Command): void {
     .option('-y, --yes', 'Actually perform the reset')
     .option('--db <path>', 'Path to the database file (defaults to the configured location)')
     .action((options: ResetOptions) => {
+      // An explicit --db path gets its own Database instance rather than the
+      // shared singleton, so this command is the only thing that can close it.
+      const ownsDb = Boolean(options.db);
       const db = options.db ? getDatabase(options.db) : getDatabase();
       try {
         const summary = resetDatabase(db, options);
@@ -143,6 +146,8 @@ export function registerResetCommand(program: Command): void {
       } catch (err) {
         printError(red(err instanceof Error ? err.message : String(err)));
         process.exitCode = 1;
+      } finally {
+        if (ownsDb) db.close();
       }
     });
 }

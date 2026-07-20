@@ -42,6 +42,29 @@ describe('CLI output helpers', () => {
     expect(paint('subtle', 'dim')).toBe('\x1b[2msubtle\x1b[22m');
   });
 
+  // FORCE_COLOR=0 is how most tools ask for colour off. Treating any set value
+  // as "on" turned colour on for the user trying to turn it off.
+  test('treats FORCE_COLOR=0 as colour off, even on a TTY', () => {
+    delete process.env.NO_COLOR;
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+
+    process.env.FORCE_COLOR = '0';
+    expect(supportsColor()).toBe(false);
+    expect(red('error')).toBe('error');
+
+    process.env.FORCE_COLOR = '1';
+    expect(supportsColor()).toBe(true);
+
+    // An empty value carries no instruction, so TTY detection decides.
+    process.env.FORCE_COLOR = '';
+    expect(supportsColor()).toBe(true);
+
+    // NO_COLOR still wins over an explicit FORCE_COLOR.
+    process.env.NO_COLOR = '1';
+    process.env.FORCE_COLOR = '1';
+    expect(supportsColor()).toBe(false);
+  });
+
   test('prints joined stdout lines, blank lines, and stderr separately', () => {
     print('one', 'two');
     print();

@@ -55,6 +55,16 @@ export function isThrottled(error: unknown): boolean {
   return (error as TransientError).response?.status === 429;
 }
 
+/**
+ * 404 means the upstream answered and does not hold this identifier. That is a
+ * miss, not a failure, and callers should report it as an absent paper rather
+ * than a status code.
+ */
+export function isNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return (error as TransientError).response?.status === 404;
+}
+
 /** GET `url`, retrying transient failures. Throws the last error if all fail. */
 export async function getWithRetry<T>(url: string, options: RetryOptions): Promise<T> {
   let lastError: unknown;

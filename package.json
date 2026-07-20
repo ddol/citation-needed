@@ -13,7 +13,7 @@
     "dev": "node --env-file-if-exists=.env -r ts-node/register src/index.ts",
     "dev:clear": "npm run dev -- reset --files --yes",
     "dev:import:velocity": "npm run dev:import -- ../velocity.report/data/maths/references.bib --paper-path ../velocity.report/docs/papers/pdf --markdown-path ../velocity.report/docs/papers/markdown",
-    "dev:reextract": "npm run dev -- extract-markdown --paper-path /Users/david/code/velocity.report/docs/papers/pdf/ --markdown-path /Users/david/code/velocity.report/docs/papers/markdown/",
+    "dev:reextract": "npm run dev -- extract-markdown --paper-path ../velocity.report/docs/papers/pdf --markdown-path ../velocity.report/docs/papers/markdown",
     "dev:reimport:velocity": "npm run dev:clear && npm run dev:import:velocity",
     "metrics": "npm run dev -- score-markdown-quality --paper-path ../velocity.report/docs/papers/pdf --markdown-path ../velocity.report/docs/papers/markdown",
     "metrics:json": "npm run metrics -- --json",

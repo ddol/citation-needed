@@ -6,6 +6,7 @@ const mockDb = {
   getStoredFilePaths: jest.fn(),
   deleteAllCitations: jest.fn(),
   vacuum: jest.fn(),
+  close: jest.fn(),
 };
 const mockGetDatabase = jest.fn();
 
@@ -47,6 +48,21 @@ describe('reset command registration', () => {
     expect(mockGetDatabase).toHaveBeenCalledWith('/tmp/custom.db');
     expect(stdout.mock.calls.join('\n')).toContain('/tmp/custom.db');
     expect(mockDb.deleteAllCitations).not.toHaveBeenCalled();
+    // An explicit --db path is a fresh instance, not the singleton, so this
+    // command owns it and must not leave the file handle open.
+    expect(mockDb.close).toHaveBeenCalledTimes(1);
+  });
+
+  // The singleton is shared with the rest of the process; closing it here would
+  // break every later command in a long-lived host.
+  test('leaves the shared singleton open when no --db is given', async () => {
+    const program = new Command();
+    registerResetCommand(program);
+
+    await program.parseAsync(['node', 'citation-needed', 'reset']);
+
+    expect(mockGetDatabase).toHaveBeenCalledWith();
+    expect(mockDb.close).not.toHaveBeenCalled();
   });
 
   test('sets exitCode when reset throws', async () => {

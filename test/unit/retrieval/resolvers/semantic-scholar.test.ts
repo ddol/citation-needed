@@ -65,6 +65,15 @@ describe('SemanticScholarResolver', () => {
     expect(result).toEqual({ ok: true, value: null });
   });
 
+  // The 404 proves the pool is answering, so it must not leave the breaker open.
+  test('a 404 closes the breaker rather than counting as a throttle', async () => {
+    mockedAxios.get.mockRejectedValueOnce({ response: { status: 404, headers: {} } });
+
+    await new SemanticScholarResolver().getOpenAccessPdf('10.1/unknown');
+
+    expect(isSemanticScholarBreakerOpen()).toBe(false);
+  });
+
   // A throttled lookup must not be reported as "this paper has no PDF".
   test('retries a 429 and then succeeds', async () => {
     mockedAxios.get
@@ -209,12 +218,15 @@ describe('SemanticScholarResolver', () => {
     expect(isSemanticScholarBreakerOpen()).toBe(false);
   });
 
+  // A 404 is an unknown DOI, not a broken lookup: it is reported as a miss so
+  // the cascade's failure message stays about the paper rather than a status
+  // code, and no caller has to special-case it. It is also not worth retrying.
   test('does not retry a 404 (DOI simply unknown to Semantic Scholar)', async () => {
     mockedAxios.get.mockRejectedValue({ response: { status: 404, headers: {} } });
 
     const result = await new SemanticScholarResolver().getOpenAccessPdf('10.1/unknown');
 
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({ ok: true, value: null });
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 });
