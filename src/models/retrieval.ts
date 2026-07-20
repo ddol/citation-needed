@@ -15,6 +15,12 @@ export interface RetrievalResult {
   localPath?: string;
   source: string;
   message: string;
+  /**
+   * A source refused to answer because it was rate-limiting us, so this DOI was
+   * never really tried. Distinct from "no source has this paper", which no
+   * amount of waiting will change — the caller can retry only these.
+   */
+  throttled?: boolean;
 }
 
 /**
@@ -23,4 +29,6 @@ export interface RetrievalResult {
  * null/[]`) from "the request itself failed" (`ok: false`) so callers can
  * surface real failures instead of silently treating them as misses.
  */
-export type ResolverResult<T> = { ok: true; value: T } | { ok: false; error: string };
+export type ResolverResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; throttled?: boolean };

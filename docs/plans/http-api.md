@@ -1,25 +1,24 @@
-# HTTP Search API & OpenAPI
+# HTTP search API & OpenAPI
 
-| Field         | Value                                                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Exploratory** — build when a real non-MCP client appears                                                                                  |
-| Work-stream   | D — Researcher Workflow (frontend enabler)                                                                                                  |
-| Depends on    | [service-layer.md](service-layer.md) (hard); [fts5-full-text-search.md](fts5-full-text-search.md) (soft — more valuable after, not blocked) |
-| Last reviewed | 2026-07-12                                                                                                                                  |
+| Field      | Value                                                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status     | **Exploratory**: build when a real non-MCP client appears                                                                                  |
+| Flow       | Infrastructure (frontend enabler)                                                                                                          |
+| Depends on | [service-layer.md](service-layer.md) (hard); [fts5-full-text-search.md](fts5-full-text-search.md) (soft; more valuable after, not blocked) |
 
 ## Intent
 
 A small, versioned HTTP API so non-MCP clients (web UI, Zotero plugin, scripts,
 other languages) can search and read the corpus. Per the unified-surface
 principle ([service-layer.md](service-layer.md)), HTTP is a **thin gateway**
-over the same services and zod contracts — never a second implementation. The
+over the same services and zod contracts: never a second implementation. The
 core `/search` endpoint stays deterministic and LLM-free.
 
 ## Current state
 
 - **No HTTP server of any kind exists.** The only transport is MCP over stdio
   (`StdioServerTransport`, `src/mcp/server.ts`). The `server` CLI command starts
-  that stdio server — the command name is taken.
+  that stdio server: the command name is taken.
 - `hono` appears in `node_modules` only as a **transitive dependency** of
   `@modelcontextprotocol/sdk`; it is not in `package.json` and nothing imports it.
   Any HTTP framework is a new direct dependency regardless.
@@ -34,25 +33,25 @@ The transitive presence of hono is **irrelevant** to the decision (it must
 become a direct dependency either way). The real reasons:
 
 1. **zod-first**: `@hono/zod-openapi` derives the OpenAPI spec from the same
-   zod schemas the service layer already defines — one contract source, no
+   zod schemas the service layer already defines: one contract source, no
    hand-maintained YAML, no drift.
 2. Tiny footprint fits a local-first tool; TS-first typing.
 
-Runners-up, recorded: **fastify** (solid, but JSON-Schema-native — fights the
+Runners-up, recorded: **fastify** (solid, but JSON-Schema-native, fighting the
 zod investment through a conversion bridge); **express** (weakest typing, no
 spec story).
 
 ### v1 endpoints
 
-| Endpoint                      | Notes                                                    |
-| ----------------------------- | -------------------------------------------------------- |
-| `GET /api/v1/health`          | liveness + schema version                                |
-| `GET /api/v1/capabilities`    | static JSON reflecting the actual build (see below)      |
-| `GET /api/v1/citations`       | cursor pagination — same `encodeCursor` semantics as MCP |
-| `GET /api/v1/citations/{doi}` | single lookup                                            |
-| `POST /api/v1/search`         | body = SearchService request contract, verbatim          |
+| Endpoint                      | Notes                                                   |
+| ----------------------------- | ------------------------------------------------------- |
+| `GET /api/v1/health`          | liveness + schema version                               |
+| `GET /api/v1/capabilities`    | static JSON reflecting the actual build (see below)     |
+| `GET /api/v1/citations`       | cursor pagination; same `encodeCursor` semantics as MCP |
+| `GET /api/v1/citations/{doi}` | single lookup                                           |
+| `POST /api/v1/search`         | body = SearchService request contract, verbatim         |
 
-The resource is named **citations**, not documents — it mirrors the actual
+The resource is named **citations**, not documents: it mirrors the actual
 schema; [domain-model.md](domain-model.md) rejects the rename.
 
 ```json
@@ -107,7 +106,7 @@ plus an `issues` extension member carrying zod issues on validation failures.
 }
 ```
 
-404 for unknown DOI; 401 for missing/bad token — same media type throughout.
+404 for unknown DOI; 401 for missing/bad token; same media type throughout.
 
 ### Rejected / deferred alternatives
 
@@ -143,7 +142,7 @@ plus an `issues` extension member carrying zod issues on validation failures.
 - Route integration tests with an injected app instance (hono's
   `app.request()`), no real port.
 - Error-shape tests: problem+json 400 with zod issues, 404, 401 with/without
-  token — `content-type: application/problem+json` asserted.
+  token, with `content-type: application/problem+json` asserted.
 - **Flagship parity test**: the same search request through the MCP handler and
   `POST /api/v1/search` returns identical result sets (both are thin bindings
   of SearchService).
@@ -158,13 +157,13 @@ plus an `issues` extension member carrying zod issues on validation failures.
 
 ## Relationship to other plans
 
-- [service-layer.md](service-layer.md) — provides the services and zod
+- [service-layer.md](service-layer.md): provides the services and zod
   contracts; this plan owns the HTTP column of the operation mapping table.
-- [fts5-full-text-search.md](fts5-full-text-search.md) — flips the
+- [fts5-full-text-search.md](fts5-full-text-search.md): flips the
   `fullTextSearch` capability; snippets flow through `/search` unchanged.
-- [storage-adapters.md](storage-adapters.md) — later adds
+- [storage-adapters.md](storage-adapters.md): later adds
   `/citations/{doi}/links`.
-- [zotero-integration.md](zotero-integration.md) — a Zotero plugin / web UI
+- [zotero-integration.md](zotero-integration.md): a Zotero plugin / web UI
   would consume this API.
-- [vector-hybrid-search.md](vector-hybrid-search.md) — flips the `vectorSearch`
+- [vector-hybrid-search.md](vector-hybrid-search.md): flips the `vectorSearch`
   capability; adds modes to the same `/search` contract.

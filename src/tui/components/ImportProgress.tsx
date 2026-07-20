@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, useApp } from 'ink';
+import { Box, Static, Text, useApp } from 'ink';
 import {
   processBibtexFile,
   type ProcessBibtexOptions,
@@ -13,6 +13,15 @@ interface ImportRow extends ProcessBibtexProgress {
   key: string;
 }
 
+type FinishedStage = 'completed' | 'failed' | 'skipped';
+
+function isFinished(stage: ProcessBibtexProgress['stage']): stage is FinishedStage {
+  return stage === 'completed' || stage === 'failed' || stage === 'skipped';
+}
+
+/** A header line plus one line per finished row — everything printed exactly once. */
+type StaticLine = { key: string; kind: 'header'; text: string } | (ImportRow & { kind: 'row' });
+
 export function ImportProgress({
   bibtexPath,
   options,
@@ -22,17 +31,18 @@ export function ImportProgress({
 }): React.ReactElement {
   const { exit } = useApp();
   const [frameIndex, setFrameIndex] = useState(0);
-  const [rows, setRows] = useState<ImportRow[]>([]);
+  // Split by lifecycle, not one list: Ink redraws its live tree every frame by
+  // clearing and rewriting those lines. Once the tree is taller than the
+  // terminal it cannot clear what has scrolled off, and the output tears. Only
+  // in-flight rows stay live; finished rows are handed to <Static>, which
+  // prints each one once and never touches it again.
+  const [finished, setFinished] = useState<ImportRow[]>([]);
+  const [active, setActive] = useState<ImportRow[]>([]);
   const [result, setResult] = useState<ProcessBibtexResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const activeRowCount = useMemo(
-    () => rows.filter((row) => row.stage === 'retrieving' || row.stage === 'markdown').length,
-    [rows]
-  );
-
   useEffect(() => {
-    if (activeRowCount === 0) {
+    if (active.length === 0) {
       return undefined;
     }
 
@@ -41,7 +51,7 @@ export function ImportProgress({
     }, 80);
 
     return () => clearInterval(interval);
-  }, [activeRowCount]);
+  }, [active.length]);
 
   useEffect(() => {
     let isMounted = true;
@@ -53,18 +63,30 @@ export function ImportProgress({
         return;
       }
 
-      setRows((currentRows) => {
-        const rowKey = progress.doi || progress.fileStem || progress.label;
-        const nextRow: ImportRow = { ...progress, key: rowKey };
-        const existingIndex = currentRows.findIndex((row) => row.key === rowKey);
+      // The retry pass revisits a DOI that already printed a ✗ line. Give it a
+      // distinct key so it prints as its own row: <Static> replays by index, so
+      // a reused key would be dropped as a duplicate and the retry's outcome
+      // would never appear.
+      const base = progress.doi || progress.fileStem || progress.label;
+      const rowKey = progress.pass ? `${base}#${progress.pass}` : base;
+      const row: ImportRow = { ...progress, key: rowKey };
 
-        if (existingIndex === -1) {
-          return [...currentRows, nextRow];
-        }
+      if (isFinished(progress.stage)) {
+        // Append-only: <Static> replays by index, so a finished row must never
+        // move or change once emitted.
+        setActive((current) => current.filter((r) => r.key !== rowKey));
+        setFinished((current) =>
+          current.some((r) => r.key === rowKey) ? current : [...current, row]
+        );
+        return;
+      }
 
-        const updatedRows = [...currentRows];
-        updatedRows[existingIndex] = nextRow;
-        return updatedRows;
+      setActive((current) => {
+        const index = current.findIndex((r) => r.key === rowKey);
+        if (index === -1) return [...current, row];
+        const next = [...current];
+        next[index] = row;
+        return next;
       });
     };
 
@@ -106,12 +128,39 @@ export function ImportProgress({
     }
   }, [errorMessage, exit, result]);
 
+  // <Static> always prints above the live frame, so the header has to be a
+  // static item too — in the live tree it would sink below every row.
+  const staticLines = useMemo<StaticLine[]>(
+    () => [
+      { key: '__header', kind: 'header', text: bibtexPath },
+      ...finished.map((row) => ({ ...row, kind: 'row' as const })),
+    ],
+    [bibtexPath, finished]
+  );
+
   return (
     <Box flexDirection="column">
-      <Text bold>Importing {bibtexPath}</Text>
-      <Box flexDirection="column" marginTop={1}>
-        {rows.length === 0 ? <Text dimColor>Waiting for citations...</Text> : null}
-        {rows.map((row) => (
+      <Static items={staticLines}>
+        {(line) =>
+          line.kind === 'header' ? (
+            <Text key={line.key} bold>
+              Importing {line.text}
+            </Text>
+          ) : (
+            <Text key={line.key}>
+              <Text color={getMarkerColor(line.stage)}>{getMarker(line.stage, frameIndex)}</Text>
+              <Text> {line.label}</Text>
+              <Text dimColor> {line.message || defaultStageMessage(line.stage)}</Text>
+            </Text>
+          )
+        }
+      </Static>
+
+      <Box flexDirection="column">
+        {finished.length === 0 && active.length === 0 ? (
+          <Text dimColor>Waiting for citations...</Text>
+        ) : null}
+        {active.map((row) => (
           <Text key={row.key}>
             <Text color={getMarkerColor(row.stage)}>{getMarker(row.stage, frameIndex)}</Text>
             <Text> {row.label}</Text>
@@ -127,18 +176,11 @@ export function ImportProgress({
           <Text>Downloaded PDFs: {result.downloadedCount}</Text>
           <Text>Generated Markdown files: {result.markdownCount}</Text>
           <Text>Skipped entries without DOI: {result.skippedCount}</Text>
+          {result.failures.length > 0 ? (
+            <Text color="yellow">Failed to retrieve: {result.failures.length} (listed above)</Text>
+          ) : null}
           <Text>PDF output: {result.paperPath}</Text>
           <Text>Markdown output: {result.markdownPath}</Text>
-          {result.failures.length > 0 ? (
-            <Box flexDirection="column">
-              <Text color="yellow">Failures:</Text>
-              {result.failures.map((failure) => (
-                <Text key={`${failure.doi}-${failure.stage}`} dimColor>
-                  {failure.doi} [{failure.stage}] {failure.message}
-                </Text>
-              ))}
-            </Box>
-          ) : null}
         </Box>
       ) : null}
 

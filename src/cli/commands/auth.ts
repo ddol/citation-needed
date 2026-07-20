@@ -1,7 +1,6 @@
-import React from 'react';
-import { render, Text } from 'ink';
 import { Command } from 'commander';
 import { setEmail, addProxy, loadAuthConfig } from '../../auth/config';
+import { green, print, printError, red } from '../output';
 
 export function registerAuthCommand(program: Command): void {
   const auth = program.command('auth').description('Configure authentication');
@@ -12,10 +11,9 @@ export function registerAuthCommand(program: Command): void {
     .action((email: string) => {
       try {
         setEmail(email);
-        render(<Text color="green">Email set: {email}</Text>);
+        print(green(`Email set: ${email}`));
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        render(<Text color="red">{message}</Text>);
+        printError(red(err instanceof Error ? err.message : String(err)));
         process.exitCode = 1;
       }
     });
@@ -39,7 +37,7 @@ export function registerAuthCommand(program: Command): void {
           username: options.username,
           passwordEnvVar: options.passwordEnv,
         });
-        render(<Text color="green">{`Proxy '${name}' added.`}</Text>);
+        print(green(`Proxy '${name}' added.`));
       }
     );
 
@@ -55,6 +53,6 @@ export function registerAuthCommand(program: Command): void {
           passwordEnvVar: p.passwordEnvVar ? '***' : undefined,
         })),
       };
-      render(<Text>{JSON.stringify(sanitized, null, 2)}</Text>);
+      print(JSON.stringify(sanitized, null, 2));
     });
 }

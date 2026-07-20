@@ -2,12 +2,14 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  watchman: false,
   testMatch: [
     '**/test/**/*.test.ts',
     '**/test/**/*.test.tsx',
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
   ],
+  testPathIgnorePatterns: ['/node_modules/', '/.claude/'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
@@ -21,16 +23,28 @@ module.exports = {
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
     '!src/index.ts',
+    '!src/auth/index.ts',
+    '!src/cli/app.tsx',
+    '!src/cli/index.ts',
+    '!src/mcp/index.ts',
+    '!src/parsers/index.ts',
+    '!src/retrieval/downloaders/index.ts',
+    '!src/retrieval/resolvers/index.ts',
+    '!src/tui/index.ts',
+    '!src/utils/index.ts',
+    '!src/verification/index.ts',
   ],
-  // Floor sits just below current coverage so any regression fails CI.
-  // Push these higher as more code gets tested (ImportProgress, MCP retrieval
-  // tool, full orchestrator cascade) — tracked as a follow-up to Milestone 1.
+  // Coverage is a ratchet: this floor sits just below actual coverage so any
+  // regression fails CI, and it rises as real coverage rises. It never goes
+  // down — see DESIGN.md § Testing. The next 95% push needs branch-heavy tests
+  // around database migrations/backfills, retrieval resolver error shapes,
+  // workflow provenance recording, and authenticated browser-download paths.
   coverageThreshold: {
     global: {
-      lines: 60,
-      branches: 45,
-      functions: 48,
-      statements: 60,
+      lines: 93,
+      branches: 78,
+      functions: 91,
+      statements: 92,
     },
   },
 };

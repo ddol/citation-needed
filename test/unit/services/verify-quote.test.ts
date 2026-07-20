@@ -95,6 +95,28 @@ describe('VerifyQuoteService', () => {
     expect(result.response.matches.map((m) => m.doi)).toEqual(['10.1/v.1']);
   });
 
+  test('verifies markdown from a manifestation outside the PDF sibling layout', () => {
+    const customDir = path.join(root, 'custom-markdown');
+    const markdownPath = path.join(customDir, 'custom.md');
+    fs.mkdirSync(customDir, { recursive: true });
+    fs.writeFileSync(markdownPath, '# Custom\n\nThis quote lives in a manifestation.');
+    const citation = db.addCitation({ doi: '10.1/v.manifest', title: 'Manifest Quote' });
+    db.upsertManifestation({
+      citationId: citation.id!,
+      kind: 'markdown-extracted',
+      path: markdownPath,
+    });
+
+    const result = new VerifyQuoteService(db).verify({
+      quote: 'quote lives in a manifestation',
+      doi: '10.1/v.manifest',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.response.verdict).toBe('exact');
+  });
+
   test('guards against too-short quotes', () => {
     expect(new VerifyQuoteService(db).verify({ quote: 'short' }).status).toBe('quote-too-short');
   });

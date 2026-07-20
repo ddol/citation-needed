@@ -1,9 +1,8 @@
-import React from 'react';
-import { render, Text } from 'ink';
 import { Command } from 'commander';
 import { getDatabase } from '../../db/index';
 import { UnpaywallResolver } from '../../retrieval/resolvers/unpaywall';
 import { OpenAccessDownloader } from '../../retrieval/downloaders/open-access';
+import { green, print, printError, red, yellow } from '../output';
 
 export function registerDownloadCommand(program: Command): void {
   program
@@ -22,31 +21,31 @@ export function registerDownloadCommand(program: Command): void {
         const unpaywall = new UnpaywallResolver(options.email);
         const lookup = await unpaywall.getOpenAccessPdf(doi);
         if (!lookup.ok) {
-          render(<Text color="red">Unpaywall lookup failed: {lookup.error}</Text>);
+          printError(red(`Unpaywall lookup failed: ${lookup.error}`));
+          process.exitCode = 1;
           return;
         }
         pdfUrl = lookup.value || undefined;
       }
 
       if (!pdfUrl) {
-        render(<Text color="red">No PDF URL. Use --url or --email for Unpaywall lookup.</Text>);
+        printError(red('No PDF URL. Use --url or --email for Unpaywall lookup.'));
+        process.exitCode = 1;
         return;
       }
 
-      render(<Text>Downloading PDF for {doi}...</Text>);
+      print(`Downloading PDF for ${doi}...`);
       const localPath = await downloader.download(doi, pdfUrl, citation?.bibtexKey || doi);
 
       if (!citation) {
-        render(
-          <Text color="yellow">
-            Warning: DOI {doi} not found in database. PDF saved but citation not updated.
-          </Text>
+        print(
+          yellow(`Warning: DOI ${doi} not found in database. PDF saved but citation not updated.`)
         );
       } else {
         db.updatePdfPath(doi, localPath);
         db.updateVerificationStatus(doi, 'downloaded');
       }
 
-      render(<Text color="green">Saved to: {localPath}</Text>);
+      print(green(`Saved to: ${localPath}`));
     });
 }

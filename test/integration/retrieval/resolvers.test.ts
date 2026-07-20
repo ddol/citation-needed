@@ -1,4 +1,14 @@
+// Collapse the real 3s rate limit and 5/10/20s backoff to zero: these tests
+// assert retry *behaviour*, and the real delays would add ~45s of sleeping.
+jest.mock('../../../src/retrieval/config', () => ({
+  ...jest.requireActual('../../../src/retrieval/config'),
+  ARXIV_RATE_LIMIT_MS: 0,
+  ARXIV_RETRY_BASE_MS: 0,
+}));
+
+// eslint-disable-next-line import/first, import/order
 import { ArxivResolver } from '../../../src/retrieval/resolvers/arxiv';
+// eslint-disable-next-line import/first, import/order
 import { UnpaywallResolver } from '../../../src/retrieval/resolvers/unpaywall';
 
 // Mock axios to avoid real HTTP calls
@@ -53,8 +63,9 @@ describe('Retrieval Resolvers', () => {
       const resolver = new ArxivResolver();
       await resolver.searchByTitle('Test   Paper\n   Title');
 
+      // The phrase stays quoted (%22) — unquoted, arXiv ORs the words apart.
       expect(axios.get).toHaveBeenCalledWith(
-        expect.stringContaining('search_query=ti:Test%20Paper%20Title'),
+        expect.stringContaining('search_query=ti:%22Test%20Paper%20Title%22'),
         expect.objectContaining({ timeout: 30000, responseType: 'text' })
       );
     });

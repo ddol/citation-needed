@@ -69,6 +69,25 @@ describe('ContentService', () => {
     expect(result.response.text).toContain('Body text');
   });
 
+  test('reads markdown from a manifestation outside the PDF sibling layout', () => {
+    const citation = db.addCitation({ doi: '10.1/read.manifest', title: 'Manifest Only' });
+    const customDir = path.join(root, 'custom-markdown');
+    const markdownPath = path.join(customDir, 'paper.md');
+    fs.mkdirSync(customDir, { recursive: true });
+    fs.writeFileSync(markdownPath, '# Manifest Only\n\nManifest body text.');
+    db.upsertManifestation({
+      citationId: citation.id!,
+      kind: 'markdown-extracted',
+      path: markdownPath,
+    });
+
+    const result = new ContentService(db).read({ doi: '10.1/read.manifest' });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.response.text).toContain('Manifest body text');
+  });
+
   test('paginates by maxChars and reassembles losslessly', () => {
     seedCitation('10.1/read.3', 'read3key', 'read3key.md');
     const full = fs.readFileSync(path.join(root, 'papers', 'markdown', 'read3key.md'), 'utf-8');

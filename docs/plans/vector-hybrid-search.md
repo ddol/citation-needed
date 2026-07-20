@@ -1,17 +1,16 @@
-# Vector & Hybrid Search
+# Vector & hybrid search
 
-| Field         | Value                                                                                                                                                                                             |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | **Deferred** — revisit after FTS5 lands and real search quality is observed                                                                                                                       |
-| Work-stream   | A — Grounded Answers (future enhancement)                                                                                                                                                         |
-| Depends on    | [fts5-full-text-search.md](fts5-full-text-search.md) (chunks), [service-layer.md](service-layer.md) (mode union), [indexing-jobs.md](indexing-jobs.md) (embed stage), persistent config file item |
-| Last reviewed | 2026-07-12                                                                                                                                                                                        |
+| Field      | Value                                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | **Deferred**: revisit after FTS5 lands and real search quality is observed                                                                                                                        |
+| Flow       | A (future enhancement)                                                                                                                                                                            |
+| Depends on | [fts5-full-text-search.md](fts5-full-text-search.md) (chunks), [service-layer.md](service-layer.md) (mode union), [indexing-jobs.md](indexing-jobs.md) (embed stage), persistent config file item |
 
 ## Intent
 
 Optional semantic search over chunk embeddings, fused with lexical results by a
 transparent, deterministic method. **Optional is structural**: the system must
-run fully — import, extract, FTS search, API — with vectors absent, no
+run fully (import, extract, FTS search, API) with vectors absent, no
 embedding provider configured, and no vector dependency installed. This doc
 parks a vetted design; its purpose is _not_ to schedule work.
 
@@ -39,7 +38,7 @@ CREATE TABLE embeddings (
 ```
 
 Brute-force cosine over `Float32Array` in JS. This is genuinely sufficient below
-~50k chunks (department-scale corpus) with **zero new dependencies** — measure
+~50k chunks (department-scale corpus) with **zero new dependencies**: measure
 before optimizing.
 
 **sqlite-vec** is the upgrade path when latency demands it, gated on a spike
@@ -57,7 +56,7 @@ bias: ollama endpoint before any hosted API.
 ### Hybrid mode: reciprocal-rank fusion
 
 `mode: 'lexical' | 'semantic' | 'hybrid'` in SearchService. Hybrid = RRF
-(`k = 60`) over the lexical and semantic rank lists — transparent, deterministic,
+(`k = 60`) over the lexical and semantic rank lists: transparent, deterministic,
 no tuning treadmill. Scores reported per source
 (`scores: { combined, lexical?, semantic? }`).
 
@@ -86,7 +85,7 @@ Embeddings key on `(content_hash, model, model_version)`:
 2. `hybrid` mode with RRF; capabilities flip.
 3. sqlite-vec spike; adopt only on a clear latency win.
 
-## Backlog items (parked — merge into BACKLOG.md only if this plan is adopted)
+## Backlog items (parked; merge into BACKLOG.md only if this plan is adopted)
 
 - [search] M - EmbeddingStore interface + flat embeddings table (chunk_id, model, model_version, dims, vector BLOB) + brute-force cosine (see docs/plans/vector-hybrid-search.md)
 - [cfg] S - Embedding provider config (none | ollama | openai-compatible); none default, all features work without vectors
@@ -108,7 +107,7 @@ Embeddings key on `(content_hash, model, model_version)`:
 
 ## Open questions
 
-1. Default local model (via ollama): `nomic-embed-text` vs `all-MiniLM` class —
+1. Default local model (via ollama): `nomic-embed-text` vs `all-MiniLM` class;
    decide at spike time, not now.
 2. Embed title+journal as a pseudo-chunk per citation for metadata-semantic
    matching, or chunks only?
@@ -117,12 +116,12 @@ Embeddings key on `(content_hash, model, model_version)`:
 
 ## Relationship to other plans
 
-- [fts5-full-text-search.md](fts5-full-text-search.md) — provides chunks +
+- [fts5-full-text-search.md](fts5-full-text-search.md): provides chunks +
   content hashes; lexical rank list for RRF.
-- [service-layer.md](service-layer.md) — mode union widens; contract otherwise
+- [service-layer.md](service-layer.md): mode union widens; contract otherwise
   stable.
-- [indexing-jobs.md](indexing-jobs.md) — `embed` becomes a pipeline stage with
+- [indexing-jobs.md](indexing-jobs.md): `embed` becomes a pipeline stage with
   standard provenance.
-- [http-api.md](http-api.md) — `capabilities.vectorSearch` flips; same `/search`
+- [http-api.md](http-api.md): `capabilities.vectorSearch` flips; same `/search`
   endpoint.
-- [domain-model.md](domain-model.md) — hashes underpin invalidation.
+- [domain-model.md](domain-model.md): hashes underpin invalidation.

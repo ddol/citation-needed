@@ -1,14 +1,14 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { Database } from '../../../src/db/index';
+import { Database, getDatabase } from '../../../src/db/index';
 
 const BetterSqlite3 = require('better-sqlite3');
 
 function makeTestDb(): { db: Database; dbPath: string } {
   const dbPath = path.join(
-    os.homedir(),
-    '.citation-needed-test',
+    os.tmpdir(),
+    'citation-needed-test',
     `db-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
   );
   const db = new Database(dbPath);
@@ -29,7 +29,7 @@ describe('Database', () => {
   });
 
   afterAll(() => {
-    const dir = path.join(os.homedir(), '.citation-needed-test');
+    const dir = path.join(os.tmpdir(), 'citation-needed-test');
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -56,6 +56,28 @@ describe('Database', () => {
     expect(found?.title).toBe('Another Paper');
   });
 
+  test('getDatabase with an explicit path opens the requested database', () => {
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-explicit-db-'));
+    const firstPath = path.join(otherDir, 'first.db');
+    const secondPath = path.join(otherDir, 'second.db');
+    const first = getDatabase(firstPath);
+    const second = getDatabase(secondPath);
+
+    try {
+      first.addCitation({ doi: '10.1/first', title: 'First DB' });
+      second.addCitation({ doi: '10.1/second', title: 'Second DB' });
+
+      expect(first.getCitation('10.1/first')?.title).toBe('First DB');
+      expect(first.getCitation('10.1/second')).toBeUndefined();
+      expect(second.getCitation('10.1/second')?.title).toBe('Second DB');
+      expect(second.getCitation('10.1/first')).toBeUndefined();
+    } finally {
+      first.close();
+      second.close();
+      fs.rmSync(otherDir, { recursive: true, force: true });
+    }
+  });
+
   test('getCitation returns undefined for unknown DOI', () => {
     const result = db.getCitation('10.0000/does.not.exist');
     expect(result).toBeUndefined();
@@ -67,6 +89,18 @@ describe('Database', () => {
     db.addCitation({ doi, title: 'Second' });
     const found = db.getCitation(doi);
     expect(found?.title).toBe('First');
+  });
+
+  test('addCitationWithResult reports whether a row was inserted', () => {
+    const doi = '10.1234/test.inserted';
+
+    const first = db.addCitationWithResult({ doi, title: 'First' });
+    const second = db.addCitationWithResult({ doi, title: 'Second' });
+
+    expect(first.inserted).toBe(true);
+    expect(first.citation.doi).toBe(doi);
+    expect(second.inserted).toBe(false);
+    expect(second.citation.title).toBe('First');
   });
 
   test('getAllCitations returns all records', () => {

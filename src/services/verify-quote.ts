@@ -60,7 +60,7 @@ export class VerifyQuoteService {
     const citation = this.db.getCitation(doi);
     if (!citation || citation.id == null) return { status: 'unknown-doi' };
 
-    const markdownPath = resolveMarkdownPath(citation);
+    const markdownPath = resolveMarkdownPath(citation, this.db);
     const chunks = this.db.getChunksForCitation(citation.id);
     if (!markdownPath && chunks.length === 0) return { status: 'no-markdown' };
 
@@ -87,7 +87,7 @@ export class VerifyQuoteService {
       if (matches.length >= MAX_MATCHES) break;
       if (citation.id == null) continue;
 
-      const markdownPath = resolveMarkdownPath(citation);
+      const markdownPath = resolveMarkdownPath(citation, this.db);
       if (!markdownPath) continue;
 
       const chunks = this.db.getChunksForCitation(citation.id);

@@ -1,8 +1,7 @@
-import React from 'react';
-import { render, Text } from 'ink';
 import { Command } from 'commander';
 import { getDatabase } from '../../db/index';
 import { IndexService } from '../../services/indexer';
+import { green, print, printError, red } from '../output';
 
 export function registerIndexCommand(program: Command): void {
   program
@@ -16,14 +15,10 @@ export function registerIndexCommand(program: Command): void {
 
       if (summary.errors.length > 0) {
         const failures = summary.errors.map((e) => `${e.doi}: ${e.message}`).join('; ');
-        render(
-          <Text color="red">
-            {line} Failures: {failures}
-          </Text>
-        );
+        printError(red(`${line} Failures: ${failures}`));
         process.exitCode = 1;
       } else {
-        render(<Text color="green">{line}</Text>);
+        print(green(line));
       }
     });
 }

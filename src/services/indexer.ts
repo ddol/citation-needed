@@ -47,7 +47,7 @@ export class IndexService {
           });
         }
 
-        const markdownPath = resolveMarkdownPath(citation);
+        const markdownPath = resolveMarkdownPath(citation, this.db);
         if (!markdownPath) {
           summary.missingMarkdown += 1;
           continue;

@@ -1,8 +1,8 @@
-# MCP Tools Reference
+# MCP tools reference
 
 All tools are available via the MCP server started with `citation-needed server`.
 
-## Citation Tools
+## Citation tools
 
 ### `get-citation`
 
@@ -20,17 +20,25 @@ Get citation details by DOI.
 
 ### `list-citations`
 
-List all stored citations.
+List stored citations. With no arguments, this preserves the legacy behavior and
+returns a JSON array of all citations. With `cursor` or `limit`, it returns a
+paginated object.
 
-**Input:** `{}`
+**Input:**
 
-**Output:** JSON array of citation objects.
+```json
+{ "limit": 50, "cursor": "…" }
+```
+
+**Output:** JSON array of citation objects, or `{ "citations": [...], "nextCursor": "…" }` when pagination arguments are supplied.
 
 ---
 
 ### `import-bibtex`
 
-Import citations from a BibTeX string into the database.
+Import citation metadata from a BibTeX string into the database. This MCP tool
+does not download PDFs or extract Markdown; use the CLI `import-bibtex` command
+for the full pipeline.
 
 **Input:**
 
@@ -56,11 +64,18 @@ Search arXiv for a paper by title.
 
 ---
 
-## Retrieval Tools
+## Retrieval tools
 
 ### `download-pdf`
 
-Download a PDF for a citation (tries open-access sources first).
+Download a PDF for a citation from a direct `pdfUrl`, or from Unpaywall when
+`useUnpaywall` is true and an email is available.
+
+This is a narrow tool, not the retrieval cascade: it does not try Semantic
+Scholar or arXiv, and it does not use the institutional-proxy authenticated
+downloader. The full cascade (and the identity check that refuses a wrong paper)
+runs in the CLI `import-bibtex` workflow ([architecture.md](architecture.md)
+§ Retrieval cascade).
 
 **Input:**
 
@@ -73,11 +88,12 @@ Download a PDF for a citation (tries open-access sources first).
 }
 ```
 
-**Output:** Path to downloaded PDF or error message.
+**Output:** Path to downloaded PDF or error message. If the DOI is already in
+the database, the citation's PDF path and verification status are updated.
 
 ---
 
-## Grounding Tools
+## Grounding tools
 
 ### `search-citations`
 

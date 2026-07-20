@@ -60,6 +60,26 @@ describe('IndexService', () => {
     expect(mdManifestation?.contentHash).toHaveLength(64);
   });
 
+  test('indexes markdown from an existing manifestation outside the sibling layout', async () => {
+    const citation = db.addCitation({ doi: '10.1/i.manifest', title: 'Custom Markdown' });
+    const customDir = path.join(root, 'elsewhere');
+    const markdownPath = path.join(customDir, 'custom.md');
+    fs.mkdirSync(customDir, { recursive: true });
+    fs.writeFileSync(markdownPath, '# Custom\n\nManifest indexed content.');
+    db.upsertManifestation({
+      citationId: citation.id!,
+      kind: 'markdown-extracted',
+      path: markdownPath,
+    });
+
+    const summary = await new IndexService(db).indexCorpus();
+
+    expect(summary).toMatchObject({ scanned: 1, indexed: 1, missingMarkdown: 0, errors: [] });
+    expect(db.searchFts('manifest indexed').results.map((r) => r.citation.doi)).toEqual([
+      '10.1/i.manifest',
+    ]);
+  });
+
   test('is idempotent: a second run does zero chunking work', async () => {
     seed('10.1/i.3', 'twice2024', '# Once\n\nOnly chunk me a single time.');
     const service = new IndexService(db);

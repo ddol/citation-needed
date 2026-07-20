@@ -10,7 +10,13 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "node --env-file-if-exists=.env -r ts-node/register src/index.ts",
+    "dev:clear": "npm run dev -- reset --files --yes",
+    "dev:import:velocity": "npm run dev:import -- ../velocity.report/data/maths/references.bib --paper-path ../velocity.report/docs/papers/pdf --markdown-path ../velocity.report/docs/papers/markdown",
+    "dev:reextract": "npm run dev -- extract-markdown --paper-path ../velocity.report/docs/papers/pdf --markdown-path ../velocity.report/docs/papers/markdown",
+    "dev:reimport:velocity": "npm run dev:clear && npm run dev:import:velocity",
+    "metrics": "npm run dev -- score-markdown-quality --paper-path ../velocity.report/docs/papers/pdf --markdown-path ../velocity.report/docs/papers/markdown",
+    "metrics:json": "npm run metrics -- --json",
     "cli": "node dist/index.js",
     "server": "node dist/index.js server",
     "lint": "eslint 'src/**/*.{ts,tsx}' 'test/**/*.{ts,tsx}'",
@@ -20,7 +26,8 @@
     "pretest": "tsc --noEmit",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:import": "npm run dev -- import-bibtex"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -39,6 +46,7 @@
     "bibtex-parse": "^2.1.0",
     "commander": "^12.0.0",
     "ink": "^3.2.0",
+    "prettier": "^3.8.3",
     "react": "^18.2.0",
     "zod": "^4.4.3"
   },
@@ -63,7 +71,6 @@
     "ink-testing-library": "^2.1.0",
     "jest": "^29.7.0",
     "lint-staged": "^15.5.2",
-    "prettier": "^3.8.3",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
