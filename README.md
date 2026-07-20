@@ -2,7 +2,7 @@
 
 ![citation needed](https://imgs.xkcd.com/comics/wikipedian_protester.png)
 
-> Citation retrieval, indexing, and Markdown extraction sidecar for AI agents — turns BibTeX references into a local, searchable PDF/Markdown corpus.
+> Citation retrieval, indexing, and Markdown extraction sidecar for AI agents: turns BibTeX references into a local, searchable PDF/Markdown corpus.
 
 `citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, converts those PDFs into Markdown using JavaScript, and indexes extracted Markdown for grounded MCP search, reading, and quote checking.
 
@@ -12,14 +12,14 @@ It exists to answer one question about a citation: **is this a real quote, and i
 
 ## Features
 
-- 📚 **BibTeX-first workflow** — process a `.bib` file in one run
-- 🗄️ **SQLite database** — track citation metadata, PDF paths, and processing status
-- 🔓 **Open-access retrieval** — Unpaywall, Semantic Scholar, and arXiv, with the identity of every candidate verified before download
-- 🔒 **Authenticated PDF download** — via Playwright for proxy-gated content (optional)
-- 📝 **PDF to Markdown extraction** — convert downloaded PDFs into Markdown in JavaScript
-- 📁 **Automatic output folders** — write PDFs to `papers/pdf/` and Markdown to `papers/markdown/` by default
-- 🔎 **Local full-text index** — chunk extracted Markdown into SQLite FTS5 tables with section provenance
-- 🤖 **MCP server** — Model Context Protocol tools for citation metadata, retrieval, search, content reading, and quote verification
+- 📚 **BibTeX-first workflow**: process a `.bib` file in one run
+- 🗄️ **SQLite database**: track citation metadata, PDF paths, and processing status
+- 🔓 **Open-access retrieval**: Unpaywall, Semantic Scholar, and arXiv, with the identity of every candidate verified before download
+- 🔒 **Authenticated PDF download**: via Playwright for proxy-gated content (optional)
+- 📝 **PDF to Markdown extraction**: convert downloaded PDFs into Markdown in JavaScript
+- 📁 **Automatic output folders**: write PDFs to `papers/pdf/` and Markdown to `papers/markdown/` by default
+- 🔎 **Local full-text index**: chunk extracted Markdown into SQLite FTS5 tables with section provenance
+- 🤖 **MCP server**: Model Context Protocol tools for citation metadata, retrieval, search, content reading, and quote verification
 
 ---
 
@@ -43,7 +43,7 @@ npx playwright install chromium
 
 ---
 
-## CLI Usage
+## CLI usage
 
 ```bash
 # Import a BibTeX file, download PDFs into ./papers/pdf, and write Markdown into ./papers/markdown
@@ -95,7 +95,7 @@ By default, `import-bibtex` writes PDFs to a `papers/pdf/` folder next to the Bi
 
 The standalone `download` command only downloads a PDF and updates an existing citation when that DOI is already in the database. It requires either `--url` or `--email` for an Unpaywall lookup; the fuller retrieval cascade, Markdown extraction, and proxy-authenticated fallback live in `import-bibtex`.
 
-`reset` is a maintenance command and is a **dry run unless you pass `--yes`** — a bare `reset` reports what it would remove and changes nothing. `--files` additionally deletes the PDFs and Markdown recorded in the database; without it, only the rows go. If any file cannot be deleted, the database wipe is stopped so the recorded paths remain available for a retry.
+`reset` is a maintenance command and is a **dry run unless you pass `--yes`**: a bare `reset` reports what it would remove and changes nothing. `--files` additionally deletes the PDFs and Markdown recorded in the database; without it, only the rows go. If any file cannot be deleted, the database wipe stops so the recorded paths stay available for a retry.
 
 ### Set a contact email first
 
@@ -105,11 +105,11 @@ The standalone `download` command only downloads a PDF and updates an existing c
 citation-needed auth set-email you@university.edu   # or export CITATION_NEEDED_EMAIL
 ```
 
-Retrieval tries each source in turn — `cache → Unpaywall → Semantic Scholar → arXiv → publisher → authenticated` — and stops at the first that yields a PDF. Every candidate's title is checked against the citation before download, so a source that returns the wrong paper is refused rather than saved under the right name. When nothing works, the failure message lists each stage and why it declined.
+Retrieval tries each source in turn (`cache → Unpaywall → Semantic Scholar → arXiv → publisher → authenticated`) and stops at the first that yields a PDF. Every candidate's title is checked against the citation before download, so a source that returns the wrong paper is refused rather than saved under the right name. When nothing works, the failure message lists each stage and why it declined.
 
 ---
 
-## Environment Variables
+## Environment variables
 
 | Variable                   | Default                           | Description                                                                                                                                                            |
 | -------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,7 +120,7 @@ Retrieval tries each source in turn — `cache → Unpaywall → Semantic Schola
 | `SEMANTIC_SCHOLAR_API_KEY` | _(unset)_                         | Optional, free from semanticscholar.org. Without it the Semantic Scholar stage shares an unauthenticated pool that throttles in streaks; a key buys a guaranteed quota |
 | `LOG_LEVEL`                | `info`                            | Logger verbosity: `debug` / `info` / `warn` / `error` / `silent`                                                                                                       |
 
-For local development, copy `.env.example` to `.env` — every `npm run dev*`
+For local development, copy `.env.example` to `.env`: every `npm run dev*`
 script loads it (via Node's `--env-file-if-exists`, no dependency), and a real
 environment variable still wins over the file. `.env` is gitignored, so an API
 key stays out of commits.
@@ -131,7 +131,7 @@ address.
 
 ---
 
-## MCP Server Setup
+## MCP server setup
 
 Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_config.json`):
 
@@ -146,12 +146,12 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 }
 ```
 
-### MCP Tools
+### MCP tools
 
 | Tool               | Description                                         | Required params |
 | ------------------ | --------------------------------------------------- | --------------- |
 | `get-citation`     | Get citation details                                | `doi`           |
-| `list-citations`   | List citations, optionally cursor-paginated         | —               |
+| `list-citations`   | List citations, optionally cursor-paginated         | none            |
 | `import-bibtex`    | Import citation metadata from a BibTeX string       | `bibtex`        |
 | `search-arxiv`     | Search arXiv by paper title                         | `title`         |
 | `download-pdf`     | Download PDF from `pdfUrl` or Unpaywall             | `doi`           |
@@ -171,7 +171,7 @@ npm test           # Run Jest tests
 npm run dev        # Run with ts-node (no build required)
 ```
 
-### Project Structure
+### Project structure
 
 ```
 src/
@@ -192,7 +192,7 @@ src/
 ├── verification/         # PDF Markdown extraction helpers
 ├── workflows/            # BibTeX batch processing workflow
 ├── mcp/                  # MCP server with per-tool modules
-├── tui/                  # Ink/React — live redraw only (ImportProgress)
+├── tui/                  # Ink/React, live redraw only (ImportProgress)
 └── cli/                  # Commander CLI; static output via cli/output.ts
 ```
 

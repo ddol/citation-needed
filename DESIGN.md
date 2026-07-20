@@ -12,7 +12,7 @@
 
 Concrete rules. Each one exists to serve a tenet in [TENETS.md](TENETS.md); the
 tenet is the reason, and this is the shape. Where a rule and a convenience
-disagree, the rule wins or the rule changes — not silently, and not case by
+disagree, the rule wins or the rule changes, not silently and not case by
 case.
 
 ---
@@ -24,7 +24,7 @@ case.
 
 **The cascade is `cache → Unpaywall → Semantic Scholar → arXiv → publisher →
 authenticated`** (`src/retrieval/index.ts`). A stage joins only when it resolves
-real, test-backed PDF URLs; parked stages are unexported and unwired — see
+real, test-backed PDF URLs; parked stages are unexported and unwired. See
 [docs/plans/retrieval-pipeline.md](docs/plans/retrieval-pipeline.md), which also
 tracks the one stage still violating that rule (`publisher`, whose adapters
 resolve no URLs).
@@ -34,7 +34,7 @@ title search is a guess that has to be validated. Precise sources first also
 spares the fuzzy one a request.
 
 **Verify identity before accepting any candidate.** Upstream search ranks by
-relevance, always returns something, and has no idea what we asked for — and a
+relevance, always returns something, and has no idea what we asked for, and a
 DOI lookup can still carry wrong metadata. Every source checks the title through
 `src/retrieval/title-match.ts`, and the _best_ candidate is chosen, never the
 first. Two thresholds, because the evidence differs:
@@ -49,14 +49,14 @@ the correct trade. Applying it to a DOI lookup is not: it rejects papers whose
 BibTeX subtitle is merely abbreviated.
 
 **A throttled lookup is not a missing paper.** Every upstream rate-limits, and a
-429 that escapes a resolver reads as "no PDF found" — indistinguishable from a
+429 that escapes a resolver reads as "no PDF found", indistinguishable from a
 paper the source does not have. Retry with backoff (`src/retrieval/http-retry.ts`:
 `Retry-After` when offered, else exponential; 429 and 5xx), and surface an
 exhausted budget as an error, never as an empty result.
 
 **Carry "throttled" out as a flag, not a phrase.** `RetrievalResult.throttled`
-says this DOI was refused before it was looked up, so waiting changes the answer
-— unlike a paper no source has. Callers decide what to retry from that flag;
+says this DOI was refused before it was looked up, so waiting changes the answer,
+unlike a paper no source has. Callers decide what to retry from that flag;
 nothing downstream should be parsing a message string to find out.
 
 **Back off from a refusal; do not retry into it.** When a source rate-limits in
@@ -66,7 +66,7 @@ breaker, stop calling that source, and retry the queue **once** after a cooldown
 
 **A breaker pauses a source; it does not write one off.** Throttling is a
 passing streak, not a property of the run, so an open breaker must cool down and
-then let a single probe through — closing again when the pool answers. A breaker
+then let a single probe through, closing again when the pool answers. A breaker
 that stays open for the whole run trades every paper only that source carries for
 the hammering it prevented, which is the worse half of the deal.
 
@@ -78,7 +78,7 @@ between a query and a wish.
 **Never fake a stage that is not configured.** Unpaywall needs a contact email
 and rejects placeholder domains outright, so an `@example.com` address is treated
 as no address at all. The stage is skipped, and `attempts` says which command
-fixes it — it does not silently degrade into something else, and it does not
+fixes it. It does not silently degrade into something else, and it does not
 spend a request on a guaranteed rejection.
 
 **Be a good citizen on every request**: honour each host's published rate limit
@@ -104,9 +104,9 @@ fetch?"
 | `src/tui/` | Ink / React                          | Output that redraws while work is in flight |
 | `src/cli/` | Plain writes via `src/cli/output.ts` | Everything else                             |
 
-Today exactly one component qualifies: `ImportProgress` — a spinner plus a list
-of rows mutating as an import runs. Hand-rolling cursor control for that is
-genuinely worse than a reconciler.
+Exactly one component qualifies: `ImportProgress`, a spinner plus a list of rows
+mutating as an import runs. Hand-rolling cursor control for that is genuinely
+worse than a reconciler.
 
 **Static output never goes through Ink.** A one-shot line does not need a
 reconciler, and Ink's yoga layout hard-wraps at the measured terminal width,
@@ -114,7 +114,7 @@ inserting real newlines that break copy-paste of file paths. Plain writes let
 the terminal soft-wrap. Ink for static text costs more and produces worse
 output.
 
-**All CLI writes go through `src/cli/output.ts`** — the single sanctioned place
+**All CLI writes go through `src/cli/output.ts`**, the single sanctioned place
 for `console`. It honours `NO_COLOR`, `FORCE_COLOR`, and TTY detection.
 
 **Errors go to stderr and set `process.exitCode`.** stdout stays pipeable; a
@@ -131,7 +131,7 @@ ANSI escapes never count toward a column width.
 
 **Coverage is a ratchet.** The floor in `jest.config.js` sits just below actual
 coverage so any regression fails CI. When real coverage rises, the floor rises
-with it. It never goes down — if a change needs the floor lowered, the change
+with it. It never goes down. If a change needs the floor lowered, the change
 needs tests instead.
 
 **Assert behaviour, not plumbing.** Assert what a command _printed_, not the
@@ -139,14 +139,14 @@ props of an element it constructed. A test that inspects internal wiring passes
 while the user-visible output is broken.
 
 **Assert on visible text, never on raw bytes.** Rendered output carries ANSI
-escapes only sometimes — `jest --colors` sets `FORCE_COLOR=1` in worker
+escapes only sometimes: `jest --colors` sets `FORCE_COLOR=1` in worker
 processes, so the same assertion passes piped and fails in an editor. Put
 rendered output through `stripAnsi` (`test/helpers/ansi.ts`) and measure width
 with `visibleWidth`; escapes occupy no columns. A test whose result depends on
 where it was run is not a test.
 
 **A test that encodes a bug is worse than no test.** When a fix makes a test
-fail, decide which of the two is wrong before touching either — a green suite
+fail, decide which of the two is wrong before touching either: a green suite
 asserting the wrong format is how a defect becomes a specification.
 
 **Every fixed bug gets a regression test named for the failure**, with a comment
@@ -158,7 +158,7 @@ race on a shared fixture dir. A real database catches cascade and trigger
 behaviour that a mock cannot.
 
 **Network is mocked in tests.** Live API checks are done by hand when a fix
-depends on real upstream behaviour, and the result is recorded in the PR — a
+depends on real upstream behaviour, and the result is recorded in the PR. A
 suite that reaches the network is a suite that fails on a train.
 
 ## Structure and docs
@@ -169,7 +169,7 @@ suite that reaches the network is a suite that fails on a train.
 operations, never parallel implementations. Temporary duplication states its end
 date.
 
-**Single source of truth per concept** — `manifestations` for file locations,
+**Single source of truth per concept**: `manifestations` for file locations,
 not a second path column drifting alongside it.
 
 **Docs describe current state in the present tense.** No decision logs, no

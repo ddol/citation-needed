@@ -24,7 +24,7 @@ Everything here exists to answer one question about a citation:
 
 Retrieval, extraction, chunking, and indexing are means. `verify-quote` is the
 end. A feature earns its place by making that question cheaper or more reliable
-to answer — not by making the corpus bigger.
+to answer, not by making the corpus bigger.
 
 The failure this guards against is a claim that _looks_ checkable: a plausible
 sentence, a real DOI, a citation that renders correctly in a bibliography, and
@@ -36,8 +36,8 @@ than no tool.
 A missing PDF is a visible gap. Someone notices it and fixes it.
 
 A wrong PDF filed under the right name is silent corruption. It launders a
-false citation into a checkable-looking one, and every layer downstream —
-extraction, chunking, search, quote verification — faithfully processes the
+false citation into a checkable-looking one, and every layer downstream
+(extraction, chunking, search, quote verification) faithfully processes the
 wrong paper and reports success. The blast radius is the whole product.
 
 So the asymmetry is deliberate: **when identity is uncertain, refuse and say
@@ -54,7 +54,7 @@ evidence; it is a suggestion. Papers that cannot possibly be in a corpus still
 produce top hits there.
 
 An artifact is what it claims to be only once we have checked it against the
-identity we asked for — matching title, matching DOI, matching hash. Verify,
+identity we asked for: matching title, matching DOI, matching hash. Verify,
 then trust.
 
 ## 4. Legitimate access only
@@ -78,9 +78,8 @@ does not get built here, however much coverage it would buy.
 A stage that cannot succeed is not in the cascade.
 
 Capability that exists in code but cannot yet resolve a real PDF is **parked**
-— unexported, unwired, still covered by its tests — rather than run on every
-miss to append noise to a failure message. A stage rejoins when it can do its
-job.
+(unexported, unwired, still covered by its tests) rather than run on every miss
+to append noise to a failure message. A stage rejoins when it can do its job.
 
 The same applies to reporting: a count of "downloaded" that includes items that
 were not downloaded is a lie told to the only person who could catch the
@@ -107,7 +106,7 @@ not an instrument.
 
 ## 8. One definition, thin adapters
 
-Each concept is defined once and reached through thin adapters — one service
+Each concept is defined once and reached through thin adapters: one service
 layer, MCP first, with other surfaces as gateways rather than parallel
 implementations. Two mechanisms maintained side by side is a smell that needs a
 justification and an end date.

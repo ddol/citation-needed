@@ -1,24 +1,24 @@
-# citation-needed — Backlog
+# citation-needed backlog
 
 Anti-hallucination academic citation assistant: BibTeX → local PDFs + Markdown, with SQLite tracking and MCP server.
 
 **Sizes:** XS < 1 h · S 1–4 h · M half–full day · L 2–3 d · XL week+
 **Tags:** [fetch] [flow] [parse] [db] [cli] [mcp] [tui] [verify] [test] [auth] [deploy] [docs] [devx] [util] [cfg] [search] [valid] [api] [storage]
 
-**Scope:** work is either **Core** — the one workflow below, scheduled — or **Exploratory** — designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use. The Exploratory section is ordered by user-flow priority:
+**Scope:** work is either **Core** (the one workflow below, scheduled) or **Exploratory** (designed and parked in [docs/plans/](docs/plans/README.md), unscheduled until the core loop proves valuable in daily use). The Exploratory section is ordered by user-flow priority:
 
-- **Flow A — Own-library authoring**: a researcher uses their own paper library in their own work.
-- **Flow B — Claims from papers already held**: a researcher checks other authors' claims when the relevant papers are already present.
-- **Flow C — Claims from papers not yet held**: a researcher checks other authors' claims when relevant papers may be missing.
+- **Flow A, own-library authoring**: a researcher uses their own paper library in their own work.
+- **Flow B, claims from papers already held**: a researcher checks other authors' claims when the relevant papers are already present.
+- **Flow C, claims from papers not yet held**: a researcher checks other authors' claims when relevant papers may be missing.
 - **Infrastructure**: foundations, secondary surfaces, scale, packaging, and deployment.
 
 ---
 
-## Core — grounded answers from your own library
+## Core: grounded answers from your own library
 
-The workflow the product must nail before anything else: import a `.bib` → PDFs download and extract (**already works**) → index → an agent over MCP can **find** (`search-citations`), **read** (`read-content`), and **check** (`verify-quote`) — grounded, checkable answers from the researcher's own corpus. Interim discovery: mount a community Semantic Scholar/OpenAlex MCP server alongside; the agent composes.
+The workflow the product must nail before anything else: import a `.bib` → PDFs download and extract (**already works**) → index → an agent over MCP can **find** (`search-citations`), **read** (`read-content`), and **check** (`verify-quote`): grounded, checkable answers from the researcher's own corpus. Interim discovery: mount a community Semantic Scholar/OpenAlex MCP server alongside; the agent composes.
 
-### Slice 3 — one pipeline, one locator
+### Slice 3: one pipeline, one locator
 
 Consolidates what slices 1–2 left split: content resolution reads the
 manifestations source of truth, CLI and MCP import become one pipeline, the
@@ -37,15 +37,15 @@ harness stops depending on machine-specific flags.
 
 ## Exploratory
 
-Deliberately unscheduled until the core loop is proven in use. Nothing is deleted — designs stay parked in their plan docs (statuses: Exploratory). Items keep their `(see docs/plans/…)` refs and are ordered by the flow rubric above.
+Deliberately unscheduled until the core loop is proven in use. Nothing is deleted. Designs stay parked in their plan docs (statuses: Exploratory). Items keep their `(see docs/plans/…)` refs and are ordered by the flow rubric above.
 
-### Flow A — Own-library authoring
+### Flow A: own-library authoring
 
 - [docs] S - Document Better BibTeX auto-export (pinned keys, file field) as the zero-code Zotero → citation-needed path (see docs/plans/zotero-integration.md)
 - [flow] M - Link Zotero storage and linked-file attachment PDFs as manifestations instead of re-downloading (see docs/plans/zotero-integration.md)
 - [search] S - SearchService filters: year range, verification status, access type, has-pdf (see docs/plans/service-layer.md)
-- [verify] M - Markdown post-processing: remove artefact lines, normalise headings (improves chunk quality — see docs/plans/fts5-full-text-search.md; serves B)
-- [verify] S - Quality metrics for extracted Markdown (word count, section count, table detection; doubles as chunker input validation — see docs/plans/fts5-full-text-search.md)
+- [verify] M - Markdown post-processing: remove artefact lines, normalise headings (improves chunk quality; see docs/plans/fts5-full-text-search.md; serves B)
+- [verify] S - Quality metrics for extracted Markdown (word count, section count, table detection; doubles as chunker input validation; see docs/plans/fts5-full-text-search.md)
 - [test] S - FTS benchmark script: index size and query latency at 1k/10k docs, with a size-per-document budget (see docs/plans/fts5-full-text-search.md; serves A)
 - [cli] M - `search` CLI command as second-surface adapter over SearchService + MCP/CLI parity test (see docs/plans/service-layer.md)
 - [parse] M - Zotero JSON export import: metadata + capture item key, library id, tags, collections, attachment paths (see docs/plans/zotero-integration.md)
@@ -53,32 +53,32 @@ Deliberately unscheduled until the core loop is proven in use. Nothing is delete
 - [fetch] M - Metadata enrichment from Crossref: abstract, keywords, licence, ISSN (abstract unlocks abstract search; serves A; see docs/plans/retrieval-pipeline.md)
 - [db] M - tags + collections join tables populated from Zotero import; SearchService and API filters (see docs/plans/zotero-integration.md)
 - [search] S - Emit zotero://select links in search/MCP/API results when item key known (verify supported URL forms first; see docs/plans/zotero-integration.md)
-- [mcp] S - Generate MCP tool inputSchema from the shared zod contracts for all tools — removes hand-maintained JSON Schema blocks (see docs/plans/service-layer.md)
+- [mcp] S - Generate MCP tool inputSchema from the shared zod contracts for all tools, removing hand-maintained JSON Schema blocks (see docs/plans/service-layer.md)
 - [verify] M - Evaluate external extractor filter contract: configurable stdin-PDF→stdout-Markdown command (marker/nougat/OCR user-wired; pdf2md default) (see docs/plans/fts5-full-text-search.md)
-- [verify] XL - OCR fallback for scanned PDFs (tesseract.js or external API) — future extract-stage variant, may become a user-wired extractor filter (see docs/plans/indexing-jobs.md)
+- [verify] XL - OCR fallback for scanned PDFs (tesseract.js or external API), a future extract-stage variant that may become a user-wired extractor filter (see docs/plans/indexing-jobs.md)
 - [db] M - identifiers table (scheme+value UNIQUE: arxiv, pmid, zotero-key, zotero-library, bibtex-key); DOI stays on citations (see docs/plans/domain-model.md; serves D)
 - [parse] M - RIS reference format import (.ris files; needs format-interop plan before scheduling)
 - [cli] M - `export` CLI command: write BibTeX/RIS/JSON from database (needs format-interop plan before scheduling)
 - [parse] S - CSV metadata import (title + DOI columns; needs format-interop plan before scheduling)
 
-_Deferred (Flow A future): semantic + hybrid search modes — parked in docs/plans/vector-hybrid-search.md until FTS5 quality is observed on a real corpus._
+_Deferred (Flow A future): semantic + hybrid search modes, parked in docs/plans/vector-hybrid-search.md until FTS5 quality is observed on a real corpus._
 
-### Flow B — Claims from papers already held
+### Flow B: claims from papers already held
 
-- [verify] S - Claim-grounding eval Phase 0: analytic token-economics — count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
+- [verify] S - Claim-grounding eval Phase 0: analytic token-economics via count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
 - [verify] M - Claim-grounding eval pilot: 3 papers × ~20 human-verified claims, pdf-direct vs markdown-context, one model, manual grading; exit question is whether accuracy deltas are visible and gradable (see docs/plans/claim-grounding-eval.md)
-- [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check — see docs/plans/storage-adapters.md)
-- [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI; needs RetrievalService detail pass before scheduling — see docs/plans/service-layer.md)
-- [cli] XS - `stats` CLI command: citation status summary and database size (needs CitationService detail pass before scheduling — see docs/plans/service-layer.md)
+- [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check; see docs/plans/storage-adapters.md)
+- [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI; needs RetrievalService detail pass before scheduling; see docs/plans/service-layer.md)
+- [cli] XS - `stats` CLI command: citation status summary and database size (needs CitationService detail pass before scheduling; see docs/plans/service-layer.md)
 - [storage] S - Availability checks: last_seen_at refresh, unavailable status surfaced in search results and `verify` CLI (see docs/plans/storage-adapters.md)
-- [verify] L - Reference list extraction from extracted Markdown (cited-papers discovery; owned by docs/plans/local-bibliography-spider.md; cross-checked against graph edges — see docs/plans/citation-graph.md)
+- [verify] L - Reference list extraction from extracted Markdown (cited-papers discovery; owned by docs/plans/local-bibliography-spider.md; cross-checked against graph edges; see docs/plans/citation-graph.md)
 - [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps (see docs/plans/local-bibliography-spider.md and docs/plans/citation-graph.md)
-- [cli] S - `update` CLI command: re-download or refresh metadata for a single citation (needs CitationService/RetrievalService detail pass before scheduling — see docs/plans/service-layer.md)
-- [mcp] S - MCP tool: update-citation metadata (needs CitationService detail pass before scheduling — see docs/plans/service-layer.md)
+- [cli] S - `update` CLI command: re-download or refresh metadata for a single citation (needs CitationService/RetrievalService detail pass before scheduling; see docs/plans/service-layer.md)
+- [mcp] S - MCP tool: update-citation metadata (needs CitationService detail pass before scheduling; see docs/plans/service-layer.md)
 
-### Flow C — Claims from papers not yet held
+### Flow C: claims from papers not yet held
 
-- [mcp] S - MCP tool: check-corpus — batch DOI membership join: member|frontier|absent (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool check-corpus: batch DOI membership join (member|frontier|absent) (see docs/plans/citation-graph.md)
 - [verify] M - Local bibliography parser: detect reference sections in extracted Markdown and parse raw reference entries into structured metadata (see docs/plans/local-bibliography-spider.md)
 - [db] M - reference_mentions + reference_match_candidates tables for extracted bibliography evidence and local alignment review (see docs/plans/local-bibliography-spider.md)
 - [fetch] M - Crossref enrichment for parsed references missing DOI or enough metadata, fixture-tested and disabled with --no-crossref (see docs/plans/local-bibliography-spider.md)
@@ -93,32 +93,32 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger (see docs/plans/citation-graph.md)
 - [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required) (see docs/plans/citation-graph.md)
 - [mcp] M - MCP tools: get-references + get-citing-papers (sort by influence|recency); edges cached on lookup (see docs/plans/citation-graph.md)
-- [mcp] S - MCP tool: related-papers — recommendations from seed paper(s) (see docs/plans/citation-graph.md)
+- [mcp] S - MCP tool related-papers: recommendations from seed paper(s) (see docs/plans/citation-graph.md)
 - [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler (see docs/plans/citation-graph.md)
-- [fetch] S - DoiResolver: populate isOpenAccess field — currently always undefined (see docs/plans/retrieval-pipeline.md)
+- [fetch] S - DoiResolver: populate isOpenAccess field, currently always undefined (see docs/plans/retrieval-pipeline.md)
 - [fetch] M - Extend the shared http-retry backoff to the PDF GET itself; today it covers lookups only (see docs/plans/retrieval-pipeline.md)
 - [fetch] M - Publisher-hosted PDFs 403 on our User-Agent (MDPI confirmed): send a browser-like UA, fall through to the next source, or record the URL for manual fetch (see docs/plans/retrieval-pipeline.md)
 - [fetch] S - Semantic Scholar API key support: the unauthenticated pool is shared and throttles unpredictably; a key buys a guaranteed quota (see docs/plans/retrieval-pipeline.md)
-- [auth] M - Proxy rotation across multiple configured institutional proxies — currently only proxies[0] used (see docs/plans/retrieval-pipeline.md)
+- [auth] M - Proxy rotation across multiple configured institutional proxies, currently only proxies[0] used (see docs/plans/retrieval-pipeline.md)
 - [fetch] L - Implement Springer Link PDF resolution via publisher adapter (see docs/plans/retrieval-pipeline.md)
 - [fetch] L - Implement Elsevier ScienceDirect PDF resolution via publisher adapter (see docs/plans/retrieval-pipeline.md)
 - [fetch] L - Implement ACM Digital Library PDF resolution via publisher adapter (see docs/plans/retrieval-pipeline.md)
-- [fetch] M - Wire publisher adapters into RetrievalOrchestrator fallback chain — the cascade re-entry gate (see docs/plans/retrieval-pipeline.md)
+- [fetch] M - Wire publisher adapters into RetrievalOrchestrator fallback chain, the cascade re-entry gate (see docs/plans/retrieval-pipeline.md)
 - [auth] M - API key management for publisher APIs (Elsevier, Springer) (see docs/plans/retrieval-pipeline.md)
 - [fetch] L - PubMed/NCBI E-utilities resolver for life-sciences papers (see docs/plans/retrieval-pipeline.md)
-- [auth] XL - SAML/Shibboleth SSO authentication for institutional access (needs institutional-access plan before scheduling — see docs/plans/retrieval-pipeline.md)
+- [auth] XL - SAML/Shibboleth SSO authentication for institutional access (needs institutional-access plan before scheduling; see docs/plans/retrieval-pipeline.md)
 - [db] M - Admit DOI-less citations: relax import guards; identity via identifiers + generated internal id (see docs/plans/domain-model.md; serves C, D)
-- [db] M - Citation deduplication via fuzzy title matching before insert — consult identifiers table once available (see docs/plans/domain-model.md)
+- [db] M - Citation deduplication via fuzzy title matching before insert; consult identifiers table once available (see docs/plans/domain-model.md)
 - [db] S - identifiers schemes += semantic-scholar-id, openalex-id (extend CHECK) (see docs/plans/domain-model.md)
 
-### Infrastructure — foundations, secondary surfaces, scale
+### Infrastructure: foundations, secondary surfaces, scale
 
 - [flow] S - CitationService consolidation: MCP get/list and CLI list delegate to one service; CLI list gains pagination (see docs/plans/service-layer.md; serves A, D)
 - [db] S - Store Zotero item key + library id in identifiers table on import (see docs/plans/zotero-integration.md and docs/plans/domain-model.md)
 - [db] S - Database backup and restore commands (needs backup/restore plan before scheduling)
 - [storage] M - StorageAdapter interface + LocalFileAdapter; route all PDF/markdown reads through it (see docs/plans/storage-adapters.md)
 - [db] S - Normalize manifestation paths to file:// URIs (migration + write-path change; see docs/plans/storage-adapters.md)
-- [cfg] M - Persistent config file (~/.citation-needed/config.json) for default flags (consumed by HTTP API port/token — see docs/plans/http-api.md)
+- [cfg] M - Persistent config file (~/.citation-needed/config.json) for default flags (consumed by HTTP API port/token; see docs/plans/http-api.md)
 - [flow] M - jobs table (kind, payload, status, attempts, last_error) + in-process worker loop; per-entry jobs with batch_id; 3 auto-retries with backoff then manual (see docs/plans/indexing-jobs.md)
 - [flow] M - Stage-based pipeline (resolve → download → extract → chunk → fts-index) with per-stage provenance on manifestations/chunks (see docs/plans/indexing-jobs.md)
 - [flow] S - Incremental re-index rules: skip unchanged content_hash; extractor/chunker version bump invalidates downstream stages only (see docs/plans/indexing-jobs.md)
@@ -133,18 +133,18 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [api] S - RFC 7807 problem+json error responses; static bearer-token auth (required for non-loopback binds) + request logging (see docs/plans/http-api.md)
 - [test] M - HTTP integration tests: routes, problem+json shapes, MCP/HTTP search parity (see docs/plans/http-api.md)
 - [docs] S - docs/http-api.md usage reference (see docs/plans/http-api.md)
-- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API — read-only at most) + cron recipes for trends (see docs/plans/citation-graph.md)
+- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API, read-only at most) + cron recipes for trends (see docs/plans/citation-graph.md)
 - [flow] L - `watch` mode as filesystem-watcher job producer: monitor a directory for new .bib files and auto-import (see docs/plans/indexing-jobs.md)
-- [mcp] S - MCP tool: delete-citation (needs CitationService detail pass before scheduling — see docs/plans/service-layer.md)
+- [mcp] S - MCP tool: delete-citation (needs CitationService detail pass before scheduling; see docs/plans/service-layer.md)
 - [flow] L - Zotero 7 local HTTP API import (localhost:23119) with incremental pull (see docs/plans/zotero-integration.md)
-- [flow] M - Webhook notification on batch import completion (configurable URL; needs notification plan before scheduling — see docs/plans/indexing-jobs.md)
-- [tui] S - ImportProgress reads the jobs table for progress — survives restarts, shows watch-mode work (see docs/plans/indexing-jobs.md)
-- [tui] L - Interactive TUI: multi-select bulk operations (delete, re-download; Ink-eligible as live redraw — see DESIGN.md § Terminal output)
-- [tui] M - Interactive TUI: paginated, sortable, filterable citations table (Ink-eligible as live redraw; the static table stays plain — see DESIGN.md § Terminal output)
-- [tui] M - Interactive TUI: live per-citation download progress bars (Ink-eligible as live redraw — see DESIGN.md § Terminal output)
+- [flow] M - Webhook notification on batch import completion (configurable URL; needs notification plan before scheduling; see docs/plans/indexing-jobs.md)
+- [tui] S - ImportProgress reads the jobs table for progress; survives restarts and shows watch-mode work (see docs/plans/indexing-jobs.md)
+- [tui] L - Interactive TUI: multi-select bulk operations (delete, re-download; Ink-eligible as live redraw; see DESIGN.md § Terminal output)
+- [tui] M - Interactive TUI: paginated, sortable, filterable citations table (Ink-eligible as live redraw; the static table stays plain; see DESIGN.md § Terminal output)
+- [tui] M - Interactive TUI: live per-citation download progress bars (Ink-eligible as live redraw; see DESIGN.md § Terminal output)
 - [deploy] M - npm publish pipeline and versioned GitHub Releases (needs release plan before scheduling)
-- [deploy] L - Docker container image and Compose file for server mode (also serves the HTTP API — see docs/plans/http-api.md)
-- [deploy] S - Systemd service unit file for persistent MCP server daemon (and the `serve` HTTP daemon — see docs/plans/http-api.md)
+- [deploy] L - Docker container image and Compose file for server mode (also serves the HTTP API; see docs/plans/http-api.md)
+- [deploy] S - Systemd service unit file for persistent MCP server daemon (and the `serve` HTTP daemon; see docs/plans/http-api.md)
 
 ---
 
@@ -175,8 +175,8 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [search] M - Extract SearchService (src/services/search.ts) with shared zod contract; lexical mode over extended Database.searchCitations (see docs/plans/service-layer.md)
 - [db] S - Extend Database.searchCitations: LIKE over journal/bibtex_key/doi + limit/cursor pagination reusing encodeCursor
 - [mcp] M - MCP tool: search-citations over SearchService; trimmed result summaries (see docs/plans/service-layer.md)
-- [mcp] M - MCP tool: read-content — serve extracted Markdown by DOI, paginated; pdf_path-sibling stem fallback now, manifestations lookup later (see docs/plans/service-layer.md)
-- [mcp] M - MCP tool: verify-quote v1 — normalize a quoted passage, exact-match against extracted Markdown; verdict exact|not-found (see docs/plans/fts5-full-text-search.md)
+- [mcp] M - MCP tool read-content: serve extracted Markdown by DOI, paginated; pdf_path-sibling stem fallback now, manifestations lookup later (see docs/plans/service-layer.md)
+- [mcp] M - MCP tool verify-quote v1: normalize a quoted passage, exact-match against extracted Markdown; verdict exact|not-found (see docs/plans/fts5-full-text-search.md)
 - [test] S - Core-tool tests: SearchService + search-citations, read-content, verify-quote v1
 
 - [test] L - Add tests for all CLI commands (import, list, download, auth, server)
@@ -194,21 +194,21 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [devx] S - Add ESLint with TypeScript rules
 - [devx] S - Add Prettier with pre-commit hook
 - [devx] S - Enable TypeScript strict mode (noImplicitAny, noUnusedLocals, noImplicitReturns)
-- [devx] XS - Read version from package.json at runtime — remove 4 hardcoded "0.1.0" strings
+- [devx] XS - Read version from package.json at runtime, removing 4 hardcoded "0.1.0" strings
 - [devx] XS - Remove ignoreDeprecations: "5.0" from tsconfig and fix root cause
 - [devx] XS - Add pretest type-check step to package.json scripts
 - [devx] XS - Add test:coverage script with threshold enforcement
-- [fetch] S - ArxivResolver, UnpaywallResolver, DoiResolver silently swallow errors — log and propagate message
+- [fetch] S - ArxivResolver, UnpaywallResolver, DoiResolver silently swallow errors; log and propagate message
 - [fetch] S - Surface RetrievalOrchestrator warning logs into RetrievalResult.message
 - [fetch] XS - Remove deprecated ArxivRetriever and UnpaywallRetriever re-exports
 - [fetch] XS - Remove dead publisher getAdapter() import in orchestrator or wire it up
 - [fetch] XS - Move hardcoded resolver timeouts (15 000 ms) and rate limit (1 000 ms) to config constants
 - [fetch] XS - Fix User-Agent in doi.ts and open-access.ts: read version from package.json, email from auth config
 - [db] S - Add indexes on doi and created_at columns
-- [db] S - Wrap processBibtexFile in a DB transaction — partial failure currently leaves DB inconsistent
+- [db] S - Wrap processBibtexFile in a DB transaction; partial failure currently leaves DB inconsistent
 - [db] XS - Add CASCADE DELETE on retrieval_log foreign key to prevent orphaned rows
 - [db] XS - Add CHECK constraints on verification_status and access_type enum columns
-- [mcp] S - Add schema validation for MCP tool arguments — remove unsafe type casts
+- [mcp] S - Add schema validation for MCP tool arguments, removing unsafe type casts
 - [mcp] S - Stream progress events from import-bibtex MCP tool during processing
 - [mcp] S - Add cursor-based pagination to list-citations MCP tool
 - [flow] S - Persist batch import failures to DB so they form an audit log
@@ -220,12 +220,12 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [docs] XS - Add .env.example file
 - [docs] XS - Fix README output directory examples to match actual defaults (papers/pdf/, papers/markdown/)
 
-- [fetch] L - (5) AuthenticatedDownloader — Playwright browser automation for proxy-gated content
-- [fetch] M - RetrievalOrchestrator — coordinated cascade: cache → Unpaywall → arXiv → authenticated
-- [fetch] M - OpenAccessDownloader — HTTP PDF download with rate limiting and local cache check
-- [fetch] M - ArxivResolver — title-based Atom XML search with retry for rate limits
-- [fetch] M - UnpaywallResolver — open-access PDF URL discovery via Unpaywall API
-- [fetch] M - DoiResolver — Crossref metadata lookup (title, authors, year, journal, publisher)
+- [fetch] L - (5) AuthenticatedDownloader: Playwright browser automation for proxy-gated content
+- [fetch] M - RetrievalOrchestrator: coordinated cascade (cache → Unpaywall → arXiv → authenticated)
+- [fetch] M - OpenAccessDownloader: HTTP PDF download with rate limiting and local cache check
+- [fetch] M - ArxivResolver: title-based Atom XML search with retry for rate limits
+- [fetch] M - UnpaywallResolver: open-access PDF URL discovery via Unpaywall API
+- [fetch] M - DoiResolver: Crossref metadata lookup (title, authors, year, journal, publisher)
 - [fetch] S - Stubbed publisher URL adapters: Springer, Elsevier, ACM (landing page URL only)
 - [flow] M - (5) processBibtexFile workflow with per-entry onProgress callbacks and failure tracking
 - [parse] S - BibTeX file parsing via bibtex-parse library
@@ -237,18 +237,18 @@ _Deferred (Flow A future): semantic + hybrid search modes — parked in docs/pla
 - [db] S - Full-text search on title/authors in DB layer
 - [cli] M - CLI command: import-bibtex with --paper-path, --markdown-path, --email flags
 - [cli] S - CLI command: download single PDF by DOI with optional --url and --email
-- [cli] S - CLI command: list — Ink/React table view of all stored citations
+- [cli] S - CLI command list: Ink/React table view of all stored citations
 - [cli] S - CLI command: auth add-proxy with --login-url, --username, --password-env
-- [cli] XS - CLI command: auth set-email — stores email in ~/.citation-needed/auth.json
-- [cli] XS - CLI command: auth show — masked display of current auth config
-- [cli] XS - CLI command: server — start MCP server on stdio transport
-- [mcp] S - MCP tool: get-citation — fetch citation metadata by DOI
-- [mcp] S - MCP tool: list-citations — return all stored citations
-- [mcp] S - MCP tool: import-bibtex — import citations from BibTeX string
-- [mcp] S - MCP tool: search-arxiv — search arXiv by paper title
-- [mcp] S - MCP tool: download-pdf — trigger PDF download by DOI
-- [tui] M - (5) ImportProgress Ink/React component — real-time per-citation import progress
-- [tui] S - CitationsTable Ink/React component — static 4-column table (DOI, title, year, status)
+- [cli] XS - CLI command auth set-email: stores email in ~/.citation-needed/auth.json
+- [cli] XS - CLI command auth show: masked display of current auth config
+- [cli] XS - CLI command server: start MCP server on stdio transport
+- [mcp] S - MCP tool get-citation: fetch citation metadata by DOI
+- [mcp] S - MCP tool list-citations: return all stored citations
+- [mcp] S - MCP tool import-bibtex: import citations from BibTeX string
+- [mcp] S - MCP tool search-arxiv: search arXiv by paper title
+- [mcp] S - MCP tool download-pdf: trigger PDF download by DOI
+- [tui] M - (5) ImportProgress Ink/React component: real-time per-citation import progress
+- [tui] S - CitationsTable Ink/React component: static 4-column table (DOI, title, year, status)
 - [verify] M - PDF-to-Markdown extraction via @opendocsg/pdf2md
 - [auth] S - Auth config file management (~/.citation-needed/auth.json, never stores passwords)
 - [util] S - Logger utility with debug/info/warn/error/silent levels
