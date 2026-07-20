@@ -30,8 +30,9 @@ pre-registered rules (see docs/plans/claim-grounding-eval.md).
 
 - [verify] S - Claim-grounding eval Phase 0: analytic token-economics via count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
 - [verify] M - Claim-grounding eval pilot: 3 papers × ~20 human-verified claims, pdf-direct vs markdown-context, one model, manual grading; exit question is whether accuracy deltas are visible and gradable (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding claim suite: ~160 items authored from the original PDFs only, human-verified, then frozen under eval/claims/ with per-category counts, the mode × category assignment, and each absent claim's decoy paper (see docs/plans/claim-grounding-eval.md)
 - [verify] L - Claim-grounding eval Phase 1: full harness under eval/, outside Jest and the coverage ratchet; one runner, one ModeAdapter per consumption mode, replay cache, cost guard (see docs/plans/claim-grounding-eval.md)
-- [verify] M - Claim-grounding eval Phase 2: mcp-agent mode over InMemoryTransport against createMcpServer(db), plus corpus-wide and absent-claim categories (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval Phase 2: mcp-agent mode over InMemoryTransport against createMcpServer(db), the retrieval-oracle control arm, plus corpus-wide and absent-claim categories (see docs/plans/claim-grounding-eval.md)
 - [verify] M - Claim-grounding decision memo: apply the pre-registered rules to the results, record the parser-scope decision, and wire the Markdown mode in as the extractor regression gate (see docs/plans/claim-grounding-eval.md)
 
 ---

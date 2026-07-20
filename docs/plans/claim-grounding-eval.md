@@ -201,29 +201,63 @@ attributable to the consumption surface.
 1. Verdict accuracy per (category × mode × model); paired per-claim deltas
    with bootstrap CIs, not point estimates.
 2. **False-`supported` rate on absent claims**: the headline hallucination
-   number, the failure this tool exists to prevent.
+   number, the failure this tool exists to prevent. The ~30-item allocation
+   exists so this rate carries a usable CI.
 3. Tokens and USD **per correct verdict** (the "most accurate, least tokens"
-   axis), and latency.
-4. Evidence-reached rate (mode 3, from tool transcripts): a wrong verdict
-   _with_ the gold evidence retrieved is a reasoning failure; _without_ it, a
-   retrieval/chunking failure. Routes the fix.
-5. Fidelity correlation: per-paper `score-markdown-quality` sub-scores vs the
-   per-paper (mode 1 − mode 2) accuracy gap: validates or invalidates the
-   existing metric as a cheap proxy for downstream harm.
+   axis), and latency. Reported per category; a category near the accuracy
+   floor is flagged, not divided by.
+4. Evidence-reached rate (mode 3): the gold span, after `normalizeForMatch`,
+   appears in at least one chunk a tool call returned in the transcript. A
+   wrong verdict _with_ evidence reached is a reasoning failure; _without_, a
+   retrieval/chunking failure. The retrieval-oracle arm confirms the split
+   causally: oracle ≈ mode 2 means retrieval is the whole gap.
+5. Calibration on absent claims, from the `confidence` field: a
+   high-confidence false-`supported` is the worst possible output of this
+   tool. Exploratory; feeds no decision rule.
+6. Fidelity correlation, **exploratory only**: `score-markdown-quality`
+   sub-scores vs per-claim mode 1 − mode 2 correctness. Per claim (~160
+   points), not per paper: 8 papers cannot estimate a correlation (Spearman
+   needs ρ ≈ 0.7 on n = 8 just to clear noise, and each per-paper point
+   carries ±12 pp of its own). Suggestive evidence about the scorer as a
+   proxy, never a gate decision.
 
 ## Pre-registered decision rules
 
-Written here _before_ any run so results cannot be rationalized afterward:
+Written here _before_ any run so results cannot be rationalized afterward. All
+thresholds bind on the cheap model's full-corpus run (the mid-tier run is the
+robustness check; see Harness). Δ is the paired per-claim accuracy delta with
+its 95% bootstrap CI.
 
-| Observation (full corpus, cheap model)                                   | Roadmap action                                                                                                                                |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mode 2 ≈ mode 1 within CI everywhere except figures                      | **Markdown validated**; extraction investment justified; deprioritize visual extraction except figure enrichment                              |
-| Mode 1 beats mode 2 ≥ 15 pp on equation/table claims                     | Expand the parser per [visual-extraction.md](visual-extraction.md) (Nougat pass), or build hybrid 3.5 if Phase-0 favors it                    |
-| Mode 1 beats mode 2 even on prose claims                                 | Conversion loses more than layout features: audit repair passes; hybrid page-image serving becomes the default candidate                      |
-| Mode 3 ≈ mode 2 accuracy at ≪ tokens, wins corpus-wide/absent categories | **MCP service architecture validated**; document as the recommended surface                                                                   |
-| Mode 3 < mode 2 with low evidence-reached rate                           | Fix retrieval first: chunking (`src/services/chunker.ts`), FTS query construction, revisit [vector-hybrid-search.md](vector-hybrid-search.md) |
-| Fidelity correlation strong (ρ ≳ 0.6 on relevant sub-scores)             | Keep `score-markdown-quality` as the per-commit gate; run the LLM eval on releases only                                                       |
-| Fidelity correlation ≈ 0                                                 | The scorer does not predict downstream harm: recalibrate its weights against these results                                                    |
+**Equivalence is asserted, never defaulted to.** With ~20 items per category a
+CI that merely includes zero spans ±20 pp and proves nothing; low power would
+read as "markdown validated", which is the outcome that flatters the existing
+code. "No difference" is only concluded when the CI rules substantial
+difference _out_ (an equivalence margin, TOST-style), never when the data is
+too thin to detect one.
+
+**Markdown vs PDF** (Δ = mode 1 − mode 2; evaluated in order, first match
+wins):
+
+| #   | Observation                                                    | Roadmap action                                                                                                               |
+| --- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Δ ≥ 10 pp on prose/verbatim claims, CI excluding 0             | Conversion loses more than layout features: audit repair passes; hybrid page-image serving becomes the default candidate     |
+| 2   | Δ ≥ 15 pp on equation or table claims, CI excluding 0          | Expand the parser per [visual-extraction.md](visual-extraction.md) (Nougat pass), or build hybrid 3.5 if Phase-0 favors it   |
+| 3   | CI for Δ entirely below +5 pp in every category except figures | **Markdown validated**; extraction investment justified; deprioritize visual extraction except figure enrichment             |
+| 4   | Anything else (the dead zone)                                  | No roadmap change: extend the claim set in the undecided categories and re-run. Deciding on this data would be rationalizing |
+
+**MCP layer** (Δ = mode 2 − mode 3; same semantics):
+
+| #   | Observation                                                                                                      | Roadmap action                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | CI for Δ entirely below +5 pp, at ≤ 25% of mode 2's tokens per correct verdict, mode 3 wins absent + attribution | **MCP service architecture validated**; document as the recommended surface                                                                   |
+| 2   | Δ > 0 with CI excluding 0, evidence-reached < 70%, oracle arm ≈ mode 2                                           | Fix retrieval first: chunking (`src/services/chunker.ts`), FTS query construction, revisit [vector-hybrid-search.md](vector-hybrid-search.md) |
+| 3   | Δ > 0 with CI excluding 0, evidence-reached ≥ 70% (or oracle arm also trails mode 2)                             | The gap is reading, not retrieval: markdown fidelity or claim difficulty; defer to the markdown-vs-PDF cascade's outcome                      |
+| 4   | Anything else (the dead zone)                                                                                    | No roadmap change, as above                                                                                                                   |
+
+The fidelity correlation (metric 6) drives no rule: at this corpus size it is
+directional evidence only. Both of its former actions (keeping
+`score-markdown-quality` as the per-commit gate, or recalibrating its weights)
+wait for replication at per-claim granularity.
 
 The mode-2 eval additionally becomes the **regression gate** for extractor
 changes: rebuild markdown for the corpus, skip papers whose bytes are
@@ -236,15 +270,23 @@ answers free), compare per-category accuracy against a checked-in baseline via
 1. **Phase 0, token economics.** Free, no approval needed; answers the cost
    axis analytically.
 2. **Pilot.** 3 papers × ~20 claims, modes 1–2, one model, a single script,
-   manual grading (< $2). Exit question: are the deltas visible and the claim
-   formats gradable? If mode 1 ≈ mode 2 even on Liang2020 equations, revisit
-   claim difficulty before building more.
+   manual grading (< $2). Two exit questions: are the deltas visible and the
+   claim formats gradable, and does `normalizeForMatch` treat PDF-sourced
+   evidence spans fairly on both surfaces (ligatures, hyphenation, line
+   breaks)? If mode 1 ≈ mode 2 even on Liang2020 equations, revisit claim
+   difficulty before building more; if the matcher is unfair, the evidence
+   check stays advisory until it is fixed.
 3. **Phase 1.** Full modes 1–2 harness: corpus builder, adapters, structured
-   output, mechanical grading, replay cache, report.
-4. **Phase 2.** Mode 3 adapter, corpus-wide claims, tool-transcript capture,
-   evidence-reached metric.
-5. **Phase 3.** Fidelity-correlation analysis, decision memo against the rules
-   above, regression-gate baseline.
+   output, mechanical grading, replay cache, report. The claim suite is
+   authored, human-verified, and **frozen before the first scored run**:
+   per-category counts, the mode × category assignment, and each absent
+   claim's decoy paper are committed under `eval/claims/` as the
+   pre-registration artifact. Changing them after seeing results is allowed
+   only as an explicitly labelled second suite, never as an edit.
+4. **Phase 2.** Mode 3 adapter, the retrieval-oracle control arm, corpus-wide
+   claims, tool-transcript capture, evidence-reached metric.
+5. **Phase 3.** Decision memo against the rules above, fidelity correlation as
+   exploratory context, regression-gate baseline.
 
 Deferred: scanned/OCR paper, LLM-judge grading, Batches API runs, more than two
 models, stdio-subprocess transport, hybrid 3.5 implementation (only if the
@@ -258,3 +300,6 @@ rules trigger it).
   consumption surfaces, not vendors.
 - No unverified ground truth: an item that hasn't been human-checked does not
   count toward any number.
+- Not powered for small effects. The suite is sized to detect the ~15 pp
+  differences that change the roadmap; anything below the equivalence margin
+  is reported as undecided, not as absence of an effect.
