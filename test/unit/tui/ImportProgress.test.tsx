@@ -96,9 +96,12 @@ describe('ImportProgress', () => {
     await flush();
 
     const frame = lastVisibleFrame(instance);
-    expect(mockProcessBibtexFile).toHaveBeenCalledWith(
-      'refs.bib',
-      expect.objectContaining({ paperPath: 'papers', markdownPath: 'markdown' })
+    expect(mockImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: { bibtexPath: 'refs.bib' },
+        paperPath: 'papers',
+        markdownPath: 'markdown',
+      })
     );
     expect(frame).toContain('Importing refs.bib');
     expect(frame).toContain('Alpha paper Done');
