@@ -81,7 +81,10 @@ under `eval/pilot/.cache/` makes reruns free.
 ## Status
 
 - **Phase 0:** complete, offline. See `phase0/report.md`.
-- **Pilot:** harness complete and verified offline; the scored run is blocked on
-  the SDK + API key above. The claim suite is a **seed set** (17 items),
-  PDF-sourced but not yet independently human-verified, and thin on
-  equation/figure claims; expand toward ~60 and verify before the scored run.
+- **Pilot:** harness complete and verified offline. The claim suite is **61
+  items** across the 3 pilot papers, covering all 7 categories (37 supported /
+  11 refuted / 13 not-found), every evidence span quoted from the original PDF.
+  It is drafted and self-checked but **not yet independently human-verified**;
+  verify before the scored run counts these numbers. Absent claims are served to
+  a pre-registered decoy paper (the `paper` field), per the plan's mode-by-
+  category protocol.

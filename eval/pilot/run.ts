@@ -68,16 +68,45 @@ function requestHash(mode: Mode, model: string, claim: GoldClaim): string {
     .slice(0, 16);
 }
 
+/** First complete top-level {...}, brace-matched so trailing prose is ignored. */
+function firstJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < text.length; i += 1) {
+    const c = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+// Model output parsing must never throw: a chatty model that adds prose around
+// its JSON, or returns none, becomes a not-found rather than aborting the run.
 function parseAnswer(text: string): ModelAnswer {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return { verdict: 'not-found' };
-  const obj = JSON.parse(match[0]) as { verdict?: string; evidence?: string; confidence?: number };
-  const verdict = (['supported', 'refuted', 'not-found'] as Verdict[]).includes(
-    obj.verdict as Verdict
-  )
-    ? (obj.verdict as Verdict)
-    : 'not-found';
-  return { verdict, evidence: obj.evidence || undefined, confidence: obj.confidence };
+  const json = firstJsonObject(text);
+  if (!json) return { verdict: 'not-found' };
+  try {
+    const obj = JSON.parse(json) as { verdict?: string; evidence?: string; confidence?: number };
+    const verdict = (['supported', 'refuted', 'not-found'] as Verdict[]).includes(
+      obj.verdict as Verdict
+    )
+      ? (obj.verdict as Verdict)
+      : 'not-found';
+    return { verdict, evidence: obj.evidence || undefined, confidence: obj.confidence };
+  } catch {
+    return { verdict: 'not-found' };
+  }
 }
 
 // Canned "perfect oracle" answer for --dry: proves the pipeline and grader run
@@ -91,6 +120,8 @@ interface CallResult {
   answer: ModelAnswer;
   inputTokens: number;
   outputTokens: number;
+  cacheCreate: number;
+  cacheRead: number;
 }
 
 async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<CallResult> {
@@ -107,28 +138,37 @@ async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<C
     messages: {
       create: (req: unknown) => Promise<{
         content: Array<{ type: string; text?: string }>;
-        usage: { input_tokens: number; output_tokens: number };
+        usage: {
+          input_tokens: number;
+          output_tokens: number;
+          cache_creation_input_tokens?: number;
+          cache_read_input_tokens?: number;
+        };
       }>;
     };
   };
 
-  const user =
+  // The paper block is marked cache_control so the ~20 claims that share a paper
+  // reuse it at cache-read price instead of re-sending the whole PDF/markdown
+  // each call. The per-claim text after it stays uncached.
+  const cache = { type: 'ephemeral' as const };
+  const paperBlock =
     mode === 'markdown-context'
-      ? [
-          { type: 'text', text: fs.readFileSync(path.join(MD_DIR, `${claim.paper}.md`), 'utf-8') },
-          { type: 'text', text: `\nClaim: ${claim.claim}` },
-        ]
-      : [
-          {
-            type: 'document',
-            source: {
-              type: 'base64',
-              media_type: 'application/pdf',
-              data: fs.readFileSync(path.join(PDF_DIR, `${claim.paper}.pdf`)).toString('base64'),
-            },
+      ? {
+          type: 'text',
+          text: fs.readFileSync(path.join(MD_DIR, `${claim.paper}.md`), 'utf-8'),
+          cache_control: cache,
+        }
+      : {
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: fs.readFileSync(path.join(PDF_DIR, `${claim.paper}.pdf`)).toString('base64'),
           },
-          { type: 'text', text: `Claim: ${claim.claim}` },
-        ];
+          cache_control: cache,
+        };
+  const user = [paperBlock, { type: 'text', text: `Claim: ${claim.claim}` }];
 
   const res = await client.messages.create({
     model,
@@ -142,6 +182,8 @@ async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<C
     answer: parseAnswer(text),
     inputTokens: res.usage.input_tokens,
     outputTokens: res.usage.output_tokens,
+    cacheCreate: res.usage.cache_creation_input_tokens ?? 0,
+    cacheRead: res.usage.cache_read_input_tokens ?? 0,
   };
 }
 
@@ -152,14 +194,25 @@ async function main(): Promise<void> {
 
   const results: Array<{ mode: Mode; gold: GoldClaim; answer: ModelAnswer }> = [];
   let usd = 0;
+  const tok = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 };
   const PRICE_IN = 1.0 / 1_000_000; // assumed cheap-model input $/token; illustrative
   const PRICE_OUT = 5.0 / 1_000_000;
 
+  // Process claims grouped by paper so consecutive same-paper calls hit the
+  // paper's prompt cache (5-minute TTL) instead of recreating it.
+  const ordered = [...claims].sort((a, b) => a.paper.localeCompare(b.paper));
+
   for (const mode of MODES) {
-    for (const claim of claims) {
+    for (const claim of ordered) {
       let call: CallResult;
       if (args.dry) {
-        call = { answer: cannedAnswer(claim), inputTokens: 0, outputTokens: 0 };
+        call = {
+          answer: cannedAnswer(claim),
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheCreate: 0,
+          cacheRead: 0,
+        };
       } else {
         const cacheFile = path.join(CACHE_DIR, `${requestHash(mode, args.model, claim)}.json`);
         if (fs.existsSync(cacheFile)) {
@@ -168,7 +221,14 @@ async function main(): Promise<void> {
           call = await callModel(mode, args.model, claim);
           fs.writeFileSync(cacheFile, JSON.stringify(call));
         }
-        usd += call.inputTokens * PRICE_IN + call.outputTokens * PRICE_OUT;
+        tok.input += call.inputTokens;
+        tok.output += call.outputTokens;
+        tok.cacheCreate += call.cacheCreate;
+        tok.cacheRead += call.cacheRead;
+        // Cache-aware pricing: fresh input 1x, cache write 1.25x, cache read 0.1x.
+        usd +=
+          (call.inputTokens + call.cacheCreate * 1.25 + call.cacheRead * 0.1) * PRICE_IN +
+          call.outputTokens * PRICE_OUT;
         if (usd > args.maxUsd)
           throw new Error(`Aborting: spend $${usd.toFixed(2)} exceeded --max-usd $${args.maxUsd}.`);
       }
@@ -182,14 +242,27 @@ async function main(): Promise<void> {
     `${results.map((r) => JSON.stringify({ ...r, grade: grade(r.gold, r.answer) })).join('\n')}\n`
   );
 
+  const pct = (n: number, d: number): string => (d === 0 ? '—' : `${((100 * n) / d).toFixed(0)}%`);
   process.stdout.write(
-    `\nPilot ${args.dry ? '(DRY, canned answers)' : `model=${args.model}`}  claims=${claims.length}  spend=$${usd.toFixed(4)}\n\n`
+    `\nPilot ${args.dry ? '(DRY, canned answers)' : `model=${args.model}`}  claims=${claims.length}  spend=$${usd.toFixed(4)}\n`
   );
+  if (!args.dry) {
+    process.stdout.write(
+      `tokens: input ${tok.input} + cache-read ${tok.cacheRead} (write ${tok.cacheCreate}), output ${tok.output}\n`
+    );
+  }
+  process.stdout.write('\n');
   for (const mode of MODES) {
     const rows = results
       .filter((r) => r.mode === mode)
       .map((r) => ({ gold: r.gold, grade: grade(r.gold, r.answer) }));
-    process.stdout.write(`## ${mode}\n`);
+    const correct = rows.filter((r) => r.grade.verdictCorrect).length;
+    const absent = rows.filter((r) => r.gold.verdict === 'not-found');
+    const falseSup = rows.filter((r) => r.grade.falseSupported).length;
+    process.stdout.write(
+      `## ${mode} — overall ${pct(correct, rows.length)} (${correct}/${rows.length}); ` +
+        `false-supported on absent: ${falseSup}/${absent.length}\n`
+    );
     process.stdout.write('| category | n | verdict acc | evidence | false-supported |\n');
     process.stdout.write('| --- | --- | --- | --- | --- |\n');
     for (const s of summarize(rows)) {
