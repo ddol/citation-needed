@@ -33,12 +33,12 @@ plan designs that eval.
 
 ## Consumption modes under test
 
-| Mode                     | Delivery                                                                      | Token economics per claim                      | Structural limit                                                                 |
-| ------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1 `pdf-direct`           | Anthropic native PDF (text + page images) in context                          | whole PDF ≈ 2–4× markdown tokens (page images) | doesn't scale past a few papers; 100-page cap; must know _which_ paper to load   |
-| 2 `markdown-context`     | extracted markdown in context                                                 | whole paper ≈ 15–25K tokens                    | same "which paper?" problem; corpus-in-context breaks at tens of papers          |
-| 3 `mcp-agent`            | tool loop: `search-citations` → `read-content` → `verify-quote`               | a few chunks per claim, ~O(1) in corpus size   | accuracy bounded by lexical FTS retrieval + markdown fidelity                    |
-| 3.5 hybrid _(candidate)_ | MCP locates via markdown index, serves original **PDF page images** on demand | retrieval-priced locating + PDF-priced reading | new tool (`read-page-image` via `pdftoppm`); built only if the results demand it |
+| Mode                     | Delivery                                                                      | Token economics per claim                      | Structural limit                                                                                                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 `pdf-direct`           | Anthropic native PDF (text + page images) in context                          | whole PDF ≈ 2–4× markdown tokens (page images) | doesn't scale past a few papers; 100-page cap; **per-request size cap** (measured: 14 of 25 served corpus papers exceed 4MB, one at 30MB is unservable at all); must know _which_ paper to load |
+| 2 `markdown-context`     | extracted markdown in context                                                 | whole paper ≈ 15–25K tokens                    | same "which paper?" problem; corpus-in-context breaks at tens of papers                                                                                                                         |
+| 3 `mcp-agent`            | tool loop: `search-citations` → `read-content` → `verify-quote`               | a few chunks per claim, ~O(1) in corpus size   | accuracy bounded by lexical FTS retrieval + markdown fidelity                                                                                                                                   |
+| 3.5 hybrid _(candidate)_ | MCP locates via markdown index, serves original **PDF page images** on demand | retrieval-priced locating + PDF-priced reading | new tool (`read-page-image` via `pdftoppm`); built only if the results demand it                                                                                                                |
 
 The structural insight the modes table encodes: claim verification is **many
 small queries against a corpus where the containing paper is unknown**. Modes
@@ -68,23 +68,31 @@ whether modes 1–2 are even candidates at field-scale corpora.
 
 ## Corpus
 
-8 arXiv papers (pilot: 3) selected to cover the known failure classes, drawn
-from the existing velocity.report set:
+**60 papers** (`eval/corpus/manifest.json`), built by `eval/corpus/build.ts`:
 
-- **Liang2020 / LaneGCN**: the documented worst case (mangled Eq. 10, dropped
-  end-of-paper figures, grouped-header tables).
-- One equation-dense, one table-dense, one figure-dependent paper.
-- One short clean-prose paper as the mode-invariance control.
+- **19 seed** perception papers from the existing velocity.report set, spanning
+  the known failure classes. **Liang2020 / LaneGCN** is the documented worst
+  case (mangled Eq. 10, dropped end-of-paper figures, grouped-header tables);
+  Caesar2020 is table-dense; Bewley2016 is the short clean-prose control.
+- **41 mined** references, selected by pulling every seed paper's reference list
+  from OpenAlex (`eval/corpus/mine-references.ts`) and ranking by how many seed
+  papers cite a work (foundational to this corpus) and its global citation count
+  (seminal). `eval/corpus/select.ts` then drops duplicate records, non-papers,
+  metadata artifacts, and pre-arXiv scanned classics, since the pipeline has no
+  OCR path and their result is known a priori.
 
-Nothing checked in except `eval/corpus/manifest.json`: `{ arxivId, pinned
-version, sha256, doi, tags[] }`. PDFs are fetched by arXiv id and
-sha256-verified (extraction is deterministic, so pinned PDF ⇒ pinned markdown ⇒
-stable eval input). Markdown is rebuilt via the production path
-(`reextractMarkdownFromPdfFolder` in `src/services/markdown-extraction.ts`) and
-indexed into an eval-only SQLite DB via `getDatabase(dbPath)`. Per-paper
-`score-markdown-quality --json` output is persisted for the fidelity
-correlation below. A scanned/OCR paper is deferred: the pipeline has no OCR
-path, so its result is known a priori.
+The corpus serves two roles: a **deep subset of ~9 failure-class papers** carries
+the single-paper claims that measure extraction damage, and all 60 act as the
+retrieval substrate and decoy pool for the corpus-wide categories.
+
+Nothing is checked in except the manifest: `{ id, origin, title, arxivId, doi,
+pages, sha256, tags, source }`. PDFs are fetched by arXiv id or OA URL and
+sha256-pinned (extraction is deterministic, so pinned PDF ⇒ pinned markdown ⇒
+stable eval input), then materialised into a gitignored `eval/corpus/cache/`.
+Markdown is rebuilt via the production extractor (`extractPdfMarkdown`,
+`src/verification/markdown.ts`), so the eval consumes exactly what the tool
+produces. Per-paper `score-markdown-quality --json` output is persisted for the
+fidelity correlation below.
 
 ## Task suite: claim verification, not generic QA
 
@@ -311,6 +319,97 @@ changes: rebuild markdown for the corpus, skip papers whose bytes are
 unchanged, re-run mode 2 on changed papers only (replay cache makes unchanged
 answers free), compare per-category accuracy against a checked-in baseline via
 `--fail-below-baseline`, the same shape as `--fail-below` today.
+
+## Results to date
+
+Three runs so far, all modes 1-2 only. Mode 3 is unbuilt, so no MCP-layer rule
+can fire yet.
+
+| Run                      | Items | pdf-direct                       | markdown-context  | Spend  |
+| ------------------------ | ----- | -------------------------------- | ----------------- | ------ |
+| Pilot, Haiku 4.5         | 61    | 90%                              | 85%               | ~$0.50 |
+| Pilot, Sonnet 5          | 61    | 93%                              | 93%               | ~$0.61 |
+| **Full suite, Sonnet 5** | 167   | **87%** (145/166, 1 unsupported) | **87%** (146/167) | ~$3.30 |
+
+**The markdown-vs-PDF cascade lands in the dead zone (rule 4), so no roadmap
+change.** The cheap model put pdf-direct ahead by 5 pp, concentrated entirely in
+figure-dependent claims; the mid-tier model erased the gap (0 pp) and scored
+figure claims 100% from markdown as well as from PDF. The pre-registered
+precedent is explicit: when the two models disagree, any action that adds
+investment needs both to agree. So the parser neither expands nor shrinks on
+this evidence. What the disagreement itself says is that Haiku's figure deficit
+was a model-capability limit, not purely extraction loss: the captions markdown
+preserves are enough for a stronger reader.
+
+**The headline hallucination number is clean: 0 false-`supported` in 333 graded
+calls**, across 54-55 not-supported items per mode.
+
+**The mirror-image number is not clean, and is the real finding of this run:
+over-refutation runs 19/54 (35%) pdf-direct, 18/55 (33%) markdown-context.**
+Sonnet frequently answers `refuted` rather than `not-found` for
+not-addressed/attribution claims, concentrated in attribution (50-61% verdict
+accuracy, all misses `refuted`) and not-addressed (72-75%). This is symmetric
+risk to false-`supported`: a system this willing to assert a negative beyond
+what the served document grounds will misfire the same way on a real corpus
+whenever retrieval hands it the wrong paper. It is now tracked as its own
+metric rather than folded into gold (see below).
+
+**Exact three-way accuracy understates this, and the gap is diagnostic.** Of 42
+wrong verdicts, 37 (88%) are the not-found/refuted boundary, running one way:
+the model answers `refuted` where the gold says `not-found`, concentrated in
+attribution and not-addressed claims (the same 19/54 and 18/55 counted as
+over-refutation above).
+
+**Decision: the gold does not move.** The tempting reading is that a careful
+reader, told "X was introduced in paper P" by a paper that plainly introduces
+something else, calls the claim false rather than unverifiable, so the gold
+should follow the model. Rejected, on inspection of the actual transcripts:
+several of these `refuted` calls reach past what the served document grounds.
+`at-3` refutes "the nuScenes paper introduces HOTA" by quoting a sentence about
+a _different_ prior metric (Weng and Kitani's), not anything that rules out
+nuScenes introducing HOTA; `at-21` refutes an unrelated attribution by quoting
+SemanticKITTI's own abstract, which never mentions Faster R-CNN at all. A
+model confidently asserting `refuted` from a document that is simply silent is
+the same overreach the false-`supported` metric exists to catch, just signed
+the other way. Relabeling gold to match it would reward the overreach instead
+of measuring it. The pre-registered design already routes around this:
+false-`supported` (the headline) is unaffected either way, and the whole
+not-found/refuted boundary was named fuzzy by design in the labeling policy
+above, which is why exact three-way accuracy was demoted to secondary before
+any run. **Metric added: over-refutation rate** (confident `refuted` on a
+`not-addressed`/`attribution` item), reported per model alongside
+false-`supported`, since a system this confidently wrong in the negative
+direction is a finding, not noise to be relabeled away.
+
+**The remaining 5 errors are not a boundary artifact, and are worth naming
+individually** (a 6th, `ho-9`, was a bad claim rather than a model error; fixed,
+and no longer appears in this count):
+
+- `bew-2` and `wa-3` (markdown-context only): the model quoted the _exact_
+  correct supporting sentence as its evidence field, verbatim, and still
+  answered wrong. The markdown was independently checked byte-for-byte against
+  the claim and is clean. This is metric 7 (evidence-verdict inconsistency),
+  first seen on Haiku in the pilot, reproducing on Sonnet: a reasoning failure
+  orthogonal to the consumption surface.
+- `lia-14` (both modes): the deliberately hard equation case (the loss weight
+  `α` vs the margin `ε` in a different equation). Both modes answer
+  `not-found` rather than the gold `refuted`, i.e. the model would not commit
+  to the distinction rather than getting it wrong; a defensible hedge on a
+  genuinely subtle read, not a mistake to fix.
+- `abs-3` (pdf-direct only): `not-found` against a gold of `refuted` for the
+  implied "2D bounding-box tracker doesn't fuse lidar for 3D detection"
+  contradiction. The paper never states the negative outright, so `not-found`
+  is arguably as defensible as `refuted` here; recorded as a marginal call, not
+  a defect.
+- `ho-9`: was a bad claim. It said HOTA combines "localization and
+  association"; the model correctly pointed out, quoting the paper's own
+  formula, that HOTA is the geometric mean of _detection_ and association,
+  with localization averaged in separately. Fixed in the claim, not the model.
+
+**New structural limit for mode 1:** a base64 PDF must fit in one request, and
+real papers often do not (see the modes table). This is separate from the
+100-page cap and tightens the Phase 0 conclusion that pdf-direct does not reach
+corpus scale.
 
 ## Phasing
 

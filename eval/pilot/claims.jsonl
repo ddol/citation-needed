@@ -81,7 +81,7 @@
 // --- corpus-level absent claims (served to a decoy; correct answer not-found) --
 {"id":"abs-1","paper":"Caesar2020","category":"not-addressed","claim":"The method is evaluated on the Waymo Open Dataset.","verdict":"not-found","page":1}
 {"id":"abs-2","paper":"Liang2020","category":"contradicted","claim":"The model uses a transformer architecture for feature extraction.","verdict":"refuted","page":1,"evidence":"we propose the Lane Graph Convolutional Network (LaneGCN)"}
-{"id":"abs-3","paper":"Bewley2016","category":"contradicted","claim":"The system fuses camera and lidar data for 3D object detection.","verdict":"refuted","page":1,"evidence":"only the bounding box position and size are used for both motion estimation and data association"}
+{"id":"abs-3","paper":"Bewley2016","category":"contradicted","claim":"The system fuses camera and lidar data for 3D object detection.","verdict":"refuted","page":1,"evidence":"objects are detected each frame and represented as bounding boxes"}
 {"id":"abs-4","paper":"Bewley2016","category":"not-addressed","claim":"The paper reports tracking results using the HOTA metric.","verdict":"not-found","page":1}
 {"id":"abs-5","paper":"Liang2020","category":"contradicted","claim":"The model is trained with a reinforcement learning objective.","verdict":"refuted","page":1,"evidence":"we use the sum of classification and regression losses to train the model"}
 {"id":"abs-6","paper":"Caesar2020","category":"not-addressed","claim":"The dataset was collected with a vehicle equipped with a thermal infrared camera.","verdict":"not-found","page":1}
