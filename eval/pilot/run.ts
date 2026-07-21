@@ -139,7 +139,16 @@ interface CallResult {
   outputTokens: number;
   cacheCreate: number;
   cacheRead: number;
+  /** Set when the call could not be made or failed; excluded from accuracy. */
+  error?: string;
 }
+
+/**
+ * A base64 PDF has to fit in one request. Real papers routinely do not: the
+ * corpus has a 30MB PDF (41MB base64). That is a structural limit of
+ * pdf-direct, not a wrong answer, so those cells are recorded as unsupported.
+ */
+const MAX_PDF_B64_BYTES = 25 * 1024 * 1024;
 
 async function callModel(
   mode: Mode,
@@ -174,22 +183,27 @@ async function callModel(
   // reuse it at cache-read price instead of re-sending the whole PDF/markdown
   // each call. The per-claim text after it stays uncached.
   const cache = { type: 'ephemeral' as const };
-  const paperBlock =
-    mode === 'markdown-context'
-      ? {
-          type: 'text',
-          text: fs.readFileSync(path.join(dirs.mdDir, `${claim.paper}.md`), 'utf-8'),
-          cache_control: cache,
-        }
-      : {
-          type: 'document',
-          source: {
-            type: 'base64',
-            media_type: 'application/pdf',
-            data: fs.readFileSync(path.join(dirs.pdfDir, `${claim.paper}.pdf`)).toString('base64'),
-          },
-          cache_control: cache,
-        };
+  let paperBlock: Record<string, unknown>;
+  if (mode === 'markdown-context') {
+    paperBlock = {
+      type: 'text',
+      text: fs.readFileSync(path.join(dirs.mdDir, `${claim.paper}.md`), 'utf-8'),
+      cache_control: cache,
+    };
+  } else {
+    const buf = fs.readFileSync(path.join(dirs.pdfDir, `${claim.paper}.pdf`));
+    const data = buf.toString('base64');
+    if (data.length > MAX_PDF_B64_BYTES) {
+      throw new Error(
+        `pdf-direct unsupported: ${claim.paper} is ${(buf.length / 1048576).toFixed(1)}MB, over the request size limit`
+      );
+    }
+    paperBlock = {
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data },
+      cache_control: cache,
+    };
+  }
   const user = [paperBlock, { type: 'text', text: `Claim: ${claim.claim}` }];
 
   const req: Record<string, unknown> = {
@@ -217,7 +231,7 @@ async function main(): Promise<void> {
   const claims = loadClaims(args.claims);
   if (!args.dry) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
-  const results: Array<{ mode: Mode; gold: GoldClaim; answer: ModelAnswer }> = [];
+  const results: Array<{ mode: Mode; gold: GoldClaim; answer: ModelAnswer; error?: string }> = [];
   let usd = 0;
   const tok = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 };
   const PRICE_IN = 1.0 / 1_000_000; // assumed cheap-model input $/token; illustrative
@@ -243,11 +257,26 @@ async function main(): Promise<void> {
         if (fs.existsSync(cacheFile)) {
           call = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) as CallResult;
         } else {
-          call = await callModel(mode, args.model, claim, {
-            pdfDir: args.pdfDir,
-            mdDir: args.mdDir,
-          });
-          fs.writeFileSync(cacheFile, JSON.stringify(call));
+          try {
+            call = await callModel(mode, args.model, claim, {
+              pdfDir: args.pdfDir,
+              mdDir: args.mdDir,
+            });
+            fs.writeFileSync(cacheFile, JSON.stringify(call));
+          } catch (e) {
+            // One unsupported or failing call must not abort the whole run. Not
+            // cached, so a later run retries it; excluded from accuracy below.
+            const error = e instanceof Error ? e.message : String(e);
+            call = {
+              answer: { verdict: 'not-found' },
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheCreate: 0,
+              cacheRead: 0,
+              error,
+            };
+            process.stderr.write(`  ! ${mode} ${claim.id}: ${error.slice(0, 100)}\n`);
+          }
         }
         tok.input += call.inputTokens;
         tok.output += call.outputTokens;
@@ -260,7 +289,7 @@ async function main(): Promise<void> {
         if (usd > args.maxUsd)
           throw new Error(`Aborting: spend $${usd.toFixed(2)} exceeded --max-usd $${args.maxUsd}.`);
       }
-      results.push({ mode, gold: claim, answer: call.answer });
+      results.push({ mode, gold: claim, answer: call.answer, error: call.error });
     }
   }
 
@@ -281,22 +310,30 @@ async function main(): Promise<void> {
   }
   process.stdout.write('\n');
   for (const mode of MODES) {
-    const rows = results
-      .filter((r) => r.mode === mode)
+    const modeRows = results.filter((r) => r.mode === mode);
+    // Unsupported/failed calls are not wrong answers; they leave the denominator.
+    const unsupported = modeRows.filter((r) => r.error).length;
+    const rows = modeRows
+      .filter((r) => !r.error)
       .map((r) => ({ gold: r.gold, grade: grade(r.gold, r.answer) }));
     const correct = rows.filter((r) => r.grade.verdictCorrect).length;
     const absent = rows.filter((r) => r.gold.verdict === 'not-found');
     const falseSup = rows.filter((r) => r.grade.falseSupported).length;
+    const overRef = rows.filter((r) => r.grade.overRefuted).length;
+    const unsupportedNote = unsupported ? `; unsupported: ${unsupported}` : '';
     process.stdout.write(
       `## ${mode} — overall ${pct(correct, rows.length)} (${correct}/${rows.length}); ` +
-        `false-supported on absent: ${falseSup}/${absent.length}\n`
+        `false-supported on absent: ${falseSup}/${absent.length}; ` +
+        `over-refuted on absent: ${overRef}/${absent.length}${unsupportedNote}\n`
     );
-    process.stdout.write('| category | n | verdict acc | evidence | false-supported |\n');
-    process.stdout.write('| --- | --- | --- | --- | --- |\n');
+    process.stdout.write(
+      '| category | n | verdict acc | evidence | false-supported | over-refuted |\n'
+    );
+    process.stdout.write('| --- | --- | --- | --- | --- | --- |\n');
     for (const s of summarize(rows)) {
       const ev = s.evidenceRate == null ? '—' : `${(s.evidenceRate * 100).toFixed(0)}%`;
       process.stdout.write(
-        `| ${s.category} | ${s.n} | ${(s.verdictAccuracy * 100).toFixed(0)}% | ${ev} | ${s.falseSupported} |\n`
+        `| ${s.category} | ${s.n} | ${(s.verdictAccuracy * 100).toFixed(0)}% | ${ev} | ${s.falseSupported} | ${s.overRefuted} |\n`
       );
     }
     process.stdout.write('\n');
