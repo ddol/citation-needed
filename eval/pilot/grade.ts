@@ -33,6 +33,14 @@ export interface Grade {
   evidenceMatched: boolean | null;
   /** The failure this tool exists to prevent: asserting support for nothing. */
   falseSupported: boolean;
+  /**
+   * The mirror-image failure: confidently refuting a claim the served document
+   * is simply silent on, rather than saying not-found. Reported alongside
+   * false-supported rather than folded into gold, since gold moving to match
+   * this behavior would reward the overreach instead of measuring it (see
+   * "Decision: the gold does not move" in docs/plans/claim-grounding-eval.md).
+   */
+  overRefuted: boolean;
 }
 
 /** Token-overlap ratio of predicted evidence against the gold span, normalized. */
@@ -51,7 +59,8 @@ export function grade(gold: GoldClaim, answer: ModelAnswer): Grade {
     evidenceMatched = answer.evidence ? overlap(answer.evidence, gold.evidence) >= 0.6 : false;
   }
   const falseSupported = gold.verdict === 'not-found' && answer.verdict === 'supported';
-  return { verdictCorrect, evidenceMatched, falseSupported };
+  const overRefuted = gold.verdict === 'not-found' && answer.verdict === 'refuted';
+  return { verdictCorrect, evidenceMatched, falseSupported, overRefuted };
 }
 
 export interface CategorySummary {
@@ -60,6 +69,7 @@ export interface CategorySummary {
   verdictAccuracy: number;
   evidenceRate: number | null;
   falseSupported: number;
+  overRefuted: number;
 }
 
 export function summarize(graded: Array<{ gold: GoldClaim; grade: Grade }>): CategorySummary[] {
@@ -81,6 +91,7 @@ export function summarize(graded: Array<{ gold: GoldClaim; grade: Grade }>): Cat
           ? null
           : withEvidence.filter((r) => r.grade.evidenceMatched).length / withEvidence.length,
       falseSupported: rows.filter((r) => r.grade.falseSupported).length,
+      overRefuted: rows.filter((r) => r.grade.overRefuted).length,
     });
   }
   return out.sort((a, b) => a.category.localeCompare(b.category));
