@@ -4,10 +4,20 @@
 // never the markdown, so the mode-1 vs mode-2 gap is not contaminated.
 //
 // Schema: { id, paper, category, claim, verdict, evidence?, page? }. `paper` is
-// the paper SERVED to modes 1-2. For single-paper claims that is the containing
-// paper; for `absent` claims it is the pre-registered decoy (the corpus paper a
-// model would most plausibly attribute the claim to), and the gold verdict is
-// not-found. Verdict is the primary grade; evidence is advisory.
+// the paper SERVED to modes 1-2 (the containing paper for single-paper claims;
+// a pre-registered decoy for the not-supported family). Verdict is the primary
+// grade; evidence is advisory.
+//
+// Labeling policy (docs/plans/claim-grounding-eval.md, "Labeling policy"):
+//   supported    - the paper states the claim.
+//   refuted      - the paper fills a single-valued slot (architecture, benchmark,
+//                  metric, reported value) differently => the claim is false from
+//                  this paper alone. Category `contradicted` for the decoy-served
+//                  version of this.
+//   not-found    - the claim is additive to what the paper describes and the
+//                  paper is silent. Category `not-addressed`: the pure
+//                  hallucination probe. The headline metric here is
+//                  false-supported rate, not exact not-found/refuted match.
 //
 // STATUS: drafted and self-checked against the PDF, NOT yet independently
 // human-verified. Verify before any scored run counts these numbers.
@@ -34,7 +44,7 @@
 {"id":"cae-3","paper":"Caesar2020","category":"numeric-table","claim":"nuScenes annotates 3D bounding boxes for 23 classes and 8 attributes.","verdict":"supported","evidence":"fully annotated with 3D bounding boxes for 23 classes and 8 attributes","page":1}
 {"id":"cae-4","paper":"Caesar2020","category":"numeric-table","claim":"nuScenes annotates 3D bounding boxes for 40 object classes.","verdict":"refuted","evidence":"fully annotated with 3D bounding boxes for 23 classes and 8 attributes","page":1}
 {"id":"cae-5","paper":"Caesar2020","category":"paraphrase","claim":"The nuScenes sensor suite has 6 cameras, 5 radars, and 1 lidar with full 360-degree coverage.","verdict":"supported","evidence":"6 cameras, 5 radars and 1 lidar, all with full 360 degree field of view","page":1}
-{"id":"cae-6","paper":"Caesar2020","category":"absent","claim":"nuScenes provides annotations for pedestrian gaze direction.","verdict":"not-found","page":1}
+{"id":"cae-6","paper":"Caesar2020","category":"not-addressed","claim":"nuScenes provides annotations for pedestrian gaze direction.","verdict":"not-found","page":1}
 {"id":"cae-7","paper":"Caesar2020","category":"numeric","claim":"nuScenes annotates keyframes at 2 Hz.","verdict":"supported","evidence":"We annotate the object classes in every keyframe","page":4}
 {"id":"cae-8","paper":"Caesar2020","category":"numeric-table","claim":"The nuScenes lidar is a spinning sensor with 32 beams capturing at 20 Hz.","verdict":"supported","evidence":"1x Lidar Spinning, 32 beams, 20Hz capture frequency, 360","page":3}
 {"id":"cae-9","paper":"Caesar2020","category":"numeric-table","claim":"The nuScenes lidar uses 64 beams.","verdict":"refuted","evidence":"1x Lidar Spinning, 32 beams, 20Hz capture frequency, 360","page":3}
@@ -45,15 +55,15 @@
 {"id":"cae-14","paper":"Caesar2020","category":"numeric","claim":"The nuScenes lidar produces up to 1.4 million points per second.","verdict":"supported","evidence":"up to 1.4M points per second","page":3}
 {"id":"cae-15","paper":"Caesar2020","category":"numeric","claim":"In nuScenes the cameras run at 20 Hz.","verdict":"refuted","evidence":"The cameras run at 12Hz while the lidar runs at 20Hz","page":3}
 {"id":"cae-16","paper":"Caesar2020","category":"figure-dependent","claim":"The example scene figure shows six camera views together with lidar and radar data and a human-annotated semantic map.","verdict":"supported","evidence":"We see 6 different camera views, lidar and radar data, as well as the human annotated semantic map","page":1}
-{"id":"cae-17","paper":"Caesar2020","category":"absent","claim":"nuScenes includes synchronized audio recordings captured from the vehicle.","verdict":"not-found","page":1}
-{"id":"cae-18","paper":"Caesar2020","category":"absent","claim":"nuScenes annotates the signal state of every traffic light in each keyframe.","verdict":"not-found","page":1}
+{"id":"cae-17","paper":"Caesar2020","category":"not-addressed","claim":"nuScenes includes synchronized audio recordings captured from the vehicle.","verdict":"not-found","page":1}
+{"id":"cae-18","paper":"Caesar2020","category":"not-addressed","claim":"nuScenes annotates the signal state of every traffic light in each keyframe.","verdict":"not-found","page":1}
 // --- Liang2020 (LaneGCN): worst-case (equations, grouped tables, figures) --
 {"id":"lia-1","paper":"Liang2020","category":"paraphrase","claim":"LaneGCN constructs a lane graph from raw map data instead of rasterizing the map into image-like inputs.","verdict":"supported","evidence":"Instead of encoding vectorized maps as raster images, we construct a lane graph from raw map data to explicitly preserve the map structure","page":1}
 {"id":"lia-2","paper":"Liang2020","category":"numeric-table","claim":"On Argoverse, LaneGCN (Our Model) achieves a minADE of 0.87 at K=6.","verdict":"supported","evidence":"Our Model 1.71 3.78 0.59 0.87 1.36 0.16","page":11}
 {"id":"lia-3","paper":"Liang2020","category":"numeric-table","claim":"On Argoverse, LaneGCN achieves a minADE of 1.71 at K=6.","verdict":"refuted","evidence":"Our Model 1.71 3.78 0.59 0.87 1.36 0.16","page":11}
 {"id":"lia-4","paper":"Liang2020","category":"equation","claim":"For regression, LaneGCN applies the smooth L1 loss on all predicted time steps.","verdict":"supported","evidence":"For regression, we apply the smooth l1 loss on all predicted time steps","page":10}
 {"id":"lia-5","paper":"Liang2020","category":"equation","claim":"LaneGCN uses a max-margin loss for classification.","verdict":"supported","evidence":"For classification, we use the max-margin loss","page":10}
-{"id":"lia-6","paper":"Liang2020","category":"attribution","claim":"LaneGCN reports its main results on the nuScenes prediction benchmark.","verdict":"not-found","page":1}
+{"id":"lia-6","paper":"Liang2020","category":"contradicted","claim":"LaneGCN reports its main results on the nuScenes prediction benchmark.","verdict":"refuted","page":1,"evidence":"our approach significantly outperforms the state-of-the-art on the large scale Argoverse motion forecasting benchmark"}
 {"id":"lia-7","paper":"Liang2020","category":"numeric-table","claim":"LaneGCN's fusion network models four types of interactions.","verdict":"supported","evidence":"four types of interactions: actor-to-lane, lane-to-lane, lane-to-actor and actor-to-actor","page":1}
 {"id":"lia-8","paper":"Liang2020","category":"numeric-table","claim":"LaneGCN's fusion network models three types of interactions.","verdict":"refuted","evidence":"four types of interactions: actor-to-lane, lane-to-lane, lane-to-actor and actor-to-actor","page":1}
 {"id":"lia-9","paper":"Liang2020","category":"paraphrase","claim":"LaneGCN uses a 1D CNN to extract features from the actors' past trajectories.","verdict":"supported","evidence":"here we use an 1D CNN to process the trajectory input for its effectiveness in extracting multi-scale features","page":6}
@@ -66,14 +76,14 @@
 {"id":"lia-16","paper":"Liang2020","category":"paraphrase","claim":"LaneGCN extends graph convolutions with multiple adjacency matrices and along-lane dilation.","verdict":"supported","evidence":"extends graph convolutions with multiple adjacency matrices and along-lane dilation","page":1}
 {"id":"lia-17","paper":"Liang2020","category":"figure-dependent","claim":"In LaneGCN's approach figure, ActorNet and LaneGCN produce features that feed a FusionNet outputting the future predictions.","verdict":"supported","evidence":"We construct a lane graph from raw map data and use LaneGCN to extract map features. In parallel, ActorNet extracts actor features","page":2}
 {"id":"lia-18","paper":"Liang2020","category":"paraphrase","claim":"LaneGCN represents both actors and lanes as nodes in a graph.","verdict":"supported","evidence":"we represent both actors and lanes as nodes in the graph","page":2}
-{"id":"lia-19","paper":"Liang2020","category":"absent","claim":"LaneGCN incorporates traffic light state as an input feature.","verdict":"not-found","page":1}
+{"id":"lia-19","paper":"Liang2020","category":"contradicted","claim":"LaneGCN incorporates traffic light state as an input feature.","verdict":"refuted","page":1,"evidence":"we represent both actors and lanes as nodes in the graph"}
 {"id":"lia-20","paper":"Liang2020","category":"numeric-table","claim":"On Argoverse, LaneGCN (Our Model) achieves a minADE of 0.87 at K=1.","verdict":"refuted","evidence":"Our Model 1.71 3.78 0.59 0.87 1.36 0.16","page":11}
 // --- corpus-level absent claims (served to a decoy; correct answer not-found) --
-{"id":"abs-1","paper":"Caesar2020","category":"absent","claim":"The method is evaluated on the Waymo Open Dataset.","verdict":"not-found","page":1}
-{"id":"abs-2","paper":"Liang2020","category":"absent","claim":"The model uses a transformer architecture for feature extraction.","verdict":"not-found","page":1}
-{"id":"abs-3","paper":"Bewley2016","category":"absent","claim":"The system fuses camera and lidar data for 3D object detection.","verdict":"not-found","page":1}
-{"id":"abs-4","paper":"Bewley2016","category":"absent","claim":"The paper reports tracking results using the HOTA metric.","verdict":"not-found","page":1}
-{"id":"abs-5","paper":"Liang2020","category":"absent","claim":"The model is trained with a reinforcement learning objective.","verdict":"not-found","page":1}
-{"id":"abs-6","paper":"Caesar2020","category":"absent","claim":"The dataset was collected with a vehicle equipped with a thermal infrared camera.","verdict":"not-found","page":1}
-{"id":"abs-7","paper":"Bewley2016","category":"absent","claim":"The tracker associates detections across frames using a graph neural network.","verdict":"not-found","page":1}
-{"id":"abs-8","paper":"Liang2020","category":"absent","claim":"The approach is pretrained on the KITTI dataset before fine-tuning.","verdict":"not-found","page":1}
+{"id":"abs-1","paper":"Caesar2020","category":"not-addressed","claim":"The method is evaluated on the Waymo Open Dataset.","verdict":"not-found","page":1}
+{"id":"abs-2","paper":"Liang2020","category":"contradicted","claim":"The model uses a transformer architecture for feature extraction.","verdict":"refuted","page":1,"evidence":"we propose the Lane Graph Convolutional Network (LaneGCN)"}
+{"id":"abs-3","paper":"Bewley2016","category":"contradicted","claim":"The system fuses camera and lidar data for 3D object detection.","verdict":"refuted","page":1,"evidence":"only the bounding box position and size are used for both motion estimation and data association"}
+{"id":"abs-4","paper":"Bewley2016","category":"not-addressed","claim":"The paper reports tracking results using the HOTA metric.","verdict":"not-found","page":1}
+{"id":"abs-5","paper":"Liang2020","category":"contradicted","claim":"The model is trained with a reinforcement learning objective.","verdict":"refuted","page":1,"evidence":"we use the sum of classification and regression losses to train the model"}
+{"id":"abs-6","paper":"Caesar2020","category":"not-addressed","claim":"The dataset was collected with a vehicle equipped with a thermal infrared camera.","verdict":"not-found","page":1}
+{"id":"abs-7","paper":"Bewley2016","category":"contradicted","claim":"The tracker associates detections across frames using a graph neural network.","verdict":"refuted","page":1,"evidence":"The assignment is solved optimally using the Hungarian algorithm"}
+{"id":"abs-8","paper":"Liang2020","category":"not-addressed","claim":"The approach is pretrained on the KITTI dataset before fine-tuning.","verdict":"not-found","page":1}
