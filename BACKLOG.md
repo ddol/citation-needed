@@ -28,10 +28,12 @@ service, and the answer decides whether the parser expands, shrinks, or stays.
 Nothing here ships product surface; the deliverable is a decision backed by
 pre-registered rules (see docs/plans/claim-grounding-eval.md).
 
-- [verify] S - Claim-grounding eval Phase 0: analytic token-economics via count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (see docs/plans/claim-grounding-eval.md)
-- [verify] M - Claim-grounding eval pilot: 3 papers × ~20 human-verified claims, pdf-direct vs markdown-context, one model, manual grading; exit question is whether accuracy deltas are visible and gradable (see docs/plans/claim-grounding-eval.md)
-- [verify] M - Claim-grounding claim suite: ~160 items authored from the original PDFs only, human-verified, then frozen under eval/claims/ with per-category counts, the mode × category assignment, and each absent claim's decoy paper (see docs/plans/claim-grounding-eval.md)
-- [verify] L - Claim-grounding eval Phase 1: full harness under eval/, outside Jest and the coverage ratchet; one runner, one ModeAdapter per consumption mode, replay cache, cost guard (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval Phase 0: token-economics across the 60-paper corpus (eval/phase0/); PDF ~3x Markdown tokens, retrieval flat, modes 1-2 break in the low tens of papers
+- [verify] M - Claim-grounding eval pilot: 61 claims x 2 modes on the 3 pilot papers (eval/pilot/, Haiku 4.5, ~$0.50); deltas visible (pdf 90% vs markdown 85%, gap is figures), formats gradable, labeling policy settled
+- [verify] M - Claim-grounding corpus: 60 papers (19 perception seed + 41 cross-citation-mined references) built via the production extractor, sha256-pinned in eval/corpus/manifest.json
+- [verify] M - Claim-grounding claim suite: 167 items drafted from the original PDFs in eval/claims/suite.jsonl (9 deep failure-class papers + 32 not-addressed + 14 contradicted + 23 attribution). Remaining: independent human verification against the PDFs, then freeze before the first scored Phase 1 run (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding second model: re-run the pilot suite with a mid-tier model (Sonnet) to check whether model strength erases the evidence-verdict-inconsistency errors and changes the mode delta (see docs/plans/claim-grounding-eval.md)
+- [verify] L - Claim-grounding eval Phase 1: generalise the pilot script into the full harness under eval/, outside Jest and the coverage ratchet; one runner, one ModeAdapter per consumption mode, replay cache, cost guard (see docs/plans/claim-grounding-eval.md)
 - [verify] M - Claim-grounding eval Phase 2: mcp-agent mode over InMemoryTransport against createMcpServer(db), the retrieval-oracle control arm, plus corpus-wide and absent-claim categories (see docs/plans/claim-grounding-eval.md)
 - [verify] M - Claim-grounding decision memo: apply the pre-registered rules to the results, record the parser-scope decision, and wire the Markdown mode in as the extractor regression gate (see docs/plans/claim-grounding-eval.md)
 

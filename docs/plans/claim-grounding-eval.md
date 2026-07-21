@@ -90,32 +90,47 @@ path, so its result is known a priori.
 
 Each item is a **claim + gold verdict (`supported` / `refuted` / `not-found`) +
 gold evidence location** (page + verbatim span). Categories map to the failure
-classes and to the hallucination-mitigation mission:
+classes and to the hallucination-mitigation mission. The first six are
+single-paper (served the containing paper); the last three are the
+not-supported family and corpus-wide probes (served a decoy).
 
-| Category                | Probes                                                                | Expected signature                                              |
-| ----------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Verbatim claims         | exact sentences from papers                                           | all modes should find; mode 3 has `verify-quote`                |
-| Paraphrased claims      | semantically supported, different wording                             | stresses lexical FTS (no embeddings) vs full-context reading    |
-| Numeric/table claims    | "LaneGCN achieves minADE 1.71 at K=6" + perturbed-number refuted twin | markdown hurt by flattened grouped headers                      |
-| Equation claims         | "the loss applies the norm inside the sum"                            | markdown hurt by lost sub/superscripts                          |
-| Figure-dependent claims | content only visible in figures                                       | markdown/MCP near floor; measures the ceiling vision would buy  |
-| **Absent claims**       | plausible, in-domain, in no corpus paper                              | **the core hallucination probe**: correct answer is `not-found` |
-| Attribution claims      | "X was shown in paper P" (actually paper Q)                           | corpus-wide; where modes 1–2 structurally break                 |
+| Category          | Probes                                                              | Gold      | Expected signature                                             |
+| ----------------- | ------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
+| Verbatim          | exact sentences from papers                                         | supported | all modes should find; mode 3 has `verify-quote`               |
+| Paraphrased       | semantically supported, different wording                           | supported | stresses lexical FTS (no embeddings) vs full-context reading   |
+| Numeric/table     | "minADE 0.87 at K=6" + a perturbed-number refuted twin              | either    | markdown hurt by flattened grouped headers                     |
+| Equation          | a property of a displayed equation (which symbol is the margin)     | either    | markdown hurt by lost sub/superscripts                         |
+| Figure-dependent  | content only visible in a figure                                    | supported | markdown/MCP near floor; measures the ceiling vision would buy |
+| **Not-addressed** | plausible, in-domain, additive, the paper silent                    | not-found | **the core hallucination probe**: headline false-supported     |
+| Contradicted      | the paper fills a single-valued slot differently than the claim     | refuted   | tests catching an _implied_ contradiction, not a stated one    |
+| Attribution       | "X was shown in paper P" (actually paper Q); both P and Q in corpus | not-found | corpus-wide; where modes 1–2 structurally break                |
 
-~15 claims per paper + **~30 absent claims** + ~10 attribution claims ≈ **160
-items**, enough for paired per-claim comparisons (McNemar / bootstrap) to
-detect the ~15 pp differences that would change the roadmap; finer resolution
-is not chased. Absent claims get the largest single allocation because they
-carry the headline metric: a false-`supported` rate estimated on 10 items has
-a ±25 pp confidence interval, and they are the cheapest items to author since
-no gold evidence span exists.
+**Full 60-paper corpus budget (~170 items).** The corpus is 60 papers, but not
+all need deep claims: single-paper claims measure per-paper extraction damage,
+so they are authored for a **deep subset of ~10 papers** spanning the failure
+classes (the 3 pilot papers plus, e.g., PointNet and Faster R-CNN for
+equation/table density, VoxelNet for architecture figures, HOTA for metric
+definitions). The corpus-wide categories exploit the full 60 as retrieval
+substrate and distractor set.
+
+| Group         | Categories                                                               | Count                  |
+| ------------- | ------------------------------------------------------------------------ | ---------------------- |
+| Deep subset   | verbatim, paraphrase, numeric, numeric-table, equation, figure-dependent | ~10 papers × ~11 ≈ 110 |
+| Not-addressed | additive-and-silent, decoys spread across the 60                         | ~30                    |
+| Contradicted  | single-valued slot differs, decoy-served                                 | ~15                    |
+| Attribution   | wrong-paper attribution, both papers in the corpus                       | ~15                    |
+
+~170 items, enough for paired per-claim comparisons (McNemar / bootstrap) to
+detect the ~15 pp differences that would change the roadmap. Not-addressed and
+contradicted together (~45) carry the headline hallucination number, which a
+false-supported rate on 10 items (±25 pp CI) cannot; both are cheap to author.
 
 Per-category counts are pre-registered alongside the claims before any run.
-Category and paper are otherwise confounded (equation claims would come mostly
-from the equation-dense paper, making the "equation delta" really that paper's
-delta), so each category draws from at least 3 papers where the corpus allows;
-where it cannot, the affected per-category delta is reported as paper-specific
-rather than category-general.
+Category and paper are otherwise confounded (equation claims cluster in
+equation-dense papers, making the "equation delta" really that paper's delta),
+so each single-paper category draws from at least 3 deep-subset papers where the
+corpus allows; where it cannot, the delta is reported as paper-specific rather
+than category-general.
 
 **Authoring:** LLM-drafted with page number and verbatim evidence span,
 **from the original PDF only, never from the extracted markdown**. A claim
@@ -137,6 +152,28 @@ for markdown, so an evidence mismatch can be a surface artifact (ligatures,
 hyphenation) rather than a wrong answer. `confidence` is collected for exactly
 one pre-registered analysis, the calibration curve on absent claims (metric
 5); it feeds no decision rule. No LLM judge in v1.
+
+### Labeling policy
+
+The pilot surfaced that "absent" conflated two situations a model rightly
+answers differently, so the verdict is defined by what the **served paper**
+licenses, and the not-supported family is split into two categories:
+
+- **`refuted` / `contradicted`:** the paper fills a **single-valued slot** (its
+  architecture, evaluation benchmark, training objective, association method, or
+  a reported number) with a value the claim contradicts. A careful reader
+  concludes the claim is false from this paper alone. "Uses a transformer"
+  against a paper whose stated architecture is a GCN.
+- **`not-found` / `not-addressed`:** the claim is **additive** to what the
+  paper describes (an extra sensor, annotation type, pretraining step, tool)
+  and the paper is silent. Nothing in it bears on the claim. This is the pure
+  hallucination probe.
+- The `not-found` / `refuted` boundary is inherently fuzzy for borderline
+  claims, so the **headline metric for the whole not-supported family is the
+  false-`supported` rate** ("did the model wrongly assert support?"), with
+  exact three-way accuracy a secondary number. Authors write only clear-cut
+  cases into each category; a claim that cannot be placed cleanly is not
+  authored. The model prompt carries these same definitions.
 
 ### Mode × category applicability
 
@@ -187,10 +224,12 @@ attributable to the consumption surface.
 - **Decode settings:** temperature 0, single run per (claim × mode × model),
   fixed here so variance cannot be shopped after the fact. The replay cache
   freezes whatever stochasticity remains.
-- **Cost controls:** replay cache keyed on request hash (reruns free), prompt
-  caching per (paper, mode) group, and a `maxCostUsd` abort guard. Spend
-  approval is decided at scheduling; the pilot is designed to stay under a few
-  dollars.
+- **Cost controls:** replay cache keyed on request hash (mode, model, claim,
+  **and the system prompt**, so a prompt change misses instead of silently
+  reusing answers from the old instructions), plus prompt caching on the paper
+  block per (paper, mode) group, and a `maxCostUsd` abort guard. In the pilot,
+  caching cut the 61-claim × 2-mode run to ~$0.50 (2.9M cache-read vs 3K fresh
+  input tokens). Spend approval is decided at scheduling.
 - **Output:** JSONL per (claim × mode × model) containing verdict, grade,
   usage, latency, and tool transcript, plus a report mirroring
   `score-markdown-quality`'s summary/`--json` style, with a
@@ -200,9 +239,11 @@ attributable to the consumption surface.
 
 1. Verdict accuracy per (category × mode × model); paired per-claim deltas
    with bootstrap CIs, not point estimates.
-2. **False-`supported` rate on absent claims**: the headline hallucination
-   number, the failure this tool exists to prevent. The ~30-item allocation
-   exists so this rate carries a usable CI.
+2. **False-`supported` rate on the not-supported family** (not-addressed +
+   contradicted + attribution): the headline hallucination number, the failure
+   this tool exists to prevent. Reported across the family rather than by exact
+   not-found/refuted match, since that boundary is fuzzy. The ~60-item
+   allocation exists so this rate carries a usable CI.
 3. Tokens and USD **per correct verdict** (the "most accurate, least tokens"
    axis), and latency. Reported per category; a category near the accuracy
    floor is flagged, not divided by.
@@ -215,11 +256,17 @@ attributable to the consumption surface.
    high-confidence false-`supported` is the worst possible output of this
    tool. Exploratory; feeds no decision rule.
 6. Fidelity correlation, **exploratory only**: `score-markdown-quality`
-   sub-scores vs per-claim mode 1 − mode 2 correctness. Per claim (~160
-   points), not per paper: 8 papers cannot estimate a correlation (Spearman
-   needs ρ ≈ 0.7 on n = 8 just to clear noise, and each per-paper point
-   carries ±12 pp of its own). Suggestive evidence about the scorer as a
-   proxy, never a gate decision.
+   sub-scores vs per-claim mode 1 − mode 2 correctness. Per claim (~170
+   points), not per paper: 60 papers with ~2 deep-claim papers each cannot
+   estimate a per-paper correlation reliably. Suggestive evidence about the
+   scorer as a proxy, never a gate decision.
+7. Evidence-verdict consistency (surfaced by the pilot): the fraction of
+   wrong-verdict answers whose quoted evidence in fact supports the gold
+   verdict: the model retrieved the right sentence and still labeled it wrong.
+   A cheap model showed this on ~2 claims in both modes; it is a reasoning
+   weakness independent of the consumption surface, and it separates
+   "input-quality" failures (which the mode comparison is about) from
+   "model-quality" failures (which it is not). Reported per model.
 
 ## Pre-registered decision rules
 
@@ -267,15 +314,18 @@ answers free), compare per-category accuracy against a checked-in baseline via
 
 ## Phasing
 
-1. **Phase 0, token economics.** Free, no approval needed; answers the cost
-   axis analytically.
-2. **Pilot.** 3 papers × ~20 claims, modes 1–2, one model, a single script,
-   manual grading (< $2). Two exit questions: are the deltas visible and the
-   claim formats gradable, and does `normalizeForMatch` treat PDF-sourced
-   evidence spans fairly on both surfaces (ligatures, hyphenation, line
-   breaks)? If mode 1 ≈ mode 2 even on Liang2020 equations, revisit claim
-   difficulty before building more; if the matcher is unfair, the evidence
-   check stays advisory until it is fixed.
+1. **Phase 0, token economics.** _Done._ Free; answered the cost axis
+   analytically across the 60-paper corpus (PDF ≈ 3× markdown tokens, retrieval
+   flat, modes 1–2 break in the low tens of papers). See `eval/phase0/report.md`.
+2. **Pilot.** _Done_ (`eval/pilot/`, 61 claims × 2 modes, Haiku 4.5, ~$0.50).
+   Both exit questions answered yes: formats are mechanically gradable and the
+   deltas are visible (pdf-direct 90% vs markdown-context 85%, the gap almost
+   entirely figure-dependent claims at 100% vs 33%). The run earned its keep by
+   catching what a scored run must not inherit: one mis-authored gold (a loss
+   weight read as a margin), the not-found/refuted labeling ambiguity now
+   settled above, a cheap-model reasoning weakness (evidence-verdict
+   inconsistency, metric 7), and a harness bug (a greedy JSON parse, and a
+   cache key that ignored the prompt). All fixed before Phase 1.
 3. **Phase 1.** Full modes 1–2 harness: corpus builder, adapters, structured
    output, mechanical grading, replay cache, report. The claim suite is
    authored, human-verified, and **frozen before the first scored run**:

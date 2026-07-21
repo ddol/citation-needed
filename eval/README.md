@@ -21,9 +21,10 @@ eval/
   phase0/economics.ts        per-claim cost model per mode x corpus size
   phase0/run.ts              Phase 0 runner -> report.md + report.json
   phase0/report.md           generated Phase 0 findings
-  pilot/claims.jsonl         claim suite (seed set; PDF-sourced evidence spans)
+  pilot/claims.jsonl         pilot claim subset (3 papers, 61 items)
   pilot/grade.ts             mechanical grader (verdict primary, evidence secondary)
-  pilot/run.ts               pilot runner: pdf-direct vs markdown-context
+  pilot/run.ts               runner: pdf-direct vs markdown-context (--claims to pick a suite)
+  claims/suite.jsonl         full claim suite: 167 items over the 60-paper corpus
 ```
 
 ## Building the corpus
@@ -81,10 +82,15 @@ under `eval/pilot/.cache/` makes reruns free.
 ## Status
 
 - **Phase 0:** complete, offline. See `phase0/report.md`.
-- **Pilot:** harness complete and verified offline. The claim suite is **61
-  items** across the 3 pilot papers, covering all 7 categories (37 supported /
-  11 refuted / 13 not-found), every evidence span quoted from the original PDF.
-  It is drafted and self-checked but **not yet independently human-verified**;
-  verify before the scored run counts these numbers. Absent claims are served to
-  a pre-registered decoy paper (the `paper` field), per the plan's mode-by-
-  category protocol.
+- **Pilot:** ran (`eval/pilot/`, 61 claims × 2 modes, Haiku 4.5, ~$0.50).
+  pdf-direct 90% vs markdown-context 85%, the gap almost entirely
+  figure-dependent claims (100% vs 33%); zero false-supported. See the plan doc.
+- **Full suite:** `claims/suite.jsonl`, **167 items** over the 60-paper corpus:
+  deep single-paper claims for 9 failure-class papers plus corpus-wide
+  attribution and not-addressed probes served to decoys. All nine categories,
+  81 supported / 31 refuted / 55 not-found, every evidence span quoted from the
+  original PDF. Drafted and self-checked but **not yet independently
+  human-verified**; freeze and verify before the first scored Phase 1 run.
+  Dry-grade it with `run.ts --dry --claims eval/claims/suite.jsonl`; a real run
+  needs the runner pointed at `eval/corpus/cache/` (Phase 1 wiring), since the
+  suite serves mined papers that live there, not in `velocity.report`.
