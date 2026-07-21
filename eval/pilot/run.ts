@@ -18,8 +18,12 @@ import crypto from 'crypto';
 import { grade, summarize, type GoldClaim, type ModelAnswer, type Verdict } from './grade';
 
 const REPO = path.resolve(__dirname, '..', '..');
-const MD_DIR = path.resolve(REPO, '..', 'velocity.report', 'docs', 'papers', 'markdown');
-const PDF_DIR = path.resolve(REPO, '..', 'velocity.report', 'docs', 'papers', 'pdf');
+// The 3 pilot papers live in the sibling velocity.report set; the full suite
+// serves mined papers that only exist in the built corpus cache. Both are
+// selectable so the pilot stays comparable while the suite can reach every
+// corpus paper.
+const DEFAULT_PDF_DIR = path.resolve(REPO, '..', 'velocity.report', 'docs', 'papers', 'pdf');
+const DEFAULT_MD_DIR = path.resolve(REPO, '..', 'velocity.report', 'docs', 'papers', 'markdown');
 const CACHE_DIR = path.join(__dirname, '.cache');
 
 type Mode = 'pdf-direct' | 'markdown-context';
@@ -30,6 +34,8 @@ interface Args {
   model: string;
   maxUsd: number;
   claims: string;
+  pdfDir: string;
+  mdDir: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -42,6 +48,8 @@ function parseArgs(argv: string[]): Args {
     model: get('--model', 'claude-haiku-4-5-20251001'),
     maxUsd: Number(get('--max-usd', '2')),
     claims: get('--claims', path.join(__dirname, 'claims.jsonl')),
+    pdfDir: get('--pdf-dir', DEFAULT_PDF_DIR),
+    mdDir: get('--md-dir', DEFAULT_MD_DIR),
   };
 }
 
@@ -133,7 +141,12 @@ interface CallResult {
   cacheRead: number;
 }
 
-async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<CallResult> {
+async function callModel(
+  mode: Mode,
+  model: string,
+  claim: GoldClaim,
+  dirs: { pdfDir: string; mdDir: string }
+): Promise<CallResult> {
   // Dynamic import so --dry and this file's parse do not require the SDK.
   const mod = (await import('@anthropic-ai/sdk').catch(() => {
     throw new Error(
@@ -165,7 +178,7 @@ async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<C
     mode === 'markdown-context'
       ? {
           type: 'text',
-          text: fs.readFileSync(path.join(MD_DIR, `${claim.paper}.md`), 'utf-8'),
+          text: fs.readFileSync(path.join(dirs.mdDir, `${claim.paper}.md`), 'utf-8'),
           cache_control: cache,
         }
       : {
@@ -173,19 +186,22 @@ async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<C
           source: {
             type: 'base64',
             media_type: 'application/pdf',
-            data: fs.readFileSync(path.join(PDF_DIR, `${claim.paper}.pdf`)).toString('base64'),
+            data: fs.readFileSync(path.join(dirs.pdfDir, `${claim.paper}.pdf`)).toString('base64'),
           },
           cache_control: cache,
         };
   const user = [paperBlock, { type: 'text', text: `Claim: ${claim.claim}` }];
 
-  const res = await client.messages.create({
+  const req: Record<string, unknown> = {
     model,
     max_tokens: 512,
-    temperature: 0,
     system: SYSTEM,
     messages: [{ role: 'user', content: user }],
-  });
+  };
+  // Newer models (Sonnet 5, Opus 4.x) reject `temperature`; the cheap model
+  // still takes it, and greedy decoding is the goal on all of them.
+  if (model.includes('haiku')) req.temperature = 0;
+  const res = await client.messages.create(req);
   const text = res.content.find((b) => b.type === 'text')?.text ?? '';
   return {
     answer: parseAnswer(text),
@@ -227,7 +243,10 @@ async function main(): Promise<void> {
         if (fs.existsSync(cacheFile)) {
           call = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) as CallResult;
         } else {
-          call = await callModel(mode, args.model, claim);
+          call = await callModel(mode, args.model, claim, {
+            pdfDir: args.pdfDir,
+            mdDir: args.mdDir,
+          });
           fs.writeFileSync(cacheFile, JSON.stringify(call));
         }
         tok.input += call.inputTokens;
