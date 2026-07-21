@@ -29,6 +29,7 @@ interface Args {
   dry: boolean;
   model: string;
   maxUsd: number;
+  claims: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -40,11 +41,11 @@ function parseArgs(argv: string[]): Args {
     dry: argv.includes('--dry'),
     model: get('--model', 'claude-haiku-4-5-20251001'),
     maxUsd: Number(get('--max-usd', '2')),
+    claims: get('--claims', path.join(__dirname, 'claims.jsonl')),
   };
 }
 
-function loadClaims(): GoldClaim[] {
-  const file = path.join(__dirname, 'claims.jsonl');
+function loadClaims(file: string): GoldClaim[] {
   return fs
     .readFileSync(file, 'utf-8')
     .split('\n')
@@ -56,14 +57,22 @@ const SYSTEM = [
   'You verify a claim against a single scientific paper provided in this message.',
   'Reply with ONLY a JSON object, no prose, matching:',
   '{"verdict": "supported" | "refuted" | "not-found", "evidence": "<verbatim span from the paper, or empty>", "confidence": <0..1>}',
-  'Use "supported" only if the paper states the claim; "refuted" if the paper states the opposite;',
-  '"not-found" if the paper does not address it. Do not guess.',
+  'Definitions:',
+  '- "supported": the paper states the claim.',
+  '- "refuted": the paper states something that makes the claim false, including',
+  '  filling a single-valued property (its architecture, dataset, benchmark, metric,',
+  '  or a reported number) with a different value than the claim asserts.',
+  '- "not-found": the paper is silent and the claim would merely add to what it',
+  '  describes; nothing in the paper bears on it.',
+  'Do not guess. Answer only from the provided paper.',
 ].join('\n');
 
 function requestHash(mode: Mode, model: string, claim: GoldClaim): string {
+  // SYSTEM is part of the key: change the prompt and the cache must miss,
+  // otherwise a run silently reuses answers from the old instructions.
   return crypto
     .createHash('sha256')
-    .update(JSON.stringify({ mode, model, id: claim.id, claim: claim.claim }))
+    .update(JSON.stringify({ mode, model, id: claim.id, claim: claim.claim, sys: SYSTEM }))
     .digest('hex')
     .slice(0, 16);
 }
@@ -189,7 +198,7 @@ async function callModel(mode: Mode, model: string, claim: GoldClaim): Promise<C
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const claims = loadClaims();
+  const claims = loadClaims(args.claims);
   if (!args.dry) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
   const results: Array<{ mode: Mode; gold: GoldClaim; answer: ModelAnswer }> = [];
