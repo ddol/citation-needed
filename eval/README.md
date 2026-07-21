@@ -13,18 +13,39 @@ with a real key. `npm test` and CI never touch it.
 
 ```
 eval/
-  corpus/manifest.json     pilot papers, pinned by sha256 (PDFs not checked in)
-  lib/tokens.ts            deterministic token estimator (+ optional count_tokens)
-  phase0/economics.ts      per-claim cost model per mode x corpus size
-  phase0/run.ts            Phase 0 runner -> report.md + report.json
-  phase0/report.md         generated Phase 0 findings
-  pilot/claims.jsonl       claim suite (seed set; PDF-sourced evidence spans)
-  pilot/grade.ts           mechanical grader (verdict primary, evidence secondary)
-  pilot/run.ts             pilot runner: pdf-direct vs markdown-context
+  corpus/mine-references.ts  seed papers -> OpenAlex references, ranked (no key)
+  corpus/select.ts           curate the ranking into the expansion set
+  corpus/build.ts            fetch PDFs + extract markdown -> cache/ + manifest
+  corpus/manifest.json       the corpus, pinned by sha256 (PDFs not checked in)
+  lib/tokens.ts              deterministic token estimator (+ optional count_tokens)
+  phase0/economics.ts        per-claim cost model per mode x corpus size
+  phase0/run.ts              Phase 0 runner -> report.md + report.json
+  phase0/report.md           generated Phase 0 findings
+  pilot/claims.jsonl         claim suite (seed set; PDF-sourced evidence spans)
+  pilot/grade.ts             mechanical grader (verdict primary, evidence secondary)
+  pilot/run.ts               pilot runner: pdf-direct vs markdown-context
 ```
 
-The corpus lives in the sibling `velocity.report` repo; the manifest pins each
-PDF by sha256 so a pinned PDF yields pinned markdown yields stable eval input.
+## Building the corpus
+
+The corpus is 19 perception papers we already hold (from the sibling
+`velocity.report` repo) plus references mined from them by cross-citation, for
+60 total. Nothing but `manifest.json` is checked in; PDFs and markdown are
+materialised on demand into a gitignored `corpus/cache/`.
+
+```
+npx ts-node --transpile-only eval/corpus/mine-references.ts   # -> candidates.json
+npx ts-node --transpile-only eval/corpus/select.ts            # -> selection.json
+npx ts-node --transpile-only eval/corpus/build.ts             # -> cache/ + manifest.json
+```
+
+`mine-references` pulls each seed's reference list from OpenAlex (free, no key)
+and ranks referenced works by how many seeds cite them (foundational to this
+corpus) and their global citation count (seminal). `select` dedupes and drops
+non-papers, scanned pre-arXiv classics (no OCR path), and metadata artifacts.
+`build` fetches each PDF, runs it through the production markdown extractor, and
+pins it by sha256 so a pinned PDF yields pinned markdown yields stable input.
+`build` is resumable and records misses in `build-log.json`.
 
 ## Phase 0: token economics (free, offline)
 
