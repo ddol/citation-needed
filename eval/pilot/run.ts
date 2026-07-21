@@ -159,7 +159,7 @@ async function callModel(
   // Dynamic import so --dry and this file's parse do not require the SDK.
   const mod = (await import('@anthropic-ai/sdk').catch(() => {
     throw new Error(
-      'Real runs need @anthropic-ai/sdk. Install it (npm i -D @anthropic-ai/sdk) or use --dry.'
+      'Real runs need @anthropic-ai/sdk. Install it (npm i -S @anthropic-ai/sdk) or use --dry.'
     );
   })) as { default: new (o: { apiKey: string }) => unknown };
   const apiKey = process.env.ANTHROPIC_API_KEY;
