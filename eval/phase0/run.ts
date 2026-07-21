@@ -30,7 +30,9 @@ import {
 } from './economics';
 
 const REPO = path.resolve(__dirname, '..', '..');
-const MD_DIR = path.resolve(REPO, '..', 'velocity.report', 'docs', 'papers', 'markdown');
+// The corpus markdown built by eval/corpus/build.ts (gitignored cache). Run the
+// corpus builder first; Phase 0 reads whatever the manifest lists.
+const MD_DIR = path.resolve(REPO, 'eval', 'corpus', 'cache', 'markdown');
 const OUT_DIR = __dirname;
 const REFINE_MODEL = 'claude-haiku-4-5-20251001';
 
