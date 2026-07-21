@@ -1,7 +1,7 @@
 {
   "note": "Claim-grounding eval corpus (docs/plans/claim-grounding-eval.md). 19 seed perception papers plus references mined from them by cross-citation. PDFs are not checked in; they are materialised into eval/corpus/cache/ by eval/corpus/build.ts and pinned here by sha256.",
-  "generatedAt": "2026-07-21T00:53:19.813Z",
-  "count": 58,
+  "generatedAt": "2026-07-21T00:54:37.557Z",
+  "count": 60,
   "papers": [
     {
       "id": "Behley2019",
@@ -690,6 +690,32 @@
       "source": "arXiv:2008.08294",
       "crossCites": 1,
       "citedBy": 211
+    },
+    {
+      "id": "FPNNField2016",
+      "origin": "mined",
+      "title": "FPNN: Field Probing Neural Networks for 3D Data",
+      "arxivId": "1605.06240",
+      "doi": "https://doi.org/10.48550/arxiv.1605.06240",
+      "pages": 10,
+      "sha256": "417936971a68442324d2a149051a6a5c1e36cd9ae1f5f5dad602b56d20a1b298",
+      "tags": ["mined", "reference"],
+      "source": "arXiv:1605.06240",
+      "crossCites": 1,
+      "citedBy": 209
+    },
+    {
+      "id": "OneThousand2020",
+      "origin": "mined",
+      "title": "One Thousand and One Hours: Self-driving Motion Prediction Dataset",
+      "arxivId": "2006.14480",
+      "doi": "https://doi.org/10.48550/arxiv.2006.14480",
+      "pages": 10,
+      "sha256": "63cc38eafa52aa7e1d2140a929ebfb36b0d267ca8d10285aa3017465ac49d9f2",
+      "tags": ["mined", "reference"],
+      "source": "arXiv:2006.14480",
+      "crossCites": 1,
+      "citedBy": 200
     }
   ]
 }
