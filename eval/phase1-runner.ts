@@ -6,6 +6,7 @@ import { getDatabase } from '../src/db/index';
 import {
   makeAnthropicAdapter,
   makeDryAdapter,
+  makeMcpAgentAdapter,
   type EvalClaim,
   type EvalMode,
   type ModeAdapter,
@@ -23,7 +24,9 @@ export interface Phase1Config {
 }
 
 export function createModeAdapter(mode: EvalMode, dryRun = false): ModeAdapter {
-  return dryRun ? makeDryAdapter(mode) : makeAnthropicAdapter(mode);
+  if (dryRun) return makeDryAdapter(mode);
+  if (mode === 'mcp-agent') return makeMcpAgentAdapter(mode);
+  return makeAnthropicAdapter(mode);
 }
 
 export async function runPhase1Eval(config: Phase1Config) {

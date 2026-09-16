@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import { loadClaims, makeMcpAgentAdapter, runClaimSuite, type EvalClaim } from '../../eval/runner';
+import { createModeAdapter } from '../../eval/phase1-runner';
 
 describe('eval runner', () => {
   test('loads JSONL claims while ignoring comments and blanks', () => {
@@ -102,6 +103,11 @@ describe('eval runner', () => {
         }),
       })
     ).rejects.toThrow(/maxUsd|budget/i);
+  });
+
+  test('phase1 factory picks the MCP agent adapter for the MCP mode', () => {
+    const adapter = createModeAdapter('mcp-agent', false);
+    expect(adapter.mode).toBe('mcp-agent');
   });
 
   test('mcp-agent adapter calls the MCP tool loop and returns a supported verdict when quote matches', async () => {
