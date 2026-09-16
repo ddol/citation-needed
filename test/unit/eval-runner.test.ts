@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { loadClaims, runClaimSuite, type EvalClaim } from '../../eval/runner';
+import { loadClaims, makeMcpAgentAdapter, runClaimSuite, type EvalClaim } from '../../eval/runner';
 
 describe('eval runner', () => {
   test('loads JSONL claims while ignoring comments and blanks', () => {
@@ -102,5 +102,68 @@ describe('eval runner', () => {
         }),
       })
     ).rejects.toThrow(/maxUsd|budget/i);
+  });
+
+  test('mcp-agent adapter calls the MCP tool loop and returns a supported verdict when quote matches', async () => {
+    const claim: EvalClaim = {
+      id: 'mcp-1',
+      paper: 'alpha',
+      category: 'verbatim',
+      claim: 'alpha states X',
+      verdict: 'supported',
+      evidence: 'X',
+    };
+
+    const callTool = jest.fn(async ({ name }: { name: string }) => {
+      if (name === 'search-citations') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ results: [{ citation: { doi: '10.42/alpha' } }] }),
+            },
+          ],
+        };
+      }
+      if (name === 'read-content') {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ doi: '10.42/alpha', text: 'X' }) }],
+        };
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ verdict: 'exact', matches: [{ doi: '10.42/alpha' }] }),
+          },
+        ],
+      };
+    });
+
+    jest
+      .spyOn(require('@modelcontextprotocol/sdk/client/index.js'), 'Client')
+      .mockImplementation(() => ({
+        connect: jest.fn().mockResolvedValue(undefined),
+        callTool,
+        close: jest.fn().mockResolvedValue(undefined),
+      }));
+    jest
+      .spyOn(require('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport, 'createLinkedPair')
+      .mockReturnValue([{}, {}] as any);
+    jest.spyOn(require('../../src/mcp/server'), 'createMcpServer').mockReturnValue({
+      connect: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    } as any);
+
+    const result = await makeMcpAgentAdapter('mcp-agent').execute({
+      mode: 'mcp-agent',
+      model: 'test-model',
+      claim,
+      pdfDir: '/tmp',
+      mdDir: '/tmp',
+    });
+
+    expect(callTool).toHaveBeenCalledWith(expect.objectContaining({ name: 'search-citations' }));
+    expect(result.answer.verdict).toBe('supported');
   });
 });

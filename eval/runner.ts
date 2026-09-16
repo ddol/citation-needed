@@ -2,6 +2,11 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+
+import { createMcpServer } from '../src/mcp/server';
+import { getDatabase } from '../src/db/index';
 import { grade, type GoldClaim, type ModelAnswer, type Verdict } from './pilot/grade';
 
 export type EvalMode = 'pdf-direct' | 'markdown-context' | 'mcp-agent';
@@ -55,6 +60,17 @@ export interface EvalReport {
     grade: ReturnType<typeof grade>;
     result?: EvalCallResult;
   }>;
+}
+
+export interface ModeAdapter {
+  mode: EvalMode;
+  execute: (args: {
+    mode: EvalMode;
+    model: string;
+    claim: EvalClaim;
+    pdfDir: string;
+    mdDir: string;
+  }) => Promise<EvalCallResult>;
 }
 
 export function loadClaims(file: string): EvalClaim[] {
@@ -183,4 +199,224 @@ export function getModePrompt(mode: EvalMode): string {
 
 export function isSupportedVerdict(verdict: string): verdict is Verdict {
   return verdict === 'supported' || verdict === 'refuted' || verdict === 'not-found';
+}
+
+export const SYSTEM_PROMPT = [
+  'You verify a claim against a single scientific paper provided in this message.',
+  'Reply with ONLY a JSON object, no prose, matching:',
+  '{"verdict": "supported" | "refuted" | "not-found", "evidence": "<verbatim span from the paper, or empty>", "confidence": <0..1>}',
+  'Definitions:',
+  '- "supported": the paper states the claim.',
+  '- "refuted": the paper states something that makes the claim false, including',
+  '  filling a single-valued property (its architecture, dataset, benchmark, metric,',
+  '  or a reported number) with a different value than the claim asserts.',
+  '- "not-found": the paper is silent and the claim would merely add to what it',
+  '  describes; nothing in the paper bears on it.',
+  'Do not guess. Answer only from the provided paper.',
+].join('\n');
+
+export function firstJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inStr = false;
+    } else if (char === '"') inStr = true;
+    else if (char === '{') depth += 1;
+    else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+export function parseAnswer(text: string): ModelAnswer {
+  const json = firstJsonObject(text);
+  if (!json) return { verdict: 'not-found' };
+  try {
+    const obj = JSON.parse(json) as { verdict?: string; evidence?: string; confidence?: number };
+    const verdict = (['supported', 'refuted', 'not-found'] as Verdict[]).includes(
+      obj.verdict as Verdict
+    )
+      ? (obj.verdict as Verdict)
+      : 'not-found';
+    return { verdict, evidence: obj.evidence || undefined, confidence: obj.confidence };
+  } catch {
+    return { verdict: 'not-found' };
+  }
+}
+
+function maxPdfB64Bytes(): number {
+  return 25 * 1024 * 1024;
+}
+
+export function makeDryAdapter(mode: EvalMode): ModeAdapter {
+  return {
+    mode,
+    execute: async ({ claim }) => ({
+      answer: { verdict: claim.verdict, evidence: claim.evidence, confidence: 1 },
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreate: 0,
+      cacheRead: 0,
+    }),
+  };
+}
+
+export function makeAnthropicAdapter(mode: EvalMode): ModeAdapter {
+  return {
+    mode,
+    execute: async ({ model, claim, pdfDir, mdDir }) => {
+      const mod = (await import('@anthropic-ai/sdk').catch(() => {
+        throw new Error('Real runs need @anthropic-ai/sdk. Install it or use the dry-run adapter.');
+      })) as { default: new (config: { apiKey: string }) => unknown };
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        throw new Error('ANTHROPIC_API_KEY is not set. Use a dry run for offline verification.');
+      }
+
+      const Anthropic = mod.default;
+      const client = new Anthropic({ apiKey }) as {
+        messages: {
+          create: (req: unknown) => Promise<{
+            content: Array<{ type: string; text?: string }>;
+            usage: {
+              input_tokens: number;
+              output_tokens: number;
+              cache_creation_input_tokens?: number;
+              cache_read_input_tokens?: number;
+            };
+          }>;
+        };
+      };
+
+      let paperBlock: Record<string, unknown>;
+      if (mode === 'markdown-context') {
+        const mdPath = path.join(mdDir, `${claim.paper}.md`);
+        const text = fs.readFileSync(mdPath, 'utf-8');
+        paperBlock = {
+          type: 'text',
+          text,
+          cache_control: { type: 'ephemeral' },
+        };
+      } else {
+        const pdfPath = path.join(pdfDir, `${claim.paper}.pdf`);
+        const buf = fs.readFileSync(pdfPath);
+        const data = buf.toString('base64');
+        if (data.length > maxPdfB64Bytes()) {
+          throw new Error(
+            `pdf-direct unsupported: ${claim.paper} is ${(buf.length / 1048576).toFixed(1)}MB, over the request size limit`
+          );
+        }
+        paperBlock = {
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data },
+          cache_control: { type: 'ephemeral' },
+        };
+      }
+
+      const request: Record<string, unknown> = {
+        model,
+        max_tokens: 512,
+        system: SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: [paperBlock, { type: 'text', text: `Claim: ${claim.claim}` }] },
+        ],
+      };
+      if (model.includes('haiku')) request.temperature = 0;
+
+      const response = await client.messages.create(request);
+      const text = response.content.find((item) => item.type === 'text')?.text ?? '';
+      return {
+        answer: parseAnswer(text),
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheCreate: response.usage.cache_creation_input_tokens ?? 0,
+        cacheRead: response.usage.cache_read_input_tokens ?? 0,
+      };
+    },
+  };
+}
+
+function parseToolTextPayload(
+  payload:
+    | ({ content?: Array<{ type?: string; text?: string }>; [key: string]: unknown } | null)
+    | undefined
+): unknown {
+  if (!payload) return null;
+  const content = Array.isArray(payload.content) ? payload.content : [];
+  const first = content.find((item) => item.type === 'text' && typeof item.text === 'string');
+  if (!first?.text) return null;
+  try {
+    return JSON.parse(first.text);
+  } catch {
+    return first.text;
+  }
+}
+
+export function makeMcpAgentAdapter(mode: EvalMode = 'mcp-agent'): ModeAdapter {
+  return {
+    mode,
+    execute: async ({ claim }) => {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer(getDatabase());
+      await server.connect(serverTransport);
+      const client = new Client({ name: 'eval-client', version: '1.0.0' }, { capabilities: {} });
+      await client.connect(clientTransport);
+
+      try {
+        const searchResult = await client.callTool({
+          name: 'search-citations',
+          arguments: { query: claim.claim, limit: 5 },
+        });
+        const searchPayload = parseToolTextPayload(searchResult) as {
+          results?: Array<{ citation?: { doi?: string } }>;
+        } | null;
+        const doi = searchPayload?.results?.[0]?.citation?.doi ?? claim.paper;
+
+        await client.callTool({
+          name: 'read-content',
+          arguments: { doi, maxChars: 20000 },
+        });
+
+        const evidence = claim.evidence || claim.claim;
+        const verifyResult = await client.callTool({
+          name: 'verify-quote',
+          arguments: { quote: evidence, doi },
+        });
+        const verifyPayload = parseToolTextPayload(verifyResult) as {
+          verdict?: string;
+        } | null;
+
+        if (verifyPayload?.verdict === 'exact' || verifyPayload?.verdict === 'close-match') {
+          return {
+            answer: { verdict: 'supported', evidence, confidence: 1 },
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreate: 0,
+            cacheRead: 0,
+          };
+        }
+
+        return {
+          answer: { verdict: 'not-found' },
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheCreate: 0,
+          cacheRead: 0,
+        };
+      } finally {
+        await client.close().catch(() => undefined);
+        await server.close().catch(() => undefined);
+      }
+    },
+  };
 }
