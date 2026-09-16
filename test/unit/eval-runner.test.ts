@@ -70,4 +70,37 @@ describe('eval runner', () => {
     expect(result.summary.correct).toBe(1);
     expect(result.rows[0].answer.verdict).toBe('supported');
   });
+
+  test('aborts when the estimated spend exceeds the maxUsd guard', async () => {
+    const claims: EvalClaim[] = [
+      {
+        id: 'c1',
+        paper: 'alpha',
+        category: 'verbatim',
+        claim: 'A paper says X',
+        verdict: 'supported',
+        evidence: 'X',
+      },
+    ];
+
+    await expect(
+      runClaimSuite({
+        claims,
+        model: 'test-model',
+        mode: 'markdown-context',
+        dryRun: false,
+        maxUsd: 0.000001,
+        cacheDir: path.join(os.tmpdir(), 'citation-needed-eval-cost-guard'),
+        pdfDir: '/tmp',
+        mdDir: '/tmp',
+        executeCall: async () => ({
+          answer: { verdict: 'supported', evidence: 'X', confidence: 1 },
+          inputTokens: 2_000_000,
+          outputTokens: 100_000,
+          cacheCreate: 0,
+          cacheRead: 0,
+        }),
+      })
+    ).rejects.toThrow(/maxUsd|budget/i);
+  });
 });

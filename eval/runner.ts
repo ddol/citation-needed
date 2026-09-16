@@ -35,6 +35,28 @@ export interface EvalRunRequest {
   }) => Promise<EvalCallResult>;
 }
 
+export interface EvalSummary {
+  total: number;
+  correct: number;
+  falseSupported: number;
+  overRefuted: number;
+  totalUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
+export interface EvalReport {
+  mode: EvalMode;
+  model: string;
+  summary: EvalSummary;
+  rows: Array<{
+    claim: EvalClaim;
+    answer: ModelAnswer;
+    grade: ReturnType<typeof grade>;
+    result?: EvalCallResult;
+  }>;
+}
+
 export function loadClaims(file: string): EvalClaim[] {
   return fs
     .readFileSync(file, 'utf-8')
@@ -51,15 +73,7 @@ function requestHash(mode: EvalMode, model: string, claim: EvalClaim): string {
     .slice(0, 16);
 }
 
-export async function runClaimSuite(args: EvalRunRequest): Promise<{
-  summary: { total: number; correct: number; falseSupported: number; overRefuted: number };
-  rows: Array<{
-    claim: EvalClaim;
-    answer: ModelAnswer;
-    grade: ReturnType<typeof grade>;
-    result?: EvalCallResult;
-  }>;
-}> {
+export async function runClaimSuite(args: EvalRunRequest): Promise<EvalReport> {
   const { claims } = args;
   const { cacheDir } = args;
   if (!args.dryRun) {
@@ -75,6 +89,12 @@ export async function runClaimSuite(args: EvalRunRequest): Promise<{
   let totalCorrect = 0;
   let falseSupported = 0;
   let overRefuted = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalUsd = 0;
+
+  const INPUT_PRICE_USD = 1.0 / 1_000_000;
+  const OUTPUT_PRICE_USD = 5.0 / 1_000_000;
 
   for (const claim of claims) {
     const key = requestHash(args.mode, args.model, claim);
@@ -114,17 +134,35 @@ export async function runClaimSuite(args: EvalRunRequest): Promise<{
     };
     rows.push(row);
 
+    totalInputTokens += result.inputTokens;
+    totalOutputTokens += result.outputTokens;
+    totalUsd +=
+      (result.inputTokens - result.cacheRead) * INPUT_PRICE_USD +
+      result.outputTokens * OUTPUT_PRICE_USD +
+      result.cacheCreate * INPUT_PRICE_USD * 0.1;
+
     if (finalGrade.verdictCorrect) totalCorrect += 1;
     if (finalGrade.falseSupported) falseSupported += 1;
     if (finalGrade.overRefuted) overRefuted += 1;
+
+    if (!args.dryRun && args.maxUsd > 0 && totalUsd > args.maxUsd) {
+      throw new Error(
+        `maxUsd budget exceeded: estimated USD ${totalUsd.toFixed(6)} > ${args.maxUsd.toFixed(6)}`
+      );
+    }
   }
 
   return {
+    mode: args.mode,
+    model: args.model,
     summary: {
       total: claims.length,
       correct: totalCorrect,
       falseSupported,
       overRefuted,
+      totalUsd,
+      totalInputTokens,
+      totalOutputTokens,
     },
     rows,
   };
