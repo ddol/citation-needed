@@ -7,6 +7,7 @@ import {
   makeAnthropicAdapter,
   makeDryAdapter,
   makeMcpAgentAdapter,
+  makeRetrievalOracleAdapter,
   type EvalClaim,
   type EvalMode,
   type ModeAdapter,
@@ -21,16 +22,18 @@ export interface Phase1Config {
   cacheDir: string;
   dryRun?: boolean;
   maxUsd?: number;
+  oracle?: boolean;
 }
 
-export function createModeAdapter(mode: EvalMode, dryRun = false): ModeAdapter {
+export function createModeAdapter(mode: EvalMode, dryRun = false, oracle = false): ModeAdapter {
   if (dryRun) return makeDryAdapter(mode);
+  if (oracle) return makeRetrievalOracleAdapter(mode);
   if (mode === 'mcp-agent') return makeMcpAgentAdapter(mode);
   return makeAnthropicAdapter(mode);
 }
 
 export async function runPhase1Eval(config: Phase1Config) {
-  const adapter = createModeAdapter(config.mode, config.dryRun ?? false);
+  const adapter = createModeAdapter(config.mode, config.dryRun ?? false, config.oracle ?? false);
   const cacheDir = config.cacheDir || path.join(process.cwd(), 'eval', '.cache');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -38,20 +41,22 @@ export async function runPhase1Eval(config: Phase1Config) {
   createMcpServer(db);
 
   const suite = config.claims;
-  const result = await (async () => {
-    const rows = [] as Array<{ claim: EvalClaim; answer: { verdict: string } }>;
-    for (const claim of suite) {
-      const response = await adapter.execute({
-        mode: config.mode,
-        model: config.model,
-        claim,
-        pdfDir: config.pdfDir,
-        mdDir: config.mdDir,
-      });
-      rows.push({ claim, answer: response.answer });
-    }
-    return rows;
-  })();
+  const rows = [] as Array<{ claim: EvalClaim; answer: { verdict: string } }>;
+  for (const claim of suite) {
+    const response = await adapter.execute({
+      mode: config.mode,
+      model: config.model,
+      claim,
+      pdfDir: config.pdfDir,
+      mdDir: config.mdDir,
+      oracle: config.oracle ?? false,
+    });
+    rows.push({ claim, answer: response.answer });
+  }
 
-  return result;
+  return {
+    mode: config.mode,
+    oracle: config.oracle ?? false,
+    rows,
+  };
 }

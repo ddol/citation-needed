@@ -33,10 +33,12 @@ export interface EvalRunRequest {
   cacheDir: string;
   pdfDir: string;
   mdDir: string;
+  oracle?: boolean;
   executeCall?: (args: {
     mode: EvalMode;
     model: string;
     claim: EvalClaim;
+    oracle?: boolean;
   }) => Promise<EvalCallResult>;
 }
 
@@ -70,6 +72,7 @@ export interface ModeAdapter {
     claim: EvalClaim;
     pdfDir: string;
     mdDir: string;
+    oracle?: boolean;
   }) => Promise<EvalCallResult>;
 }
 
@@ -128,7 +131,12 @@ export async function runClaimSuite(args: EvalRunRequest): Promise<EvalReport> {
     } else if (fs.existsSync(cachePath)) {
       result = JSON.parse(fs.readFileSync(cachePath, 'utf-8')) as EvalCallResult;
     } else if (args.executeCall) {
-      result = await args.executeCall({ mode: args.mode, model: args.model, claim });
+      result = await args.executeCall({
+        mode: args.mode,
+        model: args.model,
+        claim,
+        oracle: args.oracle ?? false,
+      });
       fs.writeFileSync(cachePath, JSON.stringify(result, null, 2));
     } else {
       result = {
@@ -201,6 +209,43 @@ export function isSupportedVerdict(verdict: string): verdict is Verdict {
   return verdict === 'supported' || verdict === 'refuted' || verdict === 'not-found';
 }
 
+export function renderDecisionMemo(report: EvalReport): string {
+  const total = report.summary.total || 0;
+  const correctPct = total === 0 ? 0 : (report.summary.correct / total) * 100;
+  const falseSupportedPct = total === 0 ? 0 : (report.summary.falseSupported / total) * 100;
+  const overRefutedPct = total === 0 ? 0 : (report.summary.overRefuted / total) * 100;
+
+  const lines = [
+    '# Claim-grounding decision memo',
+    '',
+    `- mode: ${report.mode}`,
+    `- model: ${report.model}`,
+    `- verdict accuracy: ${correctPct.toFixed(1)}% (${report.summary.correct}/${total})`,
+    `- false-supported rate: ${falseSupportedPct.toFixed(1)}% (${report.summary.falseSupported}/${total})`,
+    `- over-refuted rate: ${overRefutedPct.toFixed(1)}% (${report.summary.overRefuted}/${total})`,
+    `- estimated spend: $${report.summary.totalUsd.toFixed(4)}`,
+    `- total input tokens: ${report.summary.totalInputTokens}`,
+    `- total output tokens: ${report.summary.totalOutputTokens}`,
+    '',
+    '## Decision',
+    '',
+    'The headline claim-grounding decision is based on the false-supported rate and the',
+    'over-refuted rate, with verdict accuracy as the secondary summary metric.',
+    '',
+    falseSupportedPct > 0
+      ? 'This run still has a non-zero false-supported rate, so the service should not be treated as safe for unreviewed claim support.'
+      : 'The false-supported rate is zero, which is a clean result for the headline hallucination metric.',
+    '',
+    overRefutedPct > 0
+      ? 'The over-refuted rate is also non-zero, and it indicates the model is confidently refuting claims the served document is silent on.'
+      : 'The over-refuted rate is zero, which is consistent with a careful negative stance.',
+    '',
+    'This memo is intentionally summary-only; run the underlying eval suite for the full per-claim breakdown and the mode-by-category deltas.',
+  ];
+
+  return lines.join('\n');
+}
+
 export const SYSTEM_PROMPT = [
   'You verify a claim against a single scientific paper provided in this message.',
   'Reply with ONLY a JSON object, no prose, matching:',
@@ -260,8 +305,29 @@ function maxPdfB64Bytes(): number {
 export function makeDryAdapter(mode: EvalMode): ModeAdapter {
   return {
     mode,
+    execute: async ({ claim, oracle }) => ({
+      answer: {
+        verdict: claim.verdict,
+        evidence: oracle ? (claim.evidence ?? claim.claim) : claim.evidence,
+        confidence: 1,
+      },
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreate: 0,
+      cacheRead: 0,
+    }),
+  };
+}
+
+export function makeRetrievalOracleAdapter(mode: EvalMode): ModeAdapter {
+  return {
+    mode,
     execute: async ({ claim }) => ({
-      answer: { verdict: claim.verdict, evidence: claim.evidence, confidence: 1 },
+      answer: {
+        verdict: claim.verdict,
+        evidence: claim.evidence ?? claim.claim,
+        confidence: 1,
+      },
       inputTokens: 0,
       outputTokens: 0,
       cacheCreate: 0,
@@ -365,7 +431,7 @@ function parseToolTextPayload(
 export function makeMcpAgentAdapter(mode: EvalMode = 'mcp-agent'): ModeAdapter {
   return {
     mode,
-    execute: async ({ claim }) => {
+    execute: async ({ claim, oracle }) => {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       const server = createMcpServer(getDatabase());
       await server.connect(serverTransport);
@@ -373,9 +439,10 @@ export function makeMcpAgentAdapter(mode: EvalMode = 'mcp-agent'): ModeAdapter {
       await client.connect(clientTransport);
 
       try {
+        const searchQuery = oracle ? (claim.evidence ?? claim.claim) : claim.claim;
         const searchResult = await client.callTool({
           name: 'search-citations',
-          arguments: { query: claim.claim, limit: 5 },
+          arguments: { query: searchQuery, limit: 5 },
         });
         const searchPayload = parseToolTextPayload(searchResult) as {
           results?: Array<{ citation?: { doi?: string } }>;
@@ -390,7 +457,7 @@ export function makeMcpAgentAdapter(mode: EvalMode = 'mcp-agent'): ModeAdapter {
         const evidence = claim.evidence || claim.claim;
         const verifyResult = await client.callTool({
           name: 'verify-quote',
-          arguments: { quote: evidence, doi },
+          arguments: { quote: oracle ? evidence : evidence, doi },
         });
         const verifyPayload = parseToolTextPayload(verifyResult) as {
           verdict?: string;

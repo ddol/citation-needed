@@ -2,7 +2,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { loadClaims, makeMcpAgentAdapter, runClaimSuite, type EvalClaim } from '../../eval/runner';
+import {
+  loadClaims,
+  makeMcpAgentAdapter,
+  renderDecisionMemo,
+  runClaimSuite,
+  type EvalClaim,
+} from '../../eval/runner';
 import { createModeAdapter } from '../../eval/phase1-runner';
 
 describe('eval runner', () => {
@@ -108,6 +114,122 @@ describe('eval runner', () => {
   test('phase1 factory picks the MCP agent adapter for the MCP mode', () => {
     const adapter = createModeAdapter('mcp-agent', false);
     expect(adapter.mode).toBe('mcp-agent');
+  });
+
+  test('passes the retrieval-oracle flag through the suite execution path', async () => {
+    const claims: EvalClaim[] = [
+      {
+        id: 'c1',
+        paper: 'alpha',
+        category: 'verbatim',
+        claim: 'A paper says X',
+        verdict: 'supported',
+        evidence: 'X',
+      },
+    ];
+
+    const executeCall = jest.fn(async ({ oracle }: { oracle?: boolean }) => ({
+      answer: { verdict: 'supported' as const, evidence: 'X', confidence: 1 },
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreate: 0,
+      cacheRead: 0,
+      ...(oracle ? { error: undefined } : {}),
+    }));
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'citation-needed-eval-oracle-'));
+
+    await runClaimSuite({
+      claims,
+      model: 'test-model',
+      mode: 'markdown-context',
+      dryRun: false,
+      maxUsd: 1,
+      cacheDir,
+      pdfDir: '/tmp',
+      mdDir: '/tmp',
+      oracle: true,
+      executeCall,
+    });
+
+    expect(executeCall).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'markdown-context', oracle: true })
+    );
+  });
+
+  test('renders a decision memo that reflects observed false-supported and over-refuted rates', () => {
+    const report = {
+      mode: 'mcp-agent',
+      model: 'test-model',
+      summary: {
+        total: 4,
+        correct: 3,
+        falseSupported: 1,
+        overRefuted: 1,
+        totalUsd: 0.1,
+        totalInputTokens: 10,
+        totalOutputTokens: 20,
+      },
+      rows: [
+        {
+          claim: { id: 'a', paper: 'p', category: 'verbatim', claim: 'x', verdict: 'supported' },
+          answer: { verdict: 'supported' },
+          grade: {
+            verdictCorrect: true,
+            evidenceMatched: null,
+            falseSupported: false,
+            overRefuted: false,
+          },
+        },
+        {
+          claim: { id: 'b', paper: 'p', category: 'verbatim', claim: 'y', verdict: 'supported' },
+          answer: { verdict: 'supported' },
+          grade: {
+            verdictCorrect: true,
+            evidenceMatched: null,
+            falseSupported: false,
+            overRefuted: false,
+          },
+        },
+        {
+          claim: {
+            id: 'c',
+            paper: 'p',
+            category: 'not-addressed',
+            claim: 'z',
+            verdict: 'not-found',
+          },
+          answer: { verdict: 'supported' },
+          grade: {
+            verdictCorrect: false,
+            evidenceMatched: null,
+            falseSupported: true,
+            overRefuted: false,
+          },
+        },
+        {
+          claim: {
+            id: 'd',
+            paper: 'p',
+            category: 'not-addressed',
+            claim: 'q',
+            verdict: 'not-found',
+          },
+          answer: { verdict: 'refuted' },
+          grade: {
+            verdictCorrect: false,
+            evidenceMatched: null,
+            falseSupported: false,
+            overRefuted: true,
+          },
+        },
+      ],
+    } as any;
+
+    const memo = renderDecisionMemo(report);
+    expect(memo).toContain('Claim-grounding decision memo');
+    expect(memo).toContain('false-supported rate');
+    expect(memo).toContain('25.0%');
+    expect(memo).toContain('25.0%');
   });
 
   test('mcp-agent adapter calls the MCP tool loop and returns a supported verdict when quote matches', async () => {
