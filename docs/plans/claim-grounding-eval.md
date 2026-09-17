@@ -425,17 +425,17 @@ corpus scale.
    settled above, a cheap-model reasoning weakness (evidence-verdict
    inconsistency, metric 7), and a harness bug (a greedy JSON parse, and a
    cache key that ignored the prompt). All fixed before Phase 1.
-3. **Phase 1.** Full modes 1–2 harness: corpus builder, adapters, structured
-   output, mechanical grading, replay cache, report. The claim suite is
-   authored, human-verified, and **frozen before the first scored run**:
+3. **Phase 1.** Done. Full modes 1–2 harness: corpus builder, adapters,
+   structured output, mechanical grading, replay cache, report. The claim suite
+   is authored, human-verified, and **frozen before the first scored run**:
    per-category counts, the mode × category assignment, and each absent
    claim's decoy paper are committed under `eval/claims/` as the
    pre-registration artifact. Changing them after seeing results is allowed
    only as an explicitly labelled second suite, never as an edit.
-4. **Phase 2.** Mode 3 adapter, the retrieval-oracle control arm, corpus-wide
-   claims, tool-transcript capture, evidence-reached metric.
-5. **Phase 3.** Decision memo against the rules above, fidelity correlation as
-   exploratory context, regression-gate baseline.
+4. **Phase 2.** Done. Mode 3 adapter, the retrieval-oracle control arm,
+   corpus-wide claims, tool-transcript capture, evidence-reached metric.
+5. **Phase 3.** Done. Decision memo against the rules above, fidelity
+   correlation as exploratory context, regression-gate baseline.
 
 Deferred: scanned/OCR paper, LLM-judge grading, Batches API runs, more than two
 models, stdio-subprocess transport, hybrid 3.5 implementation (only if the

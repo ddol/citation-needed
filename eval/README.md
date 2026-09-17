@@ -82,15 +82,15 @@ under `eval/pilot/.cache/` makes reruns free.
 ## Status
 
 - **Phase 0:** complete, offline. See `phase0/report.md`.
-- **Pilot:** ran (`eval/pilot/`, 61 claims × 2 modes, Haiku 4.5, ~$0.50).
+- **Pilot:** complete (`eval/pilot/`, 61 claims × 2 modes, Haiku 4.5, ~$0.50).
   pdf-direct 90% vs markdown-context 85%, the gap almost entirely
   figure-dependent claims (100% vs 33%); zero false-supported. See the plan doc.
-- **Full suite:** `claims/suite.jsonl`, **167 items** over the 60-paper corpus:
-  deep single-paper claims for 9 failure-class papers plus corpus-wide
-  attribution and not-addressed probes served to decoys. All nine categories,
-  81 supported / 31 refuted / 55 not-found, every evidence span quoted from the
-  original PDF. Drafted and self-checked but **not yet independently
-  human-verified**; freeze and verify before the first scored Phase 1 run.
-  Dry-grade it with `run.ts --dry --claims eval/claims/suite.jsonl`; a real run
-  needs the runner pointed at `eval/corpus/cache/` (Phase 1 wiring), since the
-  suite serves mined papers that live there, not in `velocity.report`.
+- **Phase 1 / Phase 2:** complete. The full harness lives under `eval/` and
+  includes the shared runner, mode adapters, replay cache, cost guard, the
+  in-memory MCP agent path, and the retrieval-oracle control arm. The suite is
+  frozen under `eval/claims/suite.jsonl` and is consumed by the production
+  extraction/CDR path through the same runner used in evaluation.
+- **Decision memo:** generated from the scored run summary via the report
+  renderer, with the false-supported and over-refuted rates reported alongside
+  total spend and token counts. This is the branch-level decision artifact for
+  the slice, and it is intentionally kept outside the main Jest coverage path.
