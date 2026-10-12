@@ -17,7 +17,7 @@ The system is **core + satellites** (the agent is the shell composing small
 tools), and the graph belongs **in the core** when built, because its value is
 joins against corpus state (which papers are members, frontier promotion,
 verification cross-checks). What stays outside: scheduling (cron/launchd),
-trend digests (files a cron'd command writes), and any third-party scout tools
+trend reports (files a cron'd command writes), and any third-party scout tools
 (they feed the corpus through the pipe contract: BibTeX/JSONL →
 `citation-needed import`).
 
@@ -102,7 +102,7 @@ schemes for cross-source dedupe.
 - **Frontier promotion**: graph-source open-access PDF URLs join the retrieval
   cascade as an additional OA source (coverage win independent of the graph).
 - **`trends` CLI command**: new works citing corpus members since the last run
-  → writes a Markdown/JSON digest file for the agent (the webhook item can
+  → writes a Markdown/JSON report file for the agent (the webhook item can
   announce it). **Scheduling stays external**: a cron/launchd recipe in the
   composition docs, no scheduler inside citation-needed.
 
@@ -110,7 +110,7 @@ schemes for cross-source dedupe.
 
 Any external scout (Paperfetcher, LitStudy, a shell script, a community
 Semantic Scholar MCP server the agent also has mounted) composes with the core
-through `citation-needed import` (BibTeX/JSONL in) and digest files out. The
+through `citation-needed import` (BibTeX/JSONL in) and report files out. The
 SQLite DB is **not** a public API for siblings, read-only at most (rule
 documented in the composition docs item).
 
@@ -138,7 +138,7 @@ documented in the composition docs item).
    cached on lookup. Needs only the migration runner.
 2. **Expansion**: `expand-corpus` snowball job kind + frontier promotion +
    OA-URL cascade source + OpenAlex client.
-3. **Trends & cross-check**: `trends` digest command + cron recipe in the
+3. **Trends & cross-check**: `trends` report command + cron recipe in the
    composition docs; extracted-reference cross-check (Flow B).
 
 ## Backlog items (all exploratory)
@@ -157,9 +157,9 @@ Phases 2–3:
 - [fetch] M - OpenAlex GraphSource client (bulk edges via cites: filter, related_works, topics; API key required)
 - [flow] M - expand-corpus: bounded snowball job kind (depth/budget/filters, frontier stubs, identifiers dedupe) + MCP/CLI trigger
 - [fetch] S - Graph-source open-access PDF URLs as an additional retrieval-cascade source
-- [cli] M - `trends` command: new works citing corpus members since last run → digest file; cron-scheduled, no in-core scheduler
+- [cli] M - `trends` command: new works citing corpus members since last run → report file; cron-scheduled, no in-core scheduler
 - [verify] S - Cross-check extracted reference lists against graph edges; flag extraction/graph gaps
-- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, digest files out; SQLite is not a public API, read-only at most) + cron recipes for trends
+- [docs] S - docs/composition.md: satellite pipe contract (BibTeX/JSONL in via import, report files out; SQLite is not a public API, read-only at most) + cron recipes for trends
 
 ## Testing
 
@@ -170,7 +170,7 @@ Phases 2–3:
 - Budget enforcement: expansion stops at depth/budget exactly; frontier stubs
   never trigger downloads without promotion.
 - check-corpus join correctness across member/frontier/absent.
-- trends digest: stable output for a fixed corpus + fixed API fixtures.
+- trends report: stable output for a fixed corpus + fixed API fixtures.
 
 ## Open questions
 
