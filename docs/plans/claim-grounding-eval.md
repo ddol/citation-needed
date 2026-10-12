@@ -1,13 +1,13 @@
 # Claim-grounding consumption eval: PDF vs Markdown vs MCP
 
-**Status:** Core (slice 4) · **Flow:** B · **Depends on:**
+**Status:** Exploratory · **Flow:** B · **Depends on:**
 [service-layer.md](service-layer.md), [fts5-full-text-search.md](fts5-full-text-search.md)
 (shipped slices, the tools under test). Decision input for
-[visual-extraction.md](visual-extraction.md) and
-[vector-hybrid-search.md](vector-hybrid-search.md).
+[vector-hybrid-search.md](vector-hybrid-search.md). Its pilot corpus and
+human-verified claims seed the dossier eval in [dossier.md](dossier.md).
 
-citation-needed exists to ground an LLM agent in **factual claims from papers a
-researcher already holds**: Flow B, hallucination mitigation. The architecture
+The grounded MCP loop exists to ground an LLM agent in **factual claims from
+papers a researcher already holds**: Flow B, hallucination mitigation. The architecture
 bet under question: the pipeline invests heavily in PDF→Markdown extraction
 (~15 deterministic repair passes, the 2000-line quality scorer), but conversion
 demonstrably loses information: display-equation structure, grouped table
@@ -165,7 +165,7 @@ Written here _before_ any run so results cannot be rationalized afterward:
 | Observation (full corpus, cheap model)                                   | Roadmap action                                                                                                                                |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Mode 2 ≈ mode 1 within CI everywhere except figures                      | **Markdown validated**; extraction investment justified; deprioritize visual extraction except figure enrichment                              |
-| Mode 1 beats mode 2 ≥ 15 pp on equation/table claims                     | Expand the parser per [visual-extraction.md](visual-extraction.md) (Nougat pass), or build hybrid 3.5 if Phase-0 favors it                    |
+| Mode 1 beats mode 2 ≥ 15 pp on equation/table claims                     | Expand the parser per [visual-extraction.md](visual-extraction.md) (vision-model pass), or build hybrid 3.5 if Phase-0 favors it              |
 | Mode 1 beats mode 2 even on prose claims                                 | Conversion loses more than layout features: audit repair passes; hybrid page-image serving becomes the default candidate                      |
 | Mode 3 ≈ mode 2 accuracy at ≪ tokens, wins corpus-wide/absent categories | **MCP service architecture validated**; document as the recommended surface                                                                   |
 | Mode 3 < mode 2 with low evidence-reached rate                           | Fix retrieval first: chunking (`src/services/chunker.ts`), FTS query construction, revisit [vector-hybrid-search.md](vector-hybrid-search.md) |

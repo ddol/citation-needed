@@ -19,8 +19,9 @@ case.
 
 ## Retrieval and access
 
-> Serves: _relevance is not identity_, _legitimate access only_, _every stage is
-> honest_, _a wrong answer is worse than no answer_.
+> Serves: _relevance is not identity_, _legitimate access, deliberate
+> disclosure_, _every stage is honest_, _a wrong answer is worse than no
+> answer_.
 
 **The cascade is `cache → Unpaywall → Semantic Scholar → arXiv → publisher →
 authenticated`** (`src/retrieval/index.ts`). A stage joins only when it resolves
@@ -93,6 +94,125 @@ failure. The log is how a bad run gets diagnosed after the fact.
 is not a download. Counts must survive a reader asking "how many did it actually
 fetch?"
 
+## Dossier generation
+
+> Serves: _the dossier is the product_, _report, don't review_, _models write,
+> checks decide_, _independent models, not one oracle_, _provenance or it didn't
+> happen_.
+
+The design lives in [docs/plans/dossier.md](docs/plans/dossier.md); these are
+the rules it must keep.
+
+**Coverage sets the size.** A deterministic source profile runs before any
+model call, and every section, display equation, figure, and table it lists
+gets an entry. Prose budgets scale with the passage digested. No prompt asks for
+a word count: a length target pads short sources and drops equations from long
+ones.
+
+**Reproduce the exact things.** Numbers, equations, captions, quotations, and
+table values are copied from the source, never paraphrased or recomputed.
+Captions are injected from the layout text, not generated. A number the source
+never states is a finding, not a summary.
+
+**Every generated item is checked or marked.** Quotes go through `verify-quote`
+against the source's own chunks, numbers through the number gate, equations
+through KaTeX and a layout cross-check, and coverage against the profile. A
+failure stays in place, marked ⚑ with its reason. Nothing is dropped or
+rewritten to make a check pass.
+
+**Two transcriptions or a flag.** Every display equation is transcribed by the
+`math` role and again by the `auditor` role from a different family. Agreement
+passes; disagreement keeps both and flags.
+
+**The auditor flags; it never edits.** The writer gets one revision pass over
+flagged lines, and whatever still fails stays marked. One pass, never a loop.
+
+**The footer is rendered, never generated.** Code builds it from `model_runs`,
+`manifestations`, `retrieval_log`, and the check results, with a fixed preamble
+and fixed fields, so every dossier's footer reads the same and none of it is a
+model's claim about itself.
+
+**Generated content never touches the evidence layer.** Transcriptions,
+descriptions, and digests live in dossier parts. The extracted Markdown stays
+byte-identical whether or not a dossier ran, and `verify-quote` never checks
+against a dossier.
+
+**Pin what ran.** Each model run records the resolved model name the provider
+reported, the prompt-set hash, the input hash, and the temperature. A call that
+matches a prior successful run reuses its output, so a resumed job never pays
+twice.
+
+## Model providers and secrets
+
+> Serves: _legitimate access, deliberate disclosure_, _independent models, not
+> one oracle_, _one definition, thin adapters_.
+
+The design lives in
+[docs/plans/model-providers.md](docs/plans/model-providers.md).
+
+**Code asks for a role, never a model.** `reader`, `math`, `figure`, `writer`,
+and `auditor` are assigned to provider and model pairs in config. A role whose
+job needs images must be assigned a vision model; an auditor from the same
+family as the reader or writer is a recorded warning.
+
+**Two adapters, three providers.** Anthropic speaks the Messages API; OpenRouter
+and Ollama are two configurations of one OpenAI-compatible adapter. Both use the
+shared retry policy in `http-retry.ts`. No vendor SDKs, no LLM framework.
+
+**Keys live in one file, and only there.** `~/.citation-needed/secrets.json`,
+mode 0600, written atomically. A group- or world-readable secrets file is
+refused. An environment variable wins over the file. Keys never enter SQLite,
+logs, errors, job payloads, dossiers, or HTTP responses; the API reports a
+masked hint, and the UI can set, replace, or delete a key but never read one
+back.
+
+**Say where the source goes.** The settings page shows, per role, whether its
+input leaves the machine. An all-local assignment must run without network
+access.
+
+**Restricted sources need consent per dossier.** A source whose `access_type`
+is not `open-access` reaches a remote provider only after the user confirms it
+for that dossier, or runs on local roles alone. There is no global override.
+The confirmation and the reported licence are printed in the footer.
+
+**One key is enough to start.** With a single provider configured, every role
+defaults to it, and the footer records that the audit was not independent.
+
+**Cap the spend.** A per-dossier token cap pauses the job before the call that
+would cross it. Pausing is visible and resumable; overrunning silently is not
+an option.
+
+## Web surface
+
+> Serves: _one definition, thin adapters_.
+
+**SvelteKit and svelte-ux, used as documented.** Pages are Svelte components
+built from svelte-ux, in the `web/` workspace. SvelteKit runs under adapter-node
+inside the `serve` process, never as a static export. Svelte files are
+`.svelte`, so `.tsx` keeps meaning live terminal redraw (see
+[Terminal output](#terminal-output)). Live progress is Server-Sent Events from
+the job event bus; persisted rows are the source of truth on reload.
+
+**One context per process.** `serve` creates the database, services, worker,
+and event bus once and hands them to SvelteKit through the request. Web code
+imports only types from `src/`. A second copy of the services bundled into the
+web build would hold its own database handle and event bus, and progress events
+would never reach the page.
+
+**No logic in `web/`.** Endpoints parse with the shared zod contract, call a
+service, and return JSON; pages read through the same `/api/v1` endpoints.
+Logic in `web/` would escape the Jest coverage ratchet, so it belongs in a
+service.
+
+**A local server is still a server.** Loopback bind, a `Host` allowlist against
+DNS rebinding, a startup token exchanged for a `SameSite=Strict` session cookie,
+and no CORS headers. A non-loopback bind requires a bearer token. See
+[docs/plans/http-api.md](docs/plans/http-api.md#security).
+
+**Math renders with the library that checks it.** KaTeX typesets equations in
+the UI and is also the LaTeX gate, bundled rather than loaded from a CDN so the
+UI works offline.
+
 ## Terminal output
 
 > Serves: _one definition, thin adapters_.
@@ -159,15 +279,18 @@ behaviour that a mock cannot.
 
 **Network is mocked in tests.** Live API checks are done by hand when a fix
 depends on real upstream behaviour, and the result is recorded in the PR. A
-suite that reaches the network is a suite that fails on a train.
+suite that reaches the network is a suite that fails on a train. Model calls are
+no exception: adapters and dossier stages run against recorded responses, and
+dossier quality is measured by the eval harness in `eval/`, outside Jest.
 
 ## Structure and docs
 
-> Serves: _one definition, thin adapters_, _the core stays deterministic_.
+> Serves: _one definition, thin adapters_, _models write, checks decide_.
 
-**One service layer, MCP first.** Other surfaces are thin gateways over the same
-operations, never parallel implementations. Temporary duplication states its end
-date.
+**One service layer, one surface first per capability.** Dossiers bind to the
+web UI first; the grounded search tools bind to MCP. Other surfaces are thin
+gateways over the same operations, never parallel implementations. Temporary
+duplication states its end date.
 
 **Single source of truth per concept**: `manifestations` for file locations,
 not a second path column drifting alongside it.

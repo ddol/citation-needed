@@ -16,48 +16,58 @@ feature count. [DESIGN.md](DESIGN.md) turns them into concrete rules;
 
 ---
 
-## 1. The question is the product
+## 1. The dossier is the product
 
-Everything here exists to answer one question about a citation:
+Everything here exists to turn one source into a **dossier** a researcher can
+rely on: what the source claims, how it argues, its mathematics reproduced, its
+diagrams described, its tables intact, and nothing it does not say.
 
-> **Is this a real quote, and is it a fair interpretation of the work?**
+Retrieval, extraction, indexing, and verification are means. A feature earns
+its place by making dossiers more faithful, more complete, or cheaper to
+produce, not by making the corpus bigger.
 
-Retrieval, extraction, chunking, and indexing are means. `verify-quote` is the
-end. A feature earns its place by making that question cheaper or more reliable
-to answer, not by making the corpus bigger.
+The failure this guards against is a digest that reads well and is wrong: a
+plausible summary, an equation with a dropped subscript, a figure described as
+showing what the authors hoped. A tool that produces that faster is worse than
+no tool.
 
-The failure this guards against is a claim that _looks_ checkable: a plausible
-sentence, a real DOI, a citation that renders correctly in a bibliography, and
-nothing behind it. A tool that helps a researcher produce that faster is worse
-than no tool.
+## 2. Report, don't review
 
-## 2. A wrong answer is worse than no answer
+A dossier says what the source says, in the source's terms, attributed to its
+authors. It does not praise, rank, critique, or fill gaps from a model's
+general knowledge. Numbers, equations, captions, and quoted claims are
+reproduced, never paraphrased into new values. Where the source is ambiguous,
+the dossier says so.
 
-A missing PDF is a visible gap. Someone notices it and fixes it.
+Judgement is the reader's job. A dossier that has opinions is one more source
+to check, not a map of the one it digests.
 
-A wrong PDF filed under the right name is silent corruption. It launders a
-false citation into a checkable-looking one, and every layer downstream
-(extraction, chunking, search, quote verification) faithfully processes the
-wrong paper and reports success. The blast radius is the whole product.
+## 3. A wrong answer is worse than no answer
 
-So the asymmetry is deliberate: **when identity is uncertain, refuse and say
-why.** A failure message a researcher can act on beats a file they will trust
-by mistake. Coverage is never a reason to relax this.
+A missing equation is a visible gap. Someone notices it and reads the page.
 
-## 3. Relevance is not identity
+A wrong equation, cleanly typeset, is silent corruption. So is a wrong PDF
+filed under the right name: every stage downstream faithfully processes the
+wrong paper and reports success.
+
+So the asymmetry is deliberate: **when a stage cannot produce something
+faithfully, it marks the gap and says why.** When identity is uncertain, the
+pipeline refuses to start. A flag a researcher can act on beats a line they
+will trust by mistake. Completeness is never a reason to relax this.
+
+## 4. Relevance is not identity
 
 A search result is a candidate. Nothing more.
 
 Ranking answers "what is most related to these words", which is not the
 question we asked. An upstream API returning a confident first result is not
-evidence; it is a suggestion. Papers that cannot possibly be in a corpus still
-produce top hits there.
+evidence; it is a suggestion.
 
 An artifact is what it claims to be only once we have checked it against the
 identity we asked for: matching title, matching DOI, matching hash. Verify,
 then trust.
 
-## 4. Legitimate access only
+## 5. Legitimate access, deliberate disclosure
 
 We take the open route first, then the user's own front door. We never pick a
 lock.
@@ -69,44 +79,66 @@ lock.
   and rate-limit every host.
 - We do not scrape, circumvent, or crawl on our own initiative.
 
+The same care runs outward. Source text goes only to the model providers the
+user configured, with the user's own keys, and the user can see which roles
+send it off the machine. A paywalled source reaches a remote model only when the
+user confirms it for that dossier, because publisher licences often forbid it.
+A fully local setup is always possible.
+
 This is a tenet rather than a policy because it constrains what we build, not
-just how we behave. Capability that only works by misrepresenting who we are
-does not get built here, however much coverage it would buy.
+just how we behave.
 
-## 5. Every stage is honest
+## 6. Models write, checks decide
 
-A stage that cannot succeed is not in the cascade.
+Language models do the reading, transcribing, describing, and writing; nothing
+else can comprehend a paper. They do not get the last word.
 
-Capability that exists in code but cannot yet resolve a real PDF is **parked**
-(unexported, unwired, still covered by its tests) rather than run on every miss
-to append noise to a failure message. A stage rejoins when it can do its job.
+Every dossier passes deterministic checks against the source: quotations found
+in its text, numbers present in it, equations that parse and match the page,
+every section, equation, figure, and table covered. Checks flag; they never
+silently rewrite.
 
-The same applies to reporting: a count of "downloaded" that includes items that
-were not downloaded is a lie told to the only person who could catch the
+The evidence layer (retrieval, extraction, search, quote verification, the
+provenance record) stays deterministic and inspectable. Given the same source,
+it gives the same answer, and a human can follow why.
+
+## 7. Independent models, not one oracle
+
+Each job goes to a model suited to it: vision models for equations and
+diagrams, long-context models for reading, a model from a different family to
+audit. Two independent models agreeing on a transcription is evidence. One
+model agreeing with itself is not.
+
+When independence is not available, the dossier still runs and says so.
+
+## 8. Every stage is honest
+
+A stage that cannot succeed is not in the pipeline.
+
+Capability that exists in code but cannot yet do its job is **parked**
+(unexported, unwired, still covered by its tests) rather than run on every
+attempt to append noise to a failure message. A stage rejoins when it can do
+its job.
+
+The same applies to reporting: a count of "verified" that includes items that
+were not verified is a lie told to the only person who could catch the
 problem.
 
-## 6. Provenance or it didn't happen
+## 9. Provenance or it didn't happen
 
-Every artifact traces back: `retrieval_log` for what was attempted and from
+Every artifact traces back: `retrieval_log` for what was fetched and from
 where, `manifestations` for what is on disk, content hashes for what it is,
-section paths for where in the document a chunk came from.
+section paths for where a passage came from, `model_runs` for which model wrote
+which line, when, and from what input.
 
-Grounding is the product. A passage we cannot trace to a source is not evidence,
-and an answer built on it is a guess wearing a citation.
+Every dossier ends with a standardized footer naming its source, the models
+that compiled it, and when the source was extracted and the dossier
+synthesized. Code renders the footer from those records. A model never writes
+its own provenance.
 
-## 7. The core stays deterministic
-
-Search, resolution, and verification are deterministic and inspectable. Given
-the same corpus and the same query, they give the same answer, and a human can
-follow why.
-
-LLM-shaped features live outside that core and compose with it. The agent is
-the shell; this is the instrument it reaches for. An instrument that guesses is
-not an instrument.
-
-## 8. One definition, thin adapters
+## 10. One definition, thin adapters
 
 Each concept is defined once and reached through thin adapters: one service
-layer, MCP first, with other surfaces as gateways rather than parallel
+layer, with the web UI, MCP, and the CLI as gateways rather than parallel
 implementations. Two mechanisms maintained side by side is a smell that needs a
 justification and an end date.

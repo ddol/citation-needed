@@ -2,11 +2,13 @@
 
 ![citation needed](https://imgs.xkcd.com/comics/wikipedian_protester.png)
 
-> Citation retrieval, indexing, and Markdown extraction sidecar for AI agents: turns BibTeX references into a local, searchable PDF/Markdown corpus.
+> Source dossiers for researchers: hand it one paper and get back a faithful digest, its mathematics reproduced, its diagrams described, every line checked against the source, with a footer naming the models that wrote it.
 
-`citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, converts those PDFs into Markdown using JavaScript, and indexes extracted Markdown for grounded MCP search, reading, and quote checking.
+`citation-needed` ingests a BibTeX file, stores citation metadata, downloads PDFs when they can be resolved, converts those PDFs into Markdown using JavaScript, and indexes extracted Markdown for grounded MCP search, reading, and quote checking. That pipeline is the evidence layer for **source dossiers**: several language models (Anthropic, OpenRouter, or local Ollama) read, transcribe, describe, and write, and deterministic checks decide what stands. A local web UI tracks progress and stores provider keys.
 
-It exists to answer one question about a citation: **is this a real quote, and is it a fair interpretation of the work?** [TENETS.md](TENETS.md) states the commitments that follow from that; [DESIGN.md](DESIGN.md) turns them into rules for the code.
+**Status:** the evidence layer below is built and usable today. The dossier pipeline and web UI are designed and scheduled ([docs/plans/dossier.md](docs/plans/dossier.md), [BACKLOG.md](BACKLOG.md)), not yet built.
+
+[TENETS.md](TENETS.md) states the commitments behind the product; [DESIGN.md](DESIGN.md) turns them into rules for the code.
 
 ---
 
