@@ -136,7 +136,9 @@ stops the pipeline after the metadata on both.
 
 ## Planned evolution
 
-Forward-looking plans (indexing jobs, HTTP API,
-citation graph, storage adapters, vector search, and Zotero work) live in
-[docs/plans/](plans/README.md). Scheduled work is the Core section of
-[BACKLOG.md](../BACKLOG.md); everything else there is Exploratory.
+Everything above is the evidence layer for source dossiers: multi-model digests
+of one source, checked against extracted text, with a provenance footer
+([plans/dossier.md](plans/dossier.md)). The dossier pipeline, model providers,
+job queue, HTTP server, and web UI are designed in [docs/plans/](plans/README.md)
+and scheduled as the Core section of [BACKLOG.md](../BACKLOG.md); everything
+else there is Exploratory.

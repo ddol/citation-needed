@@ -1,129 +1,171 @@
 # Visual extraction: equations, figures, complex tables
 
-**Status:** Exploratory · **Flow:** Infrastructure · **Depends on:** the current
-`verification/` extraction pipeline (pdf2md + `pdftotext -layout`).
+| Field      | Value                                                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status     | **Core: slice 6**                                                                                                                          |
+| Flow       | Dossier                                                                                                                                    |
+| Depends on | the `verification/` extraction pipeline (pdf2md + `pdftotext -layout`), [model-providers.md](model-providers.md), [dossier.md](dossier.md) |
+
+## Intent
 
 Three parts of a PDF resist the deterministic text pipeline: **display
-equations**, **figures**, and **grouped-header tables**. They fail for the same
-reason: their meaning lives in _layout and pixels_, not in a linear character
-stream, so they are grouped into one plan with one shared pipeline rather than
-three ad-hoc fixes.
+equations**, **figures**, and **grouped-header tables**. Their meaning lives in
+layout and pixels, not in a linear character stream. They are also where a
+dossier reader most needs help and where generated content is most likely to be
+confidently wrong. This plan pairs each vision-model stage with deterministic
+checks, so a reproduced equation or a described diagram arrives with evidence
+or with a flag.
 
-This is the honest ceiling of the heuristic passes in
-[`verification/markdown.ts`](../../src/verification/markdown.ts) and
-[`verification/layout-tables.ts`](../../src/verification/layout-tables.ts): they
-recover _structure that survives in the text stream_. Equations, figure
-semantics, and merged cells do not survive it, and no amount of regex recovers
-what the extractor already discarded.
+## Current state
 
-## Why now
+Scored against `Liang2020.pdf` (LaneGCN):
 
-Scored against `Liang2020.pdf` (LaneGCN), the current pipeline produces:
+- **Equations**: `pdf2md` mangles display math (Eq. 10's piecewise `d(x_i)`
+  becomes `( 0.5x2i if kxi k < 1 d(xi ) =`). `pdftotext -layout` keeps the line
+  nearly intact but has no LaTeX structure. `layout-equations.ts` reconstructs
+  labelled equations from layout tokens and replaces them only when
+  `isConfidentReconstruction` passes.
+- **Figures**: captions survive for in-body figures; end-of-paper figures can be
+  dropped or land as placeholders. Nothing describes what a figure shows.
+- **Grouped tables**: `layout-tables.ts` (`packedGroupedTableToMarkdown`)
+  decomposes two-row headers into real pipe tables. Tables it cannot align have
+  no fallback.
+- `markdown.ts` already maps figures and equations to pages
+  (`figureCaptionsForLayout`, `equationPagesForLayout`).
 
-- **Equations**: `pdf2md` mangles display math (e.g. Eq. 10's piecewise
-  `d(x_i)` becomes `( 0.5x2i if kxi k < 1 d(xi ) =`). `pdftotext -layout` keeps
-  the same equation nearly intact on one line but still has **no LaTeX
-  structure**: subscripts, superscripts, and stacked limits are lost in both.
-- **Figures**: captions survive for in-body figures (Fig. 1–4) but never a
-  description of _what the figure shows_; end-of-paper figures (Fig. 5–6) are
-  dropped or land as placeholders.
-- **Grouped tables**: Markdown has no colspan, so a two-row header
-  (`Backbone | FusionNet | K=1 | K=6` over `ActorNet | MapNet | … | minFDE`)
-  is flattened deterministically by `layout-tables.ts`
-  (`packedGroupedTableToMarkdown`): it anchors on the single-space-packed leaf
-  header, assigns each body mark/number monotonically (order survives even when
-  `pdftotext -layout` compresses sparse `X` marks), and disambiguates duplicate
-  leaf headers with their group label (`minADE (K=1)` vs `minADE (K=6)`).
-  Pixel-level recovery stays the fallback only for tables this still can't align.
+## Design
 
-## Tenet check
+### Locate (deterministic)
 
-The plans charter says **"the search core stays deterministic (LLM features live
-outside it)."** A vision model's output is not reproducible byte-for-byte, so
-this pipeline is an **optional enrichment pass that runs after** deterministic
-extraction and is **off by default**. The FTS index, quote verification, and
-`score-markdown-quality` must behave identically whether or not it ran. Enriched
-content is additive and clearly attributed (see Output contract below).
+The dossier's profile stage lists every region:
 
-## Options considered
+- each display equation: label, page, layout line, and the deterministic
+  reconstruction when it is confident;
+- each figure: number, verbatim caption, page, and the paragraphs that cite it
+  (`Fig. N`, `Figure N`);
+- each table `layout-tables.ts` could not align: page and caption.
 
-| Option                                                               | Scope                                       | Cost                                      | License         | Fit                                                  |
-| -------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------- | --------------- | ---------------------------------------------------- |
-| **Nougat** (`facebookresearch/nougat`)                               | full page → Markdown w/ LaTeX math + tables | free, local (Python/ONNX) or HF Inference | **CC-BY-NC** ⚠️ | Best for **equations + tables**; trained on arXiv    |
-| **transformers.js + BLIP** (`Salesforce/blip-image-captioning-base`) | image → caption                             | free, local Node/ONNX, no key             | BSD-3 / Apache  | Best for **figure descriptions**; pure JS, no Python |
-| **SmolVLM / other small VLM via transformers.js**                    | image → richer VQA description              | free, local Node/ONNX                     | Apache          | Fuller figure descriptions than BLIP; heavier        |
-| **Hosted multimodal LLM free tier** (e.g. Gemini free tier)          | image → description / math                  | free tier, rate-limited, API key          | vendor          | Highest quality, but a key + network + ToS           |
-| **Mathpix**                                                          | page → LaTeX                                | **paid**                                  | commercial      | Most reliable math OCR; fails the "free" bar         |
+Equations are cropped to their layout lines, using word boxes from `pdftotext
+-bbox-layout`, padded. Figures are sent as the full page with the caption
+naming the target: a vision model finds "Figure 3" on a page more reliably than
+a caption-adjacency heuristic crops it.
 
-### Recommendation
+### Rasterize (deterministic)
 
-- **Equations + hard tables → Nougat**, run **per-page-region**, not whole-doc:
-  we already know the page and bounding context of each unresolved equation/table
-  from `pdftotext -layout`, so we rasterize only that region and ask Nougat for
-  its markup. This sidesteps Nougat's ~1/500-page whole-page repetition failure
-  and keeps runs cheap. **The CC-BY-NC license means this stays an opt-in dev
-  tool, not a bundled default**, noted loudly so a commercial deployment does
-  not inherit an NC dependency unaware.
-- **Figures → transformers.js + BLIP** locally (zero key, zero network, pure
-  Node). Upgrade path to SmolVLM for descriptions richer than a one-line caption.
-- **Do not** put any of this in the deterministic core or make it a hard
-  dependency. Package as an optional peer dependency, mirroring how Playwright is
-  optional for authenticated download.
+`pdftoppm -f N -l N -r 200 -png`, cropping with `-x -y -W -H` for equations.
+Poppler is already required for `pdftotext`, so no image library joins the
+dependencies. Output is cached by PDF sha256, page, box, and resolution.
 
-## Pipeline
+### Math stage
 
+The `math` role transcribes each equation image to LaTeX: exact transcription,
+no simplification, source numbering kept as `\tag{n}`. Its output then passes:
+
+1. **LaTeX gate**: KaTeX parses it.
+2. **Layout cross-check**: the symbol multiset of the KaTeX-tokenized LaTeX
+   overlaps the `normalizeMathGlyphs` layout line above a threshold. This
+   catches a transcription of the wrong equation or invented terms.
+3. **Second transcription**: the `auditor` role, from a different model family,
+   transcribes the same image. The two are compared after removing
+   presentation-only commands (spacing, `\left`/`\right`, redundant braces).
+   Agreement passes. Disagreement flags the equation and keeps both, with the
+   deterministic reconstruction as a third reference when one exists.
+
+A confident deterministic reconstruction that agrees with both models is the
+strongest evidence the pipeline can produce, and the footer counts it.
+
+Symbol meanings come from the `reader` role, which extracts definitions from
+the text ("where $x_i$ denotes …") with a verbatim quote each; the quote gate
+checks them.
+
+### Figure stage
+
+The `figure` role receives the page image, the caption, and the citing
+paragraphs, and returns a structured description:
+
+```json
+{
+  "kind": "plot | diagram | architecture | photo | table-image | other",
+  "elements": {
+    "axes": [],
+    "series": [],
+    "components": [],
+    "flows": [],
+    "labels": []
+  },
+  "description": "2–6 sentences: what is drawn, no interpretation beyond the caption and the citing text"
+}
 ```
-deterministic extract (pdf2md + layout)          ← unchanged, always runs
-        │
-        ▼
-find unresolved regions
-  · equations missing/garbled  (equationsForLayout gap)
-  · figures w/o description    (figureCaptionForLine)
-  · tables layout-tables can't align
-        │
-        ▼   (only if enrichment enabled)
-rasterize the page region  (pdftoppm / pdfium → PNG)
-        │
-        ├── equation/table region → Nougat  → LaTeX / md fragment
-        └── figure region         → BLIP    → caption/description
-        │
-        ▼
-splice fragment into Markdown, attributed, deterministic order
-```
 
-Region rasterization reuses the page numbers already computed by
-`figurePagesForLayout` / `equationPagesForLayout` in `markdown.ts`, so no new
-PDF-geometry code is needed on the locating side, only a region→PNG step
-(`pdftoppm -f N -l N` crop, already have `pdftotext` from poppler).
+Checks: the caption is injected from the layout text, never generated. Labels
+the model reports must appear in the page's text layer when the figure is
+vector; raster figures skip this check and the footer says so. Numbers in the
+description pass the number gate against the source text and the page text
+layer. The auditor flags interpretation that goes past the caption and text.
 
-## Output contract
+### Tables
 
-Enrichment is **labelled and reproducible in placement** even though its text is
-model-generated:
+Deterministic first. A table `layout-tables.ts` cannot align goes to the
+`figure` role as an image and returns a Markdown table; every cell value must
+appear in the page's text layer, or the cell is flagged.
 
-- Figure description:
-  `> Figure description (BLIP): …model text…` under the caption.
-- Equation recovered by Nougat: the `$$…$$` block, followed by
-  `<!-- equation source: nougat -->`.
-- Never overwrite a deterministically-extracted block; only fill a gap or append
-  a description. A re-run with enrichment off must yield the byte-identical
-  deterministic document.
+### Output contract
+
+**Generated content lives in dossier parts, never in the extracted Markdown.**
+The extracted Markdown is byte-identical whether or not these stages ran, so
+FTS, `verify-quote`, and `score-markdown-quality` stay deterministic. Each
+transcription and description is a `dossier_parts` row pointing at the
+`model_runs` row that produced it.
+
+## Rejected alternatives
+
+- **Nougat for equations and tables.** CC-BY-NC license, a Python runtime, and
+  whole-page repetition failures. A vision model behind the provider layer
+  covers the same need, locally through Ollama when wanted.
+- **BLIP captions for figures.** One-line captions ("a graph with lines") are
+  far below the bar a dossier sets.
+- **Mathpix.** Paid and single-purpose; reconsider only if the eval shows
+  vision models fall short on equations.
+- **Splicing generated content into extracted Markdown.** It would make the
+  evidence layer nondeterministic.
+- **Heuristic figure cropping.** Caption adjacency fails on multi-panel and
+  side-captioned figures; the full page plus the caption is cheap and robust.
 
 ## Phasing
 
-1. **Region rasterizer**: `pdf region → PNG` helper in `verification/`, pure and
-   tested against a fixture PDF. No model yet.
-2. **Figures (BLIP, local)**: lowest risk, no Python, no NC license. Wire an
-   optional `describe-figures` pass; gate behind a flag + missing-dependency
-   guard like the extractor-version resolver already does.
-3. **Equations/tables (Nougat)**: opt-in dev pass, CC-BY-NC guard, region-scoped
-   calls. Feed the `score-markdown-quality` equation metrics to measure lift.
-4. **Score integration**: extend `score-markdown-quality` to report
-   before/after equation-`$$` coverage and figure-description coverage so the
-   enrichment loop is measurable, not vibes.
+1. **Rasterizer and region list**: pure, tested against a fixture PDF, no model.
+2. **Math stage**: transcription, LaTeX gate, layout cross-check, second
+   transcription.
+3. **Figure stage**: structured descriptions, caption injection, label check.
+4. **Table fallback**: image to Markdown table with cell checks.
+5. **Measurement**: equation agreement and figure coverage metrics feed the
+   dossier eval.
 
-## Non-goals
+## Backlog items
 
-- Not a general OCR replacement; the deterministic path stays primary.
-- No hosted paid APIs (Mathpix) and no always-on network calls.
-- No bundling of a CC-BY-NC model into the default install path.
+- [verify] M - Region rasterizer: equation crops from pdftotext -bbox-layout word boxes, figure pages, unaligned-table pages; pdftoppm PNGs cached by sha256/page/box/dpi (see docs/plans/visual-extraction.md)
+- [model] L - Math stage: math-role LaTeX per display equation; KaTeX parse gate; layout symbol cross-check; auditor-role second transcription with normalized agreement (see docs/plans/visual-extraction.md)
+- [model] L - Figure stage: structured description from page image + caption + citing paragraphs; injected verbatim captions; text-layer label check (see docs/plans/visual-extraction.md)
+- [model] M - Table fallback: image to Markdown table for tables layout-tables cannot align, every cell checked against the page text layer (see docs/plans/visual-extraction.md)
+
+## Testing
+
+- Rasterizer: fixture PDF, expected page count and crop dimensions; cache hit on
+  a second call.
+- Math gates with recorded model outputs: a valid matching transcription passes;
+  unparseable LaTeX, a wrong-equation transcription (low symbol overlap), and
+  two disagreeing transcriptions each flag with the right reason.
+- Agreement normalizer: presentation-only differences compare equal; a dropped
+  subscript does not.
+- Figure checks: an injected caption survives model output that rewrites it; a
+  label absent from a vector figure's text layer flags.
+- Extracted Markdown is byte-identical before and after the visual stages run.
+
+## Relationship to other plans
+
+- [dossier.md](dossier.md): these stages produce its mathematics, figures, and
+  table parts.
+- [model-providers.md](model-providers.md): the `math`, `figure`, and `auditor`
+  roles.
+- [claim-grounding-eval.md](claim-grounding-eval.md): Liang2020 and the pilot
+  corpus are the first measurement set.

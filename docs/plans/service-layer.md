@@ -10,11 +10,11 @@
 
 Every capability is defined **once**, as a transport-independent application
 service with a shared zod contract, and exposed through gateways that do nothing
-but parse → call service → format. Each service binds to a **single surface,
-MCP** (the product's core); CLI and HTTP gateways are future thin adapters
-written over the same services only when actually needed. Bespoke per-surface
-APIs are an anti-goal. The first slice is the kernel of the core workflow:
-search and read.
+but parse → call service → format. Each service binds to **one surface
+first**: MCP for the grounded search tools, the web UI over HTTP for dossiers
+([dossier.md](dossier.md)). Other gateways are thin adapters written over the
+same services only when actually needed. Bespoke per-surface APIs are an
+anti-goal. The first slice is the kernel of the grounded loop: search and read.
 
 ## Current state
 
@@ -54,12 +54,13 @@ Plain service classes in `src/services/`, constructor-injected with `Database` /
 zod request/response contract as the single source of truth. New tools derive
 their MCP `inputSchema` from these contracts (zod v4 ships `z.toJSONSchema`);
 migrating the five existing tools' hand-written blocks is exploratory. Future
-hono route validation and CLI arg mapping derive from the same schemas when
+SvelteKit endpoint validation ([http-api.md](http-api.md)) and CLI arg mapping
+derive from the same schemas when
 those adapters arrive.
 
 ### Operation mapping table (source of truth for all surfaces)
 
-| Canonical operation | Service (status)               | MCP                             | CLI (future adapter)      | HTTP (future, see http-api.md)        |
+| Canonical operation | Service (status)               | MCP                             | CLI (future adapter)      | HTTP (see http-api.md, web-ui.md)     |
 | ------------------- | ------------------------------ | ------------------------------- | ------------------------- | ------------------------------------- |
 | search-citations    | SearchService.search (shipped) | `search-citations`              | `search` (exploratory)    | `POST /api/v1/search`                 |
 | read-content        | ContentService.read (shipped)  | `read-content`                  | none                      | `GET /api/v1/citations/{doi}/content` |
@@ -74,6 +75,12 @@ those adapters arrive.
 | related-papers      | GraphService (expl.)           | `related-papers`                | none                      | deferred                              |
 | check-corpus        | GraphService (expl.)           | `check-corpus`                  | none                      | deferred                              |
 | expand-corpus       | GraphService (expl.)           | `expand-corpus`                 | none                      | deferred                              |
+| create-dossier      | DossierService (slice 5)       | `create-dossier` (expl.)        | `dossier` (expl.)         | `POST /api/v1/dossiers`               |
+| read-dossier        | DossierService (slice 5)       | `read-dossier` (expl.)          | none                      | `GET /api/v1/dossiers/{id}`           |
+| list-dossiers       | DossierService (slice 5)       | none                            | none                      | `GET /api/v1/dossiers`                |
+| control-dossier     | DossierService (slice 5)       | none                            | none                      | `POST /api/v1/dossiers/{id}/…`        |
+| provider-settings   | SettingsService (slice 4)      | none                            | none                      | `/api/v1/settings/providers…`         |
+| role-settings       | SettingsService (slice 4)      | none                            | none                      | `/api/v1/settings/roles`              |
 
 ### SearchService (slice 1)
 
