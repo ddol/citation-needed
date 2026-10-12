@@ -144,9 +144,9 @@ transcription and description is a `dossier_parts` row pointing at the
 ## Backlog items
 
 - [verify] M - Region rasterizer: equation crops from pdftotext -bbox-layout word boxes, figure pages, unaligned-table pages; pdftoppm PNGs cached by sha256/page/box/dpi (see docs/plans/visual-extraction.md)
-- [verify] L - Math stage: math-role LaTeX per display equation; KaTeX parse gate; layout symbol cross-check; auditor-role second transcription with normalized agreement (see docs/plans/visual-extraction.md)
-- [verify] L - Figure stage: structured description from page image + caption + citing paragraphs; injected verbatim captions; text-layer label check (see docs/plans/visual-extraction.md)
-- [verify] M - Table fallback: image to Markdown table for tables layout-tables cannot align, every cell checked against the page text layer (see docs/plans/visual-extraction.md)
+- [model] L - Math stage: math-role LaTeX per display equation; KaTeX parse gate; layout symbol cross-check; auditor-role second transcription with normalized agreement (see docs/plans/visual-extraction.md)
+- [model] L - Figure stage: structured description from page image + caption + citing paragraphs; injected verbatim captions; text-layer label check (see docs/plans/visual-extraction.md)
+- [model] M - Table fallback: image to Markdown table for tables layout-tables cannot align, every cell checked against the page text layer (see docs/plans/visual-extraction.md)
 
 ## Testing
 

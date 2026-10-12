@@ -214,7 +214,7 @@ start, computed from the profile (expected tokens per part times part count).
 
 - [cfg] S - Secrets store: ~/.citation-needed/secrets.json at 0600 in a 0700 dir, atomic writes, group/other-readable file refused; env vars win; masked hints; holds the Semantic Scholar key too (see docs/plans/model-providers.md)
 - [util] XS - Logger redacts loaded key values (see docs/plans/model-providers.md)
-- [api] M - ModelProvider interface with anthropic and openai-compatible adapters (OpenRouter, Ollama); text + image parts, resolved model, usage, cost; shared http-retry policy (see docs/plans/model-providers.md)
+- [model] M - ModelProvider interface with anthropic and openai-compatible adapters (OpenRouter, Ollama); text + image parts, resolved model, usage, cost; shared http-retry policy (see docs/plans/model-providers.md)
 - [cfg] M - Persistent config file with role assignments and limits; one-key defaults (every role on the single configured provider); zod validation: all roles set, vision for math/figure/auditor, auditor family independence warning (see docs/plans/model-providers.md)
 - [db] M - model_runs table; output reuse when provider, model, prompt hash, input hash, and temperature match (see docs/plans/model-providers.md)
 - [flow] S - Per-dossier token cap: pause before the call that would cross it, resume with a raised cap (see docs/plans/model-providers.md)
