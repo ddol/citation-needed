@@ -6,7 +6,7 @@ layer. Design and pre-registered decision rules:
 [docs/plans/claim-grounding-eval.md](../docs/plans/claim-grounding-eval.md).
 
 This tree is deliberately outside `src/` (no coverage ratchet) and `test/` (not
-run by Jest; `/eval/` is in `testPathIgnorePatterns`). It hits the Anthropic API
+run by Jest; `<rootDir>/eval/` is in `testPathIgnorePatterns`). It hits the Anthropic API
 with a real key. `npm test` and CI never touch it.
 
 ## Layout
@@ -67,10 +67,8 @@ claim formats are gradable, zero spend):
 npx ts-node --transpile-only eval/pilot/run.ts --dry
 ```
 
-Real run needs **both** of these, which are not present by default:
-
-1. `npm i -D @anthropic-ai/sdk`
-2. `export ANTHROPIC_API_KEY=...`
+A real run needs `ANTHROPIC_API_KEY` set; `@anthropic-ai/sdk` is a dev
+dependency.
 
 ```
 npx ts-node eval/pilot/run.ts --model claude-haiku-4-5-20251001 --max-usd 2
@@ -89,8 +87,12 @@ under `eval/pilot/.cache/` makes reruns free.
   deep single-paper claims for 9 failure-class papers plus corpus-wide
   attribution and not-addressed probes served to decoys. All nine categories,
   81 supported / 31 refuted / 55 not-found, every evidence span quoted from the
-  original PDF. Drafted and self-checked but **not yet independently
-  human-verified**; freeze and verify before the first scored Phase 1 run.
-  Dry-grade it with `run.ts --dry --claims eval/claims/suite.jsonl`; a real run
-  needs the runner pointed at `eval/corpus/cache/` (Phase 1 wiring), since the
-  suite serves mined papers that live there, not in `velocity.report`.
+  original PDF. Self-verified against the extracted PDF text (not by an
+  independent second reviewer) and frozen for Phase 1. Dry-grade it with
+  `run.ts --dry --claims eval/claims/suite.jsonl`; a real run passes
+  `--pdf-dir eval/corpus/cache/pdf --md-dir eval/corpus/cache/markdown`, since
+  the suite serves mined papers that live there, not in `velocity.report`.
+- **Full-suite run:** Sonnet 5, 87% pdf-direct vs 87% markdown-context
+  (~$3.30), 0 false-supported in 333 calls, over-refutation 33-35%. The
+  markdown-vs-PDF cascade lands in the pre-registered dead zone. See the plan
+  doc.

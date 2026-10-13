@@ -431,7 +431,11 @@ corpus scale.
    per-category counts, the mode × category assignment, and each absent
    claim's decoy paper are committed under `eval/claims/` as the
    pre-registration artifact. Changing them after seeing results is allowed
-   only as an explicitly labelled second suite, never as an edit.
+   only as an explicitly labelled second suite, never as an edit. Generalises
+   `eval/pilot/run.ts`, shares its runner with the dossier eval
+   ([dossier.md](dossier.md)), and calls models through the `ModelProvider`
+   adapters ([model-providers.md](model-providers.md)), which retires the
+   direct `@anthropic-ai/sdk` dev dependency.
 4. **Phase 2.** Mode 3 adapter, the retrieval-oracle control arm, corpus-wide
    claims, tool-transcript capture, evidence-reached metric.
 5. **Phase 3.** Decision memo against the rules above, fidelity correlation as
