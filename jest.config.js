@@ -17,8 +17,11 @@ module.exports = {
   // against N versions of the source) and jest-haste-map reports duplicate
   // package.json manifests. modulePathIgnorePatterns is the one that silences
   // haste; testPathIgnorePatterns alone only stops the tests from running.
-  testPathIgnorePatterns: ['/node_modules/', '/.claude/'],
-  modulePathIgnorePatterns: ['/.claude/'],
+  // Both patterns match absolute paths, so they anchor on <rootDir>: a bare
+  // '/.claude/' also matches the root of a checkout that is itself a worktree
+  // under .claude/worktrees, and that run then finds no tests at all.
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
+  modulePathIgnorePatterns: ['<rootDir>/.claude/'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
