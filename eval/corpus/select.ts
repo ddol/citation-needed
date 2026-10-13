@@ -33,7 +33,16 @@ interface Candidate {
 const N = Number(process.argv[2] ?? 41);
 const raw = (
   JSON.parse(fs.readFileSync(path.join(__dirname, 'candidates.json'), 'utf-8')) as Candidate[]
-).map((c) => ({ ...c, title: c.title.replace(/<[^>]+>/g, '').trim() })); // strip stray HTML
+).map((c) => ({ ...c, title: stripHtml(c.title) }));
+
+// Strip stray HTML tags, then any angle bracket left over: one tag pass over
+// nested fragments like `<<b>script>` can reassemble a tag.
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]*>/g, '')
+    .replace(/[<>]/g, '')
+    .trim();
+}
 
 // The 19 papers we already hold, so a preprint record of one (e.g. VoxelNet)
 // does not re-enter the corpus as a near-duplicate under a different OpenAlex id.
