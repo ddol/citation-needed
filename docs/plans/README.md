@@ -60,24 +60,25 @@ until the dossier workflow proves valuable in daily use. Nothing is deleted.
 
 ## Plan status
 
-| Plan                                                         | Status                           | Flow           | Depends on                                                |
-| ------------------------------------------------------------ | -------------------------------- | -------------- | --------------------------------------------------------- |
-| [dossier.md](dossier.md)                                     | Core: slices 5–8                 | Dossier        | model-providers, indexing-jobs, visual-extraction, web-ui |
-| [model-providers.md](model-providers.md)                     | Core: slice 4                    | Infrastructure | http-api, web-ui                                          |
-| [web-ui.md](web-ui.md)                                       | Core: slices 4–8                 | Infrastructure | http-api, model-providers, indexing-jobs, dossier         |
-| [visual-extraction.md](visual-extraction.md)                 | Core: slice 6                    | Dossier        | verification/ extraction pipeline, model-providers        |
-| [indexing-jobs.md](indexing-jobs.md)                         | Core: slice 5 (dossier jobs)     | Infrastructure | domain-model, fts5                                        |
-| [http-api.md](http-api.md)                                   | Core: slice 4 (server, security) | Infrastructure | service-layer                                             |
-| [service-layer.md](service-layer.md)                         | Core: slices 1, 3 shipped        | A              | none                                                      |
-| [domain-model.md](domain-model.md)                           | Core: slices 2, 3 shipped        | Infrastructure | none                                                      |
-| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core: slices 1–2 shipped         | A              | service-layer, domain-model                               |
-| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core: slice 3 shipped            | C              | none                                                      |
-| [claim-grounding-eval.md](claim-grounding-eval.md)           | Exploratory                      | B              | service-layer, fts5-full-text-search                      |
-| [zotero-integration.md](zotero-integration.md)               | Exploratory                      | A              | domain-model                                              |
-| [storage-adapters.md](storage-adapters.md)                   | Exploratory                      | Infrastructure | domain-model                                              |
-| [citation-graph.md](citation-graph.md)                       | Exploratory                      | C              | domain-model, indexing-jobs                               |
-| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                      | C              | domain-model, fts5-full-text-search, later citation-graph |
-| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                         | A              | fts5, indexing-jobs                                       |
+| Plan                                                         | Status                           | Flow               | Depends on                                                                        |
+| ------------------------------------------------------------ | -------------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| [dossier.md](dossier.md)                                     | Core: slices 5–8                 | Dossier            | model-providers, indexing-jobs, visual-extraction, web-ui                         |
+| [model-providers.md](model-providers.md)                     | Core: slice 4                    | Infrastructure     | http-api, web-ui                                                                  |
+| [web-ui.md](web-ui.md)                                       | Core: slices 4–8                 | Infrastructure     | http-api, model-providers, indexing-jobs, dossier                                 |
+| [visual-extraction.md](visual-extraction.md)                 | Core: slice 6                    | Dossier            | verification/ extraction pipeline, model-providers                                |
+| [indexing-jobs.md](indexing-jobs.md)                         | Core: slice 5 (dossier jobs)     | Infrastructure     | domain-model, fts5                                                                |
+| [http-api.md](http-api.md)                                   | Core: slice 4 (server, security) | Infrastructure     | service-layer                                                                     |
+| [service-layer.md](service-layer.md)                         | Core: slices 1, 3 shipped        | A                  | none                                                                              |
+| [domain-model.md](domain-model.md)                           | Core: slices 2, 3 shipped        | Infrastructure     | none                                                                              |
+| [fts5-full-text-search.md](fts5-full-text-search.md)         | Core: slices 1–2 shipped         | A                  | service-layer, domain-model                                                       |
+| [retrieval-pipeline.md](retrieval-pipeline.md)               | Core: slice 3 shipped            | C                  | none                                                                              |
+| [claim-grounding-eval.md](claim-grounding-eval.md)           | Exploratory                      | B                  | service-layer, fts5-full-text-search                                              |
+| [corpus-knowledge.md](corpus-knowledge.md)                   | Proposed                         | B (new sources: C) | fts5, domain-model, model-providers, indexing-jobs, dossier, vector-hybrid-search |
+| [zotero-integration.md](zotero-integration.md)               | Exploratory                      | A                  | domain-model                                                                      |
+| [storage-adapters.md](storage-adapters.md)                   | Exploratory                      | Infrastructure     | domain-model                                                                      |
+| [citation-graph.md](citation-graph.md)                       | Exploratory                      | C                  | domain-model, indexing-jobs                                                       |
+| [local-bibliography-spider.md](local-bibliography-spider.md) | Exploratory                      | C                  | domain-model, fts5-full-text-search, later citation-graph                         |
+| [vector-hybrid-search.md](vector-hybrid-search.md)           | Deferred                         | A                  | fts5, indexing-jobs                                                               |
 
 ## Flows
 
