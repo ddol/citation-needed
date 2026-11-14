@@ -127,9 +127,8 @@ _Deferred (Flow A future): semantic + hybrid search modes, parked in docs/plans/
 
 ### Flow B: claims from papers already held
 
-- [verify] S - Claim-grounding eval Phase 0: analytic token-economics via count_tokens per corpus paper as PDF vs Markdown, cost-per-claim curves vs corpus size per consumption mode; zero API eval spend (also calibrates the dossier spend estimate; see docs/plans/claim-grounding-eval.md)
-- [verify] L - Claim-grounding eval Phase 1: full harness under eval/, outside Jest and the coverage ratchet; one runner, one ModeAdapter per consumption mode, replay cache, cost guard (shares the dossier eval's runner; see docs/plans/claim-grounding-eval.md)
-- [verify] M - Claim-grounding eval Phase 2: mcp-agent mode over InMemoryTransport against createMcpServer(db), plus corpus-wide and absent-claim categories (see docs/plans/claim-grounding-eval.md)
+- [verify] L - Claim-grounding eval Phase 1: generalise eval/pilot/run.ts into the full harness under eval/, outside Jest and the coverage ratchet; one runner, one ModeAdapter per consumption mode, replay cache, cost guard (shares the dossier eval's runner; see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval Phase 2: mcp-agent mode over InMemoryTransport against createMcpServer(db), the retrieval-oracle control arm, plus corpus-wide and absent-claim categories (see docs/plans/claim-grounding-eval.md)
 - [verify] M - Claim-grounding decision memo: apply the pre-registered rules to the results, record the parser-scope decision, and wire the Markdown mode in as the extractor regression gate (see docs/plans/claim-grounding-eval.md)
 - [cli] M - `verify` CLI command: re-check all citations and update verification status (doubles as manifestation location health check; see docs/plans/storage-adapters.md)
 - [mcp] S - MCP tool: get-retrieval-log (download attempt history for a DOI; needs RetrievalService detail pass before scheduling; see docs/plans/service-layer.md)
@@ -207,6 +206,15 @@ _Deferred (Flow A future): semantic + hybrid search modes, parked in docs/plans/
 ---
 
 ## Completed
+
+Claim-grounding eval, Phase 0 and pilot:
+
+- [verify] S - Claim-grounding eval Phase 0: token economics across the 60-paper corpus (eval/phase0/); PDF ~3x Markdown tokens, retrieval flat, modes 1-2 break in the low tens of papers; calibrates the dossier spend estimate (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding eval pilot: 61 claims x 2 modes on the 3 pilot papers (eval/pilot/, Haiku 4.5, ~$0.50); deltas visible (pdf 90% vs markdown 85%, gap is figures), formats gradable, labeling policy settled (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding corpus: 60 papers (19 perception seed + 41 cross-citation-mined references) built via the production extractor, sha256-pinned in eval/corpus/manifest.json; seeds the dossier gold set (see docs/plans/dossier.md)
+- [verify] M - Claim-grounding claim suite: 167 items drafted from the original PDFs in eval/claims/suite.jsonl (9 deep failure-class papers + 32 not-addressed + 14 contradicted + 23 attribution); every evidence-bearing claim checked against extracted PDF text, every contradicted/numeric-table/equation verdict reviewed by hand; self-verified, not by an independent second reviewer; frozen for Phase 1 (see docs/plans/claim-grounding-eval.md)
+- [verify] M - Claim-grounding second model: Sonnet 5 on the 167-item suite (87%/87%, ~$3.30); the Haiku pilot's mode delta is gone, 0 false-supported in 333 calls, markdown-vs-PDF cascade lands in the pre-registered dead zone (see docs/plans/claim-grounding-eval.md)
+- [verify] S - Claim-grounding gold stays put: attribution/not-addressed claims are not relabeled `refuted` to match the model, since transcripts show it refuting from documents that are silent; an over-refutation-rate metric tracks this instead (see docs/plans/claim-grounding-eval.md)
 
 - [fetch] S - Semantic Scholar API key via SEMANTIC_SCHOLAR_API_KEY: the unauthenticated pool is shared and throttles unpredictably; a key buys a guaranteed quota (see docs/plans/retrieval-pipeline.md)
 

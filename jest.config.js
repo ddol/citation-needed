@@ -20,7 +20,11 @@ module.exports = {
   // Both patterns match absolute paths, so they anchor on <rootDir>: a bare
   // '/.claude/' also matches the root of a checkout that is itself a worktree
   // under .claude/worktrees, and that run then finds no tests at all.
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
+  // <rootDir>/eval/ is the claim-grounding eval harness: standalone ts-node
+  // scripts that hit the Anthropic API, deliberately outside the Jest suite and
+  // the coverage ratchet (docs/plans/claim-grounding-eval.md). Anchored for the
+  // same reason, so a test directory named eval/ elsewhere still runs.
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/', '<rootDir>/eval/'],
   modulePathIgnorePatterns: ['<rootDir>/.claude/'],
   transform: {
     '^.+\\.tsx?$': [
